@@ -61,4 +61,33 @@ final class WorkspaceDocumentTests: XCTestCase {
         XCTAssertEqual(updated.title, "zsh")
         XCTAssertEqual(updated.workingDirectory, "/project/api")
     }
+
+    func testNestedItemsCanBeRenamedAndRemoved() throws {
+        let pane = TerminalPane(workingDirectory: "/project")
+        let space = TerminalSpace(name: "Development", layout: .terminal(pane))
+        let nestedFolder = WorkspaceFolder(
+            name: "Nested",
+            children: [.space(space)]
+        )
+        let rootFolder = WorkspaceFolder(
+            name: "Root",
+            children: [.folder(nestedFolder)]
+        )
+        var project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.folder(rootFolder)]
+        )
+
+        XCTAssertTrue(project.renameItem(withID: space.id, to: "Server"))
+        XCTAssertEqual(project.space(withID: space.id)?.name, "Server")
+        XCTAssertFalse(project.renameItem(withID: space.id, to: "Server"))
+
+        let removed = try XCTUnwrap(project.removeItem(withID: nestedFolder.id))
+
+        XCTAssertEqual(removed.terminalIDs, [pane.id])
+        XCTAssertFalse(project.folderIDs.contains(nestedFolder.id))
+        XCTAssertTrue(project.folderIDs.contains(rootFolder.id))
+        XCTAssertTrue(project.terminalIDs.isEmpty)
+    }
 }

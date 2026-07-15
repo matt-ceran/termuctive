@@ -50,9 +50,13 @@ final class WorkspaceStore: ObservableObject {
             layout: .terminal(pane)
         )
         let project = TerminalProject(
-            name: url.lastPathComponent,
+            name: uniqueName(
+                base: url.lastPathComponent,
+                existing: document.projects.map(\.name)
+            ),
             rootDirectory: path,
-            items: [.space(space)]
+            items: [.space(space)],
+            lastSelectedSpaceID: space.id
         )
 
         document.projects.append(project)
@@ -64,24 +68,24 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func selectProject(withID id: UUID) {
-        guard let project = document.projects.first(where: { $0.id == id }) else {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == id }) else {
             return
         }
 
-        document.selectedProjectID = id
-        document.selectedSpaceID = project.firstSpace?.id
+        activateProject(at: projectIndex)
         selectedFolderID = nil
-        focusedPaneID = project.firstSpace?.layout.firstTerminalID
         save()
     }
 
     func selectSpace(withID id: UUID, inProject projectID: UUID) {
-        guard let project = document.projects.first(where: { $0.id == projectID }),
-            let space = project.space(withID: id)
+        guard
+            let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
+            let space = document.projects[projectIndex].space(withID: id)
         else {
             return
         }
 
+        document.projects[projectIndex].lastSelectedSpaceID = id
         document.selectedProjectID = projectID
         document.selectedSpaceID = id
         selectedFolderID = nil
@@ -90,14 +94,21 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func selectFolder(withID id: UUID, inProject projectID: UUID) {
-        guard let project = document.projects.first(where: { $0.id == projectID }),
-            project.containsFolder(withID: id)
+        guard
+            let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
+            document.projects[projectIndex].containsFolder(withID: id)
         else {
             return
         }
 
-        document.selectedProjectID = projectID
+        let projectChanged = document.selectedProjectID != projectID
+        if projectChanged {
+            activateProject(at: projectIndex)
+        }
         selectedFolderID = id
+        if projectChanged {
+            save()
+        }
     }
 
     func toggleFolder(withID id: UUID) {
@@ -113,12 +124,14 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
-        let name = uniqueName(
-            base: "Folder",
-            existing: document.projects[projectIndex].items.map(\.name)
-        )
-        let folder = WorkspaceFolder(name: name)
         let parentID = validSelectedFolderID(in: document.projects[projectIndex])
+        let existingNames =
+            document.projects[projectIndex].childNames(
+                inFolderWithID: parentID
+            ) ?? []
+        let folder = WorkspaceFolder(
+            name: uniqueName(base: "Folder", existing: existingNames)
+        )
         guard
             document.projects[projectIndex].append(
                 .folder(folder),
@@ -129,6 +142,9 @@ final class WorkspaceStore: ObservableObject {
         }
 
         selectedFolderID = folder.id
+        if let parentID {
+            expandedFolderIDs.insert(parentID)
+        }
         expandedFolderIDs.insert(folder.id)
         save()
     }
@@ -139,16 +155,16 @@ final class WorkspaceStore: ObservableObject {
         }
 
         let project = document.projects[projectIndex]
-        let name = uniqueName(
-            base: "Terminal",
-            existing: project.items.map(\.name)
-        )
+        let parentID = validSelectedFolderID(in: project)
+        let existingNames = project.childNames(inFolderWithID: parentID) ?? []
         let pane = TerminalPane(
             title: defaultShellName,
             workingDirectory: project.rootDirectory
         )
-        let space = TerminalSpace(name: name, layout: .terminal(pane))
-        let parentID = validSelectedFolderID(in: project)
+        let space = TerminalSpace(
+            name: uniqueName(base: "Terminal", existing: existingNames),
+            layout: .terminal(pane)
+        )
         guard
             document.projects[projectIndex].append(
                 .space(space),
@@ -158,8 +174,92 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        document.projects[projectIndex].lastSelectedSpaceID = space.id
         document.selectedSpaceID = space.id
+        if let parentID {
+            expandedFolderIDs.insert(parentID)
+        }
+        selectedFolderID = nil
         focusedPaneID = pane.id
+        save()
+    }
+
+    func renameProject(withID id: UUID, to proposedName: String) {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == id }),
+            let baseName = normalizedName(proposedName)
+        else {
+            return
+        }
+        let existingNames = document.projects.filter { $0.id != id }.map(\.name)
+        let name = uniqueName(base: baseName, existing: existingNames)
+        guard document.projects[projectIndex].name != name else {
+            return
+        }
+
+        document.projects[projectIndex].name = name
+        save()
+    }
+
+    func renameItem(withID id: UUID, inProject projectID: UUID, to proposedName: String) {
+        guard
+            let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
+            let baseName = normalizedName(proposedName),
+            let existingNames = document.projects[projectIndex].siblingNames(
+                forItemWithID: id
+            )
+        else {
+            return
+        }
+        let name = uniqueName(base: baseName, existing: existingNames)
+        guard document.projects[projectIndex].renameItem(withID: id, to: name) else {
+            return
+        }
+        save()
+    }
+
+    func removeProject(withID id: UUID) {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        let wasSelected = document.selectedProjectID == id
+        document.projects.remove(at: projectIndex)
+        expandedFolderIDs.formIntersection(document.folderIDs)
+
+        if wasSelected {
+            selectedFolderID = nil
+            guard !document.projects.isEmpty else {
+                document.selectedProjectID = nil
+                document.selectedSpaceID = nil
+                focusedPaneID = nil
+                save()
+                return
+            }
+            activateProject(at: min(projectIndex, document.projects.count - 1))
+        }
+        save()
+    }
+
+    func removeItem(withID id: UUID, inProject projectID: UUID) {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
+            document.projects[projectIndex].removeItem(withID: id) != nil
+        else {
+            return
+        }
+
+        normalizeLastSelectedSpace(forProjectAt: projectIndex)
+        expandedFolderIDs.formIntersection(document.folderIDs)
+        if let selectedFolderID,
+            !document.projects.contains(where: { $0.containsFolder(withID: selectedFolderID) })
+        {
+            self.selectedFolderID = nil
+        }
+
+        if document.selectedProjectID == projectID {
+            restoreActiveSpace(
+                inProjectAt: projectIndex,
+                preferredSpaceID: document.selectedSpaceID
+            )
+        }
         save()
     }
 
@@ -275,6 +375,41 @@ final class WorkspaceStore: ObservableObject {
         return selectedFolderID
     }
 
+    private func activateProject(at index: Int, preferredSpaceID: UUID? = nil) {
+        document.selectedProjectID = document.projects[index].id
+        restoreActiveSpace(
+            inProjectAt: index,
+            preferredSpaceID: preferredSpaceID
+                ?? document.projects[index].lastSelectedSpaceID
+        )
+    }
+
+    private func restoreActiveSpace(inProjectAt index: Int, preferredSpaceID: UUID?) {
+        let project = document.projects[index]
+        let space =
+            preferredSpaceID.flatMap { project.space(withID: $0) }
+            ?? project.preferredSpace
+        document.projects[index].lastSelectedSpaceID = space?.id
+        document.selectedSpaceID = space?.id
+
+        if let focusedPaneID,
+            space?.layout.terminalIDs.contains(focusedPaneID) == true
+        {
+            return
+        }
+        focusedPaneID = space?.layout.firstTerminalID
+    }
+
+    private func normalizeLastSelectedSpace(forProjectAt index: Int) {
+        let project = document.projects[index]
+        guard let lastSelectedSpaceID = project.lastSelectedSpaceID,
+            project.space(withID: lastSelectedSpaceID) != nil
+        else {
+            document.projects[index].lastSelectedSpaceID = project.firstSpace?.id
+            return
+        }
+    }
+
     private func updateSelectedSpace(_ update: (inout TerminalSpace) -> Void) {
         guard let projectIndex = selectedProjectIndex,
             let selectedSpaceID = document.selectedSpaceID
@@ -288,6 +423,10 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func normalizeSelection() {
+        for index in document.projects.indices {
+            normalizeLastSelectedSpace(forProjectAt: index)
+        }
+
         guard !document.projects.isEmpty else {
             document.selectedProjectID = nil
             document.selectedSpaceID = nil
@@ -295,26 +434,29 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
-        let project =
-            document.selectedProject
-            ?? document.projects[0]
-        document.selectedProjectID = project.id
+        let projectIndex =
+            document.projects.firstIndex {
+                $0.id == document.selectedProjectID
+            } ?? 0
+        activateProject(
+            at: projectIndex,
+            preferredSpaceID: document.selectedSpaceID
+        )
+    }
 
-        let space =
-            document.selectedSpace
-            ?? project.firstSpace
-        document.selectedSpaceID = space?.id
-        focusedPaneID = space?.layout.firstTerminalID
+    private func normalizedName(_ name: String) -> String? {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
     }
 
     private func uniqueName(base: String, existing: [String]) -> String {
-        let names = Set(existing)
-        guard names.contains(base) else {
+        let names = Set(existing.map { $0.lowercased() })
+        guard names.contains(base.lowercased()) else {
             return base
         }
 
         var suffix = 2
-        while names.contains("\(base) \(suffix)") {
+        while names.contains("\(base) \(suffix)".lowercased()) {
             suffix += 1
         }
         return "\(base) \(suffix)"

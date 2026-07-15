@@ -138,6 +138,142 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(persistence.savedDocuments.count, 1)
     }
+
+    func testSwitchingProjectsRestoresEachProjectsLastSpace() throws {
+        let firstPane = TerminalPane(workingDirectory: "/first")
+        let secondPane = TerminalPane(workingDirectory: "/second")
+        let firstSpace = TerminalSpace(name: "First", layout: .terminal(firstPane))
+        let secondSpace = TerminalSpace(name: "Second", layout: .terminal(secondPane))
+        let firstProject = TerminalProject(
+            name: "One",
+            rootDirectory: "/one",
+            items: [.space(firstSpace), .space(secondSpace)],
+            lastSelectedSpaceID: firstSpace.id
+        )
+        let otherPane = TerminalPane(workingDirectory: "/other")
+        let otherSpace = TerminalSpace(name: "Other", layout: .terminal(otherPane))
+        let otherProject = TerminalProject(
+            name: "Two",
+            rootDirectory: "/two",
+            items: [.space(otherSpace)],
+            lastSelectedSpaceID: otherSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [firstProject, otherProject],
+            selectedProjectID: firstProject.id,
+            selectedSpaceID: firstSpace.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.selectSpace(withID: secondSpace.id, inProject: firstProject.id)
+        store.selectProject(withID: otherProject.id)
+        store.selectProject(withID: firstProject.id)
+
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpace.id)
+        XCTAssertEqual(store.focusedPaneID, secondPane.id)
+        XCTAssertEqual(store.selectedProject?.lastSelectedSpaceID, secondSpace.id)
+    }
+
+    func testRemovingSelectedNestedFolderRestoresRemainingSpace() throws {
+        let fallbackPane = TerminalPane(workingDirectory: "/project")
+        let fallbackSpace = TerminalSpace(
+            name: "Fallback",
+            layout: .terminal(fallbackPane)
+        )
+        let removedPane = TerminalPane(workingDirectory: "/project/removed")
+        let removedSpace = TerminalSpace(
+            name: "Removed",
+            layout: .terminal(removedPane)
+        )
+        let folder = WorkspaceFolder(
+            name: "Nested",
+            children: [.space(removedSpace)]
+        )
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(fallbackSpace), .folder(folder)],
+            lastSelectedSpaceID: removedSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: removedSpace.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+        store.selectFolder(withID: folder.id, inProject: project.id)
+        store.toggleFolder(withID: folder.id)
+
+        store.removeItem(withID: folder.id, inProject: project.id)
+
+        XCTAssertEqual(store.document.selectedSpaceID, fallbackSpace.id)
+        XCTAssertEqual(store.focusedPaneID, fallbackPane.id)
+        XCTAssertNil(store.selectedFolderID)
+        XCTAssertFalse(store.expandedFolderIDs.contains(folder.id))
+        XCTAssertFalse(store.document.terminalIDs.contains(removedPane.id))
+        XCTAssertEqual(persistence.savedDocuments.count, 1)
+    }
+
+    func testRemovingSelectedProjectsChoosesNeighborThenClearsSelection() {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/one"))
+        let firstProjectID = store.document.projects[0].id
+        store.addProject(at: URL(fileURLWithPath: "/tmp/two"))
+        let secondProjectID = store.document.projects[1].id
+        persistence.savedDocuments.removeAll()
+
+        store.selectProject(withID: firstProjectID)
+        persistence.savedDocuments.removeAll()
+        store.removeProject(withID: firstProjectID)
+
+        XCTAssertEqual(store.document.selectedProjectID, secondProjectID)
+        XCTAssertNotNil(store.document.selectedSpaceID)
+
+        store.removeProject(withID: secondProjectID)
+
+        XCTAssertTrue(store.document.projects.isEmpty)
+        XCTAssertNil(store.document.selectedProjectID)
+        XCTAssertNil(store.document.selectedSpaceID)
+        XCTAssertNil(store.focusedPaneID)
+        XCTAssertEqual(persistence.savedDocuments.count, 2)
+    }
+
+    func testRenameTrimsNamesAndKeepsSiblingsDistinct() throws {
+        let firstPane = TerminalPane(workingDirectory: "/project")
+        let secondPane = TerminalPane(workingDirectory: "/project")
+        let firstSpace = TerminalSpace(name: "Server", layout: .terminal(firstPane))
+        let secondSpace = TerminalSpace(name: "Tests", layout: .terminal(secondPane))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(firstSpace), .space(secondSpace)]
+        )
+        let otherProject = TerminalProject(name: "Other", rootDirectory: "/other")
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project, otherProject],
+            selectedProjectID: project.id,
+            selectedSpaceID: firstSpace.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.renameProject(withID: otherProject.id, to: "  Project  ")
+        store.renameItem(
+            withID: secondSpace.id,
+            inProject: project.id,
+            to: "  Server  "
+        )
+        store.renameItem(withID: firstSpace.id, inProject: project.id, to: "   ")
+
+        XCTAssertEqual(store.document.projects[1].name, "Project 2")
+        let updatedProject = store.document.projects[0]
+        XCTAssertEqual(updatedProject.space(withID: firstSpace.id)?.name, "Server")
+        XCTAssertEqual(updatedProject.space(withID: secondSpace.id)?.name, "Server 2")
+        XCTAssertEqual(persistence.savedDocuments.count, 2)
+    }
 }
 
 private final class RecordingPersistence: WorkspacePersisting {

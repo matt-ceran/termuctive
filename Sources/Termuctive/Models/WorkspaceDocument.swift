@@ -66,6 +66,17 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         }
     }
 
+    var folderIDs: Set<UUID> {
+        switch self {
+        case .space:
+            return []
+        case .folder(let folder):
+            return folder.children.reduce(into: Set([folder.id])) { ids, child in
+                ids.formUnion(child.folderIDs)
+            }
+        }
+    }
+
     func space(withID id: UUID) -> TerminalSpace? {
         switch self {
         case .space(let space):
@@ -91,6 +102,30 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         case .folder(let folder):
             return folder.id == id
                 || folder.children.contains { $0.containsFolder(withID: id) }
+        }
+    }
+
+    func childNames(inFolderWithID id: UUID) -> [String]? {
+        switch self {
+        case .space:
+            return nil
+        case .folder(let folder):
+            if folder.id == id {
+                return folder.children.map(\.name)
+            }
+            return folder.children.lazy.compactMap { $0.childNames(inFolderWithID: id) }.first
+        }
+    }
+
+    func siblingNames(forItemWithID id: UUID) -> [String]? {
+        switch self {
+        case .space:
+            return nil
+        case .folder(let folder):
+            if folder.children.contains(where: { $0.id == id }) {
+                return folder.children.filter { $0.id != id }.map(\.name)
+            }
+            return folder.children.lazy.compactMap { $0.siblingNames(forItemWithID: id) }.first
         }
     }
 
@@ -151,6 +186,57 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         }
     }
 
+    mutating func renameItem(withID id: UUID, to name: String) -> Bool {
+        switch self {
+        case .space(var space):
+            guard space.id == id,
+                space.name != name
+            else {
+                return false
+            }
+            space.name = name
+            self = .space(space)
+            return true
+
+        case .folder(var folder):
+            if folder.id == id {
+                guard folder.name != name else {
+                    return false
+                }
+                folder.name = name
+                self = .folder(folder)
+                return true
+            }
+            for index in folder.children.indices {
+                if folder.children[index].renameItem(withID: id, to: name) {
+                    self = .folder(folder)
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    mutating func removeDescendant(withID id: UUID) -> WorkspaceItem? {
+        guard case .folder(var folder) = self else {
+            return nil
+        }
+
+        if let index = folder.children.firstIndex(where: { $0.id == id }) {
+            let removed = folder.children.remove(at: index)
+            self = .folder(folder)
+            return removed
+        }
+
+        for index in folder.children.indices {
+            if let removed = folder.children[index].removeDescendant(withID: id) {
+                self = .folder(folder)
+                return removed
+            }
+        }
+        return nil
+    }
+
     mutating func append(_ item: WorkspaceItem, toFolderWithID folderID: UUID) -> Bool {
         switch self {
         case .space:
@@ -178,17 +264,20 @@ struct TerminalProject: Codable, Equatable, Identifiable {
     var name: String
     var rootDirectory: String
     var items: [WorkspaceItem]
+    var lastSelectedSpaceID: UUID?
 
     init(
         id: UUID = UUID(),
         name: String,
         rootDirectory: String,
-        items: [WorkspaceItem] = []
+        items: [WorkspaceItem] = [],
+        lastSelectedSpaceID: UUID? = nil
     ) {
         self.id = id
         self.name = name
         self.rootDirectory = rootDirectory
         self.items = items
+        self.lastSelectedSpaceID = lastSelectedSpaceID
     }
 
     var firstSpace: TerminalSpace? {
@@ -201,6 +290,21 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         }
     }
 
+    var folderIDs: Set<UUID> {
+        items.reduce(into: Set<UUID>()) { ids, item in
+            ids.formUnion(item.folderIDs)
+        }
+    }
+
+    var preferredSpace: TerminalSpace? {
+        if let lastSelectedSpaceID,
+            let space = space(withID: lastSelectedSpaceID)
+        {
+            return space
+        }
+        return firstSpace
+    }
+
     func space(withID id: UUID) -> TerminalSpace? {
         items.lazy.compactMap { $0.space(withID: id) }.first
     }
@@ -211,6 +315,20 @@ struct TerminalProject: Codable, Equatable, Identifiable {
 
     func containsFolder(withID id: UUID) -> Bool {
         items.contains { $0.containsFolder(withID: id) }
+    }
+
+    func childNames(inFolderWithID id: UUID?) -> [String]? {
+        guard let id else {
+            return items.map(\.name)
+        }
+        return items.lazy.compactMap { $0.childNames(inFolderWithID: id) }.first
+    }
+
+    func siblingNames(forItemWithID id: UUID) -> [String]? {
+        if items.contains(where: { $0.id == id }) {
+            return items.filter { $0.id != id }.map(\.name)
+        }
+        return items.lazy.compactMap { $0.siblingNames(forItemWithID: id) }.first
     }
 
     mutating func updateSpace(
@@ -240,6 +358,28 @@ struct TerminalProject: Codable, Equatable, Identifiable {
             }
         }
         return false
+    }
+
+    mutating func renameItem(withID id: UUID, to name: String) -> Bool {
+        for index in items.indices {
+            if items[index].renameItem(withID: id, to: name) {
+                return true
+            }
+        }
+        return false
+    }
+
+    mutating func removeItem(withID id: UUID) -> WorkspaceItem? {
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            return items.remove(at: index)
+        }
+
+        for index in items.indices {
+            if let removed = items[index].removeDescendant(withID: id) {
+                return removed
+            }
+        }
+        return nil
     }
 
     mutating func append(_ item: WorkspaceItem, toFolderWithID folderID: UUID?) -> Bool {
@@ -287,6 +427,12 @@ struct WorkspaceDocument: Codable, Equatable {
     var terminalIDs: Set<UUID> {
         projects.reduce(into: Set<UUID>()) { ids, project in
             ids.formUnion(project.terminalIDs)
+        }
+    }
+
+    var folderIDs: Set<UUID> {
+        projects.reduce(into: Set<UUID>()) { ids, project in
+            ids.formUnion(project.folderIDs)
         }
     }
 

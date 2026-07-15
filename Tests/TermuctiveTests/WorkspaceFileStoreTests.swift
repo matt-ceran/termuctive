@@ -30,7 +30,8 @@ final class WorkspaceFileStoreTests: XCTestCase {
                         children: [.space(space)]
                     )
                 )
-            ]
+            ],
+            lastSelectedSpaceID: space.id
         )
         let document = WorkspaceDocument(
             projects: [project],
@@ -55,5 +56,33 @@ final class WorkspaceFileStoreTests: XCTestCase {
         )
 
         XCTAssertNil(try persistence.load())
+    }
+
+    func testDocumentWithoutRememberedProjectSpaceStillLoads() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let pane = TerminalPane(workingDirectory: "/project")
+        let space = TerminalSpace(name: "Terminal", layout: .terminal(pane))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(space)]
+        )
+        let document = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: space.id
+        )
+        let fileURL = directory.appendingPathComponent("workspace.json")
+        let persistence = WorkspaceFileStore(fileURL: fileURL)
+
+        try persistence.save(document)
+
+        let json = try String(contentsOf: fileURL, encoding: .utf8)
+        XCTAssertFalse(json.contains("lastSelectedSpaceID"))
+        XCTAssertEqual(try persistence.load(), document)
     }
 }
