@@ -28,4 +28,37 @@ final class WorkspaceDocumentTests: XCTestCase {
         XCTAssertEqual(updated.id, space.id)
         XCTAssertEqual(updated.name, "Renamed")
     }
+
+    func testNestedTerminalCanBeUpdatedAcrossTheDocument() throws {
+        let pane = TerminalPane(
+            title: "zsh",
+            workingDirectory: "/project"
+        )
+        let space = TerminalSpace(
+            name: "Development",
+            layout: .terminal(pane)
+        )
+        let folder = WorkspaceFolder(
+            name: "Services",
+            children: [.space(space)]
+        )
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.folder(folder)]
+        )
+        var document = WorkspaceDocument(projects: [project])
+
+        let changed = document.updateTerminal(
+            withID: pane.id,
+            title: nil,
+            workingDirectory: "/project/api"
+        )
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(document.terminalIDs, [pane.id])
+        let updated = try XCTUnwrap(document.terminal(withID: pane.id))
+        XCTAssertEqual(updated.title, "zsh")
+        XCTAssertEqual(updated.workingDirectory, "/project/api")
+    }
 }

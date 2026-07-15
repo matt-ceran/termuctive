@@ -89,6 +89,55 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(store.expandedFolderIDs.contains(folderID))
         XCTAssertEqual(store.selectedFolderID, folderID)
     }
+
+    func testHiddenTerminalDirectoryUpdatePersistsOnlyWhenChanged() throws {
+        let visiblePane = TerminalPane(workingDirectory: "/visible")
+        let visibleSpace = TerminalSpace(
+            name: "Visible",
+            layout: .terminal(visiblePane)
+        )
+        let visibleProject = TerminalProject(
+            name: "Visible",
+            rootDirectory: "/visible",
+            items: [.space(visibleSpace)]
+        )
+        let hiddenPane = TerminalPane(workingDirectory: "/hidden")
+        let hiddenSpace = TerminalSpace(
+            name: "Hidden",
+            layout: .terminal(hiddenPane)
+        )
+        let hiddenProject = TerminalProject(
+            name: "Hidden",
+            rootDirectory: "/hidden",
+            items: [.folder(WorkspaceFolder(name: "Nested", children: [.space(hiddenSpace)]))]
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [visibleProject, hiddenProject],
+            selectedProjectID: visibleProject.id,
+            selectedSpaceID: visibleSpace.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.updateTerminal(
+            paneID: hiddenPane.id,
+            workingDirectory: "/hidden/service"
+        )
+
+        XCTAssertEqual(store.document.selectedProjectID, visibleProject.id)
+        XCTAssertEqual(
+            store.document.terminal(withID: hiddenPane.id)?.workingDirectory,
+            "/hidden/service"
+        )
+        XCTAssertEqual(persistence.savedDocuments.count, 1)
+
+        store.updateTerminal(
+            paneID: hiddenPane.id,
+            workingDirectory: "/hidden/service"
+        )
+
+        XCTAssertEqual(persistence.savedDocuments.count, 1)
+    }
 }
 
 private final class RecordingPersistence: WorkspacePersisting {

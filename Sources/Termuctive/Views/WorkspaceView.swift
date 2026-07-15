@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WorkspaceView: View {
     @ObservedObject var store: WorkspaceStore
+    @ObservedObject var sessions: TerminalSessionPool
 
     var body: some View {
         HStack(spacing: 0) {
@@ -19,6 +20,18 @@ struct WorkspaceView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 480)
+        .onAppear {
+            sessions.reconcile(validPaneIDs: store.document.terminalIDs)
+        }
+        .onChange(of: store.document.terminalIDs) { _, paneIDs in
+            sessions.reconcile(validPaneIDs: paneIDs)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
+        ) {
+            _ in
+            sessions.terminateAll()
+        }
         .alert(
             "Termuctive",
             isPresented: Binding(
@@ -104,7 +117,7 @@ struct WorkspaceView: View {
     @ViewBuilder
     private var workspaceContent: some View {
         if let space = store.selectedSpace {
-            PaneTreeView(node: space.layout, store: store)
+            PaneTreeView(node: space.layout, store: store, sessions: sessions)
         } else {
             ZStack {
                 Color(nsColor: .textBackgroundColor)

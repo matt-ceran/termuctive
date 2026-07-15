@@ -12,13 +12,18 @@
 		17BB13DEC6C119B651A2A659 /* PaneLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */; };
 		1A9EE08C743BE519896C8649 /* PaneTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6E1A21021BE972DC78E104D /* PaneTreeView.swift */; };
 		1B001D4A34F6BB63CF00B0A7 /* TermuctiveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */; };
+		2CFCD8602C26E670DB86BBDC /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 9C0A6106B64EBFA9AD5852B9 /* SwiftTerm */; };
 		6367DCA53C3632194454440A /* PaneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB732E6729E4ED88756FCF76 /* PaneLayout.swift */; };
+		70B35C0392C0A9E12418F603 /* TerminalSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */; };
+		7B4B4C22F2ABFEAAF52AE48E /* TerminalHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */; };
 		9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */; };
 		A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */; };
 		ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */; };
 		AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */; };
+		B0FE1456E747245CEF613181 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = C35DC00077448A260ABFB4B1 /* SwiftTerm */; };
 		BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */; };
 		BEB1CE16AA3870EA44E435F0 /* InterfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */; };
+		CBAFD73B55569F2EE40CB659 /* TerminalEngineIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */; };
 		E8D378724F95E52BD2513B72 /* WorkspaceFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -41,14 +46,36 @@
 		6E09168D4C22B0C86EB85EA2 /* Termuctive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Termuctive.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayoutTests.swift; sourceTree = "<group>"; };
 		9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSidebar.swift; sourceTree = "<group>"; };
+		A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSessionPool.swift; sourceTree = "<group>"; };
 		A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStoreTests.swift; sourceTree = "<group>"; };
+		AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHostView.swift; sourceTree = "<group>"; };
 		B6E1A21021BE972DC78E104D /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
 		D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStore.swift; sourceTree = "<group>"; };
 		DB732E6729E4ED88756FCF76 /* PaneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayout.swift; sourceTree = "<group>"; };
+		E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEngineIntegrationTests.swift; sourceTree = "<group>"; };
 		E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermuctiveApp.swift; sourceTree = "<group>"; };
 		EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
 		F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TermuctiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		18853D05F4D4B8ACB0D33537 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0FE1456E747245CEF613181 /* SwiftTerm in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A02B0E4FF22471CF6829323 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2CFCD8602C26E670DB86BBDC /* SwiftTerm in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		008C604A09F300290B3DCF2A /* Models */ = {
@@ -64,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */,
+				E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */,
 				35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */,
 				A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */,
 				30BA578C986DB04FBAB5C6C2 /* WorkspaceStoreTests.swift */,
@@ -131,9 +159,19 @@
 				55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */,
 				008C604A09F300290B3DCF2A /* Models */,
 				8D2C0979C20824CE4B41FCA7 /* Persistence */,
+				EBCF439F5CCBACDE55BCFFAC /* Terminal */,
 				44542A5A519C481EFD92EA54 /* Views */,
 			);
 			path = Termuctive;
+			sourceTree = "<group>";
+		};
+		EBCF439F5CCBACDE55BCFFAC /* Terminal */ = {
+			isa = PBXGroup;
+			children = (
+				AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */,
+				A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */,
+			);
+			path = Terminal;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -144,6 +182,7 @@
 			buildConfigurationList = 6262A5876B4D14AFBFB18069 /* Build configuration list for PBXNativeTarget "Termuctive" */;
 			buildPhases = (
 				20CC84F4CA96211F6E1247C2 /* Sources */,
+				2A02B0E4FF22471CF6829323 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -151,6 +190,7 @@
 			);
 			name = Termuctive;
 			packageProductDependencies = (
+				9C0A6106B64EBFA9AD5852B9 /* SwiftTerm */,
 			);
 			productName = Termuctive;
 			productReference = 6E09168D4C22B0C86EB85EA2 /* Termuctive.app */;
@@ -161,6 +201,7 @@
 			buildConfigurationList = 938FC508FE26EBF0EC621262 /* Build configuration list for PBXNativeTarget "TermuctiveTests" */;
 			buildPhases = (
 				4A05A62DEDC9EEDA736D5A0F /* Sources */,
+				18853D05F4D4B8ACB0D33537 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -169,6 +210,7 @@
 			);
 			name = TermuctiveTests;
 			packageProductDependencies = (
+				C35DC00077448A260ABFB4B1 /* SwiftTerm */,
 			);
 			productName = TermuctiveTests;
 			productReference = F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */;
@@ -194,6 +236,9 @@
 			);
 			mainGroup = 2E5C9385C42F2AAA61CC09C7;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AAD14E8024CA34BB7AB41A41 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8BBEF82D98EDDFA56D58E10B /* Products */;
 			projectDirPath = "";
@@ -214,6 +259,8 @@
 				6367DCA53C3632194454440A /* PaneLayout.swift in Sources */,
 				1A9EE08C743BE519896C8649 /* PaneTreeView.swift in Sources */,
 				A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */,
+				7B4B4C22F2ABFEAAF52AE48E /* TerminalHostView.swift in Sources */,
+				70B35C0392C0A9E12418F603 /* TerminalSessionPool.swift in Sources */,
 				1B001D4A34F6BB63CF00B0A7 /* TermuctiveApp.swift in Sources */,
 				AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */,
 				BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */,
@@ -227,6 +274,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				17BB13DEC6C119B651A2A659 /* PaneLayoutTests.swift in Sources */,
+				CBAFD73B55569F2EE40CB659 /* TerminalEngineIntegrationTests.swift in Sources */,
 				ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */,
 				E8D378724F95E52BD2513B72 /* WorkspaceFileStoreTests.swift in Sources */,
 				15843F292139EDF92A81512F /* WorkspaceStoreTests.swift in Sources */,
@@ -476,6 +524,30 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AAD14E8024CA34BB7AB41A41 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = exactVersion;
+				version = 1.14.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9C0A6106B64EBFA9AD5852B9 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AAD14E8024CA34BB7AB41A41 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+		C35DC00077448A260ABFB4B1 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AAD14E8024CA34BB7AB41A41 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8D3A7AFC1305754589E653AA /* Project object */;
 }

@@ -55,12 +55,32 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         }
     }
 
+    var terminalIDs: Set<UUID> {
+        switch self {
+        case .space(let space):
+            return space.layout.terminalIDs
+        case .folder(let folder):
+            return folder.children.reduce(into: Set<UUID>()) { ids, child in
+                ids.formUnion(child.terminalIDs)
+            }
+        }
+    }
+
     func space(withID id: UUID) -> TerminalSpace? {
         switch self {
         case .space(let space):
             space.id == id ? space : nil
         case .folder(let folder):
             folder.children.lazy.compactMap { $0.space(withID: id) }.first
+        }
+    }
+
+    func terminal(withID id: UUID) -> TerminalPane? {
+        switch self {
+        case .space(let space):
+            return space.layout.terminal(withID: id)
+        case .folder(let folder):
+            return folder.children.lazy.compactMap { $0.terminal(withID: id) }.first
         }
     }
 
@@ -90,6 +110,39 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         case .folder(var folder):
             for index in folder.children.indices {
                 if folder.children[index].updateSpace(withID: id, update: update) {
+                    self = .folder(folder)
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    mutating func updateTerminal(
+        withID id: UUID,
+        title: String?,
+        workingDirectory: String?
+    ) -> Bool {
+        switch self {
+        case .space(var space):
+            guard space.layout.terminalIDs.contains(id) else {
+                return false
+            }
+            space.layout = space.layout.updatingTerminal(
+                withID: id,
+                title: title,
+                workingDirectory: workingDirectory
+            )
+            self = .space(space)
+            return true
+
+        case .folder(var folder):
+            for index in folder.children.indices {
+                if folder.children[index].updateTerminal(
+                    withID: id,
+                    title: title,
+                    workingDirectory: workingDirectory
+                ) {
                     self = .folder(folder)
                     return true
                 }
@@ -142,8 +195,18 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         items.lazy.compactMap(\.firstSpace).first
     }
 
+    var terminalIDs: Set<UUID> {
+        items.reduce(into: Set<UUID>()) { ids, item in
+            ids.formUnion(item.terminalIDs)
+        }
+    }
+
     func space(withID id: UUID) -> TerminalSpace? {
         items.lazy.compactMap { $0.space(withID: id) }.first
+    }
+
+    func terminal(withID id: UUID) -> TerminalPane? {
+        items.lazy.compactMap { $0.terminal(withID: id) }.first
     }
 
     func containsFolder(withID id: UUID) -> Bool {
@@ -156,6 +219,23 @@ struct TerminalProject: Codable, Equatable, Identifiable {
     ) -> Bool {
         for index in items.indices {
             if items[index].updateSpace(withID: id, update: update) {
+                return true
+            }
+        }
+        return false
+    }
+
+    mutating func updateTerminal(
+        withID id: UUID,
+        title: String?,
+        workingDirectory: String?
+    ) -> Bool {
+        for index in items.indices {
+            if items[index].updateTerminal(
+                withID: id,
+                title: title,
+                workingDirectory: workingDirectory
+            ) {
                 return true
             }
         }
@@ -204,10 +284,37 @@ struct WorkspaceDocument: Codable, Equatable {
         return projects.first { $0.id == selectedProjectID }
     }
 
+    var terminalIDs: Set<UUID> {
+        projects.reduce(into: Set<UUID>()) { ids, project in
+            ids.formUnion(project.terminalIDs)
+        }
+    }
+
     var selectedSpace: TerminalSpace? {
         guard let selectedSpaceID else {
             return nil
         }
         return selectedProject?.space(withID: selectedSpaceID)
+    }
+
+    func terminal(withID id: UUID) -> TerminalPane? {
+        projects.lazy.compactMap { $0.terminal(withID: id) }.first
+    }
+
+    mutating func updateTerminal(
+        withID id: UUID,
+        title: String?,
+        workingDirectory: String?
+    ) -> Bool {
+        for index in projects.indices {
+            if projects[index].updateTerminal(
+                withID: id,
+                title: title,
+                workingDirectory: workingDirectory
+            ) {
+                return true
+            }
+        }
+        return false
     }
 }

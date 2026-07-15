@@ -2,11 +2,19 @@ import SwiftUI
 
 @main
 struct TermuctiveApp: App {
-    @StateObject private var store = WorkspaceStore()
+    @StateObject private var store: WorkspaceStore
+    @StateObject private var sessions: TerminalSessionPool
+
+    @MainActor
+    init() {
+        let store = WorkspaceStore()
+        _store = StateObject(wrappedValue: store)
+        _sessions = StateObject(wrappedValue: TerminalSessionPool(store: store))
+    }
 
     var body: some Scene {
-        WindowGroup("Termuctive") {
-            WorkspaceView(store: store)
+        Window("Termuctive", id: "main") {
+            WorkspaceView(store: store, sessions: sessions)
         }
         .defaultSize(width: 1180, height: 740)
         .commands {

@@ -3,16 +3,18 @@ import SwiftUI
 struct PaneTreeView: View {
     let node: PaneNode
     @ObservedObject var store: WorkspaceStore
+    @ObservedObject var sessions: TerminalSessionPool
 
     @ViewBuilder
     var body: some View {
         switch node {
         case .terminal(let pane):
-            TerminalPlaceholderView(
+            TerminalPaneView(
                 pane: pane,
                 isFocused: store.focusedPaneID == pane.id,
-                onFocus: { store.focusPane(withID: pane.id) }
+                sessions: sessions
             )
+            .id(pane.id)
 
         case .split(let split):
             GeometryReader { proxy in
@@ -25,17 +27,17 @@ struct PaneTreeView: View {
                 Group {
                     if split.axis == .horizontal {
                         HStack(spacing: 0) {
-                            PaneTreeView(node: split.first, store: store)
+                            PaneTreeView(node: split.first, store: store, sessions: sessions)
                                 .frame(width: firstLength)
                             divider(for: split, available: available)
-                            PaneTreeView(node: split.second, store: store)
+                            PaneTreeView(node: split.second, store: store, sessions: sessions)
                         }
                     } else {
                         VStack(spacing: 0) {
-                            PaneTreeView(node: split.first, store: store)
+                            PaneTreeView(node: split.first, store: store, sessions: sessions)
                                 .frame(height: firstLength)
                             divider(for: split, available: available)
-                            PaneTreeView(node: split.second, store: store)
+                            PaneTreeView(node: split.second, store: store, sessions: sessions)
                         }
                     }
                 }
@@ -60,30 +62,49 @@ struct PaneTreeView: View {
     }
 }
 
-private struct TerminalPlaceholderView: View {
+private struct TerminalPaneView: View {
     let pane: TerminalPane
     let isFocused: Bool
-    let onFocus: () -> Void
+    @ObservedObject var sessions: TerminalSessionPool
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "terminal")
                     .font(.system(size: 11, weight: .medium))
-                Text(pane.title)
+                Text(sessions.title(for: pane))
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(abbreviatedPath)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+
+                if case .exited = sessions.status(for: pane.id) {
+                    Button {
+                        sessions.restart(pane: pane)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Restart Terminal")
+                    .accessibilityLabel("Restart terminal")
+                }
             }
             .font(.system(size: 11))
             .padding(.horizontal, 9)
             .frame(height: 28)
             .background(Color(nsColor: .controlBackgroundColor))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                sessions.focus(paneID: pane.id)
+            }
 
-            Color(red: 0.055, green: 0.059, blue: 0.067)
+            TerminalHostView(
+                pane: pane,
+                isFocused: isFocused,
+                sessions: sessions
+            )
         }
         .overlay {
             Rectangle()
@@ -92,10 +113,8 @@ private struct TerminalPlaceholderView: View {
                     lineWidth: 1
                 )
         }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onFocus)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(pane.title) terminal")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(sessions.title(for: pane)) terminal")
     }
 
     private var abbreviatedPath: String {

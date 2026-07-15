@@ -14,12 +14,19 @@ settings:
     SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
     SWIFT_VERSION: 5.0
 
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.14.0
+
 targets:
   Termuctive:
     type: application
     platform: macOS
     sources:
       - Sources/Termuctive
+    dependencies:
+      - package: SwiftTerm
     settings:
       base:
         CODE_SIGNING_ALLOWED: NO
@@ -40,6 +47,7 @@ targets:
       - Tests/TermuctiveTests
     dependencies:
       - target: Termuctive
+      - package: SwiftTerm
     settings:
       base:
         CODE_SIGNING_ALLOWED: NO

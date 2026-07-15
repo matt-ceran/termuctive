@@ -229,14 +229,25 @@ final class WorkspaceStore: ObservableObject {
         title: String? = nil,
         workingDirectory: String? = nil
     ) {
-        updateSelectedSpace { space in
-            space.layout = space.layout.updatingTerminal(
-                withID: paneID,
-                title: title,
-                workingDirectory: workingDirectory
-            )
+        guard let terminal = document.terminal(withID: paneID) else {
+            return
         }
-        save()
+        let titleChanged = title.map { !$0.isEmpty && $0 != terminal.title } ?? false
+        let directoryChanged =
+            workingDirectory.map {
+                !$0.isEmpty && $0 != terminal.workingDirectory
+            } ?? false
+        guard titleChanged || directoryChanged else {
+            return
+        }
+
+        if document.updateTerminal(
+            withID: paneID,
+            title: title,
+            workingDirectory: workingDirectory
+        ) {
+            save()
+        }
     }
 
     func dismissError() {
