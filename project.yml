@@ -1,0 +1,47 @@
+name: Termuctive
+
+options:
+  bundleIdPrefix: com.mattceran
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "26.0"
+
+settings:
+  base:
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    SWIFT_VERSION: 5.0
+
+targets:
+  Termuctive:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/Termuctive
+    settings:
+      base:
+        CODE_SIGNING_ALLOWED: NO
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Termuctive
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        PRODUCT_BUNDLE_IDENTIFIER: com.mattceran.termuctive
+    scheme:
+      testTargets:
+        - TermuctiveTests
+
+  TermuctiveTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/TermuctiveTests
+    dependencies:
+      - target: Termuctive
+    settings:
+      base:
+        CODE_SIGNING_ALLOWED: NO
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.mattceran.termuctive.tests

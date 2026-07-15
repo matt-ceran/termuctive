@@ -1,0 +1,481 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0EDAB564560B62D68C1A77FC /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */; };
+		15843F292139EDF92A81512F /* WorkspaceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30BA578C986DB04FBAB5C6C2 /* WorkspaceStoreTests.swift */; };
+		17BB13DEC6C119B651A2A659 /* PaneLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */; };
+		1A9EE08C743BE519896C8649 /* PaneTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6E1A21021BE972DC78E104D /* PaneTreeView.swift */; };
+		1B001D4A34F6BB63CF00B0A7 /* TermuctiveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */; };
+		6367DCA53C3632194454440A /* PaneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB732E6729E4ED88756FCF76 /* PaneLayout.swift */; };
+		9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */; };
+		A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */; };
+		ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */; };
+		AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */; };
+		BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */; };
+		BEB1CE16AA3870EA44E435F0 /* InterfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */; };
+		E8D378724F95E52BD2513B72 /* WorkspaceFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		85E6D45599BCBC22E799E0BD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8D3A7AFC1305754589E653AA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D5191C9E3A59CD6A3E9D4493;
+			remoteInfo = Termuctive;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDocument.swift; sourceTree = "<group>"; };
+		30BA578C986DB04FBAB5C6C2 /* WorkspaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStoreTests.swift; sourceTree = "<group>"; };
+		35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDocumentTests.swift; sourceTree = "<group>"; };
+		4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterfaceComponents.swift; sourceTree = "<group>"; };
+		55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
+		6E09168D4C22B0C86EB85EA2 /* Termuctive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Termuctive.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayoutTests.swift; sourceTree = "<group>"; };
+		9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSidebar.swift; sourceTree = "<group>"; };
+		A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStoreTests.swift; sourceTree = "<group>"; };
+		B6E1A21021BE972DC78E104D /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
+		D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStore.swift; sourceTree = "<group>"; };
+		DB732E6729E4ED88756FCF76 /* PaneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayout.swift; sourceTree = "<group>"; };
+		E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermuctiveApp.swift; sourceTree = "<group>"; };
+		EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
+		F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TermuctiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		008C604A09F300290B3DCF2A /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				DB732E6729E4ED88756FCF76 /* PaneLayout.swift */,
+				1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		1CE61870739AAB4D5A08DC6D /* TermuctiveTests */ = {
+			isa = PBXGroup;
+			children = (
+				8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */,
+				35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */,
+				A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */,
+				30BA578C986DB04FBAB5C6C2 /* WorkspaceStoreTests.swift */,
+			);
+			path = TermuctiveTests;
+			sourceTree = "<group>";
+		};
+		2CD727C985ACF4BE3C344A9D /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				1CE61870739AAB4D5A08DC6D /* TermuctiveTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		2E5C9385C42F2AAA61CC09C7 = {
+			isa = PBXGroup;
+			children = (
+				5BBAF8A6D19F517C0E2B3E93 /* Sources */,
+				2CD727C985ACF4BE3C344A9D /* Tests */,
+				8BBEF82D98EDDFA56D58E10B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		44542A5A519C481EFD92EA54 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */,
+				B6E1A21021BE972DC78E104D /* PaneTreeView.swift */,
+				9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */,
+				EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		5BBAF8A6D19F517C0E2B3E93 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				C7A8E0CD44EC188068DE0B53 /* Termuctive */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		8BBEF82D98EDDFA56D58E10B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6E09168D4C22B0C86EB85EA2 /* Termuctive.app */,
+				F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8D2C0979C20824CE4B41FCA7 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		C7A8E0CD44EC188068DE0B53 /* Termuctive */ = {
+			isa = PBXGroup;
+			children = (
+				E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */,
+				55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */,
+				008C604A09F300290B3DCF2A /* Models */,
+				8D2C0979C20824CE4B41FCA7 /* Persistence */,
+				44542A5A519C481EFD92EA54 /* Views */,
+			);
+			path = Termuctive;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D5191C9E3A59CD6A3E9D4493 /* Termuctive */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6262A5876B4D14AFBFB18069 /* Build configuration list for PBXNativeTarget "Termuctive" */;
+			buildPhases = (
+				20CC84F4CA96211F6E1247C2 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Termuctive;
+			packageProductDependencies = (
+			);
+			productName = Termuctive;
+			productReference = 6E09168D4C22B0C86EB85EA2 /* Termuctive.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E9F6BFF730AFAD24C600097A /* TermuctiveTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 938FC508FE26EBF0EC621262 /* Build configuration list for PBXNativeTarget "TermuctiveTests" */;
+			buildPhases = (
+				4A05A62DEDC9EEDA736D5A0F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9D05CE0D243665EF91E8C9FC /* PBXTargetDependency */,
+			);
+			name = TermuctiveTests;
+			packageProductDependencies = (
+			);
+			productName = TermuctiveTests;
+			productReference = F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8D3A7AFC1305754589E653AA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 47296A10FBD595BE548E8B02 /* Build configuration list for PBXProject "Termuctive" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 2E5C9385C42F2AAA61CC09C7;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8BBEF82D98EDDFA56D58E10B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D5191C9E3A59CD6A3E9D4493 /* Termuctive */,
+				E9F6BFF730AFAD24C600097A /* TermuctiveTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		20CC84F4CA96211F6E1247C2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BEB1CE16AA3870EA44E435F0 /* InterfaceComponents.swift in Sources */,
+				6367DCA53C3632194454440A /* PaneLayout.swift in Sources */,
+				1A9EE08C743BE519896C8649 /* PaneTreeView.swift in Sources */,
+				A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */,
+				1B001D4A34F6BB63CF00B0A7 /* TermuctiveApp.swift in Sources */,
+				AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */,
+				BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */,
+				9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */,
+				0EDAB564560B62D68C1A77FC /* WorkspaceView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4A05A62DEDC9EEDA736D5A0F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17BB13DEC6C119B651A2A659 /* PaneLayoutTests.swift in Sources */,
+				ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */,
+				E8D378724F95E52BD2513B72 /* WorkspaceFileStoreTests.swift in Sources */,
+				15843F292139EDF92A81512F /* WorkspaceStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9D05CE0D243665EF91E8C9FC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D5191C9E3A59CD6A3E9D4493 /* Termuctive */;
+			targetProxy = 85E6D45599BCBC22E799E0BD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		041D3ABCCF0F7EA126FF7B27 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Termuctive;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.termuctive;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		1EF6D66119F109B9F03AEE20 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		29CE490354F1F0CDBF7470D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		755975A1DDA028C90892C2ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.termuctive.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Termuctive.app/Contents/MacOS/Termuctive";
+			};
+			name = Release;
+		};
+		E2BC7A2FF8F1C2FEE4D6DF03 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Termuctive;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.termuctive;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		F81744A41DE179B12E2BBB1A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.termuctive.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Termuctive.app/Contents/MacOS/Termuctive";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		47296A10FBD595BE548E8B02 /* Build configuration list for PBXProject "Termuctive" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1EF6D66119F109B9F03AEE20 /* Debug */,
+				29CE490354F1F0CDBF7470D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6262A5876B4D14AFBFB18069 /* Build configuration list for PBXNativeTarget "Termuctive" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E2BC7A2FF8F1C2FEE4D6DF03 /* Debug */,
+				041D3ABCCF0F7EA126FF7B27 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		938FC508FE26EBF0EC621262 /* Build configuration list for PBXNativeTarget "TermuctiveTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F81744A41DE179B12E2BBB1A /* Debug */,
+				755975A1DDA028C90892C2ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8D3A7AFC1305754589E653AA /* Project object */;
+}
