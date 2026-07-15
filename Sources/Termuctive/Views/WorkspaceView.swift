@@ -100,6 +100,18 @@ struct WorkspaceView: View {
             .accessibilityLabel("Split terminal down")
 
             Button {
+                togglePaneZoom()
+            } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+            }
+            .buttonStyle(SquareIconButtonStyle())
+            .disabled(!store.canZoomFocusedPane)
+            .help(store.isFocusedPaneZoomed ? "Show All Panes" : "Zoom Focused Pane")
+            .accessibilityLabel(
+                store.isFocusedPaneZoomed ? "Show all terminal panes" : "Zoom focused terminal pane"
+            )
+
+            Button {
                 store.closeFocusedPane()
             } label: {
                 Image(systemName: "xmark")
@@ -117,7 +129,13 @@ struct WorkspaceView: View {
     @ViewBuilder
     private var workspaceContent: some View {
         if let space = store.selectedSpace {
-            PaneTreeView(node: space.layout, store: store, sessions: sessions)
+            if let zoomedPaneID = store.zoomedPaneID,
+                let pane = space.layout.terminal(withID: zoomedPaneID)
+            {
+                PaneTreeView(node: .terminal(pane), store: store, sessions: sessions)
+            } else {
+                PaneTreeView(node: space.layout, store: store, sessions: sessions)
+            }
         } else {
             ZStack {
                 Color(nsColor: .textBackgroundColor)
@@ -145,6 +163,13 @@ struct WorkspaceView: View {
             Task { @MainActor in
                 store.addProject(at: url)
             }
+        }
+    }
+
+    private func togglePaneZoom() {
+        store.toggleFocusedPaneZoom()
+        if let focusedPaneID = store.focusedPaneID {
+            sessions.focus(paneID: focusedPaneID)
         }
     }
 }

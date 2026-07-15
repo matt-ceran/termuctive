@@ -61,4 +61,26 @@ final class PaneLayoutTests: XCTestCase {
         }
         XCTAssertEqual(result.ratio, 0.9)
     }
+
+    func testTerminalTraversalFollowsDisplayedSplitOrder() throws {
+        let first = TerminalPane(workingDirectory: "/first")
+        let second = TerminalPane(workingDirectory: "/second")
+        let third = TerminalPane(workingDirectory: "/third")
+        let firstSplit = try XCTUnwrap(
+            PaneNode.terminal(first).splittingTerminal(
+                withID: first.id,
+                axis: .horizontal,
+                newPane: second
+            )
+        )
+        let layout = try XCTUnwrap(
+            firstSplit.splittingTerminal(
+                withID: second.id,
+                axis: .vertical,
+                newPane: third
+            )
+        )
+
+        XCTAssertEqual(layout.orderedTerminalIDs, [first.id, second.id, third.id])
+    }
 }

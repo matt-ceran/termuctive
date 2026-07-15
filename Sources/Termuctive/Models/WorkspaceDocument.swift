@@ -66,6 +66,15 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         }
     }
 
+    var terminalSpaces: [TerminalSpace] {
+        switch self {
+        case .space(let space):
+            [space]
+        case .folder(let folder):
+            folder.children.flatMap(\.terminalSpaces)
+        }
+    }
+
     var folderIDs: Set<UUID> {
         switch self {
         case .space:
@@ -92,6 +101,20 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
             return space.layout.terminal(withID: id)
         case .folder(let folder):
             return folder.children.lazy.compactMap { $0.terminal(withID: id) }.first
+        }
+    }
+
+    func ancestorFolderIDs(forSpaceWithID id: UUID) -> [UUID]? {
+        switch self {
+        case .space(let space):
+            return space.id == id ? [] : nil
+        case .folder(let folder):
+            for child in folder.children {
+                if let ancestors = child.ancestorFolderIDs(forSpaceWithID: id) {
+                    return [folder.id] + ancestors
+                }
+            }
+            return nil
         }
     }
 
@@ -290,6 +313,10 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         }
     }
 
+    var terminalSpaces: [TerminalSpace] {
+        items.flatMap(\.terminalSpaces)
+    }
+
     var folderIDs: Set<UUID> {
         items.reduce(into: Set<UUID>()) { ids, item in
             ids.formUnion(item.folderIDs)
@@ -311,6 +338,10 @@ struct TerminalProject: Codable, Equatable, Identifiable {
 
     func terminal(withID id: UUID) -> TerminalPane? {
         items.lazy.compactMap { $0.terminal(withID: id) }.first
+    }
+
+    func ancestorFolderIDs(forSpaceWithID id: UUID) -> [UUID] {
+        items.lazy.compactMap { $0.ancestorFolderIDs(forSpaceWithID: id) }.first ?? []
     }
 
     func containsFolder(withID id: UUID) -> Bool {

@@ -83,6 +83,15 @@ indirect enum PaneNode: Codable, Equatable, Identifiable {
         }
     }
 
+    var orderedTerminalIDs: [UUID] {
+        switch self {
+        case .terminal(let pane):
+            [pane.id]
+        case .split(let split):
+            split.first.orderedTerminalIDs + split.second.orderedTerminalIDs
+        }
+    }
+
     func terminal(withID id: UUID) -> TerminalPane? {
         switch self {
         case .terminal(let pane):

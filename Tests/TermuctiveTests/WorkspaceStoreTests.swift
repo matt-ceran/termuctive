@@ -274,6 +274,92 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(updatedProject.space(withID: secondSpace.id)?.name, "Server 2")
         XCTAssertEqual(persistence.savedDocuments.count, 2)
     }
+
+    func testPaneNavigationWrapsAndZoomTracksFocus() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let firstPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.splitFocusedPane(axis: .horizontal)
+        let secondPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.splitFocusedPane(axis: .vertical)
+        let thirdPaneID = try XCTUnwrap(store.focusedPaneID)
+
+        XCTAssertEqual(
+            store.selectedSpace?.layout.orderedTerminalIDs,
+            [firstPaneID, secondPaneID, thirdPaneID]
+        )
+
+        store.focusNextPane()
+        XCTAssertEqual(store.focusedPaneID, firstPaneID)
+        store.toggleFocusedPaneZoom()
+        XCTAssertEqual(store.zoomedPaneID, firstPaneID)
+
+        store.focusNextPane()
+        XCTAssertEqual(store.focusedPaneID, secondPaneID)
+        XCTAssertEqual(store.zoomedPaneID, secondPaneID)
+
+        store.focusPreviousPane()
+        XCTAssertEqual(store.focusedPaneID, firstPaneID)
+        XCTAssertEqual(store.zoomedPaneID, firstPaneID)
+
+        store.toggleFocusedPaneZoom()
+        XCTAssertNil(store.zoomedPaneID)
+        store.toggleFocusedPaneZoom()
+        XCTAssertEqual(store.zoomedPaneID, firstPaneID)
+
+        store.splitFocusedPane(axis: .horizontal)
+        XCTAssertNil(store.zoomedPaneID)
+        XCTAssertEqual(store.selectedSpace?.layout.terminalCount, 4)
+    }
+
+    func testWorkspaceNavigationWrapsThroughNestedSpacesAndProjects() throws {
+        let firstPane = TerminalPane(workingDirectory: "/one")
+        let secondPane = TerminalPane(workingDirectory: "/one/nested")
+        let firstSpace = TerminalSpace(name: "First", layout: .terminal(firstPane))
+        let secondSpace = TerminalSpace(name: "Second", layout: .terminal(secondPane))
+        let nestedFolder = WorkspaceFolder(
+            name: "Nested",
+            children: [.space(secondSpace)]
+        )
+        let firstProject = TerminalProject(
+            name: "One",
+            rootDirectory: "/one",
+            items: [
+                .space(firstSpace),
+                .folder(nestedFolder),
+            ],
+            lastSelectedSpaceID: firstSpace.id
+        )
+        let otherPane = TerminalPane(workingDirectory: "/two")
+        let otherSpace = TerminalSpace(name: "Other", layout: .terminal(otherPane))
+        let otherProject = TerminalProject(
+            name: "Two",
+            rootDirectory: "/two",
+            items: [.space(otherSpace)],
+            lastSelectedSpaceID: otherSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [firstProject, otherProject],
+            selectedProjectID: firstProject.id,
+            selectedSpaceID: firstSpace.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.selectPreviousSpace()
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpace.id)
+        XCTAssertTrue(store.expandedFolderIDs.contains(nestedFolder.id))
+        store.selectNextSpace()
+        XCTAssertEqual(store.document.selectedSpaceID, firstSpace.id)
+
+        store.selectPreviousProject()
+        XCTAssertEqual(store.document.selectedProjectID, otherProject.id)
+        XCTAssertEqual(store.focusedPaneID, otherPane.id)
+        store.selectNextProject()
+        XCTAssertEqual(store.document.selectedProjectID, firstProject.id)
+        XCTAssertEqual(store.document.selectedSpaceID, firstSpace.id)
+    }
 }
 
 private final class RecordingPersistence: WorkspacePersisting {

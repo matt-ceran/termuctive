@@ -4,6 +4,7 @@ import Foundation
 final class WorkspaceStore: ObservableObject {
     @Published private(set) var document: WorkspaceDocument
     @Published private(set) var focusedPaneID: UUID?
+    @Published private(set) var zoomedPaneID: UUID?
     @Published private(set) var expandedFolderIDs: Set<UUID> = []
     @Published private(set) var selectedFolderID: UUID?
     @Published private(set) var errorMessage: String?
@@ -32,6 +33,26 @@ final class WorkspaceStore: ObservableObject {
 
     var canCloseFocusedPane: Bool {
         (selectedSpace?.layout.terminalCount ?? 0) > 1 && focusedPaneID != nil
+    }
+
+    var canCyclePanes: Bool {
+        (selectedSpace?.layout.terminalCount ?? 0) > 1
+    }
+
+    var canCycleSpaces: Bool {
+        (selectedProject?.terminalSpaces.count ?? 0) > 1
+    }
+
+    var canCycleProjects: Bool {
+        document.projects.count > 1
+    }
+
+    var canZoomFocusedPane: Bool {
+        canCyclePanes && focusedPaneID != nil
+    }
+
+    var isFocusedPaneZoomed: Bool {
+        zoomedPaneID != nil
     }
 
     func addProject(at url: URL) {
@@ -64,6 +85,7 @@ final class WorkspaceStore: ObservableObject {
         document.selectedSpaceID = space.id
         selectedFolderID = nil
         focusedPaneID = pane.id
+        zoomedPaneID = nil
         save()
     }
 
@@ -88,8 +110,12 @@ final class WorkspaceStore: ObservableObject {
         document.projects[projectIndex].lastSelectedSpaceID = id
         document.selectedProjectID = projectID
         document.selectedSpaceID = id
+        expandedFolderIDs.formUnion(
+            document.projects[projectIndex].ancestorFolderIDs(forSpaceWithID: id)
+        )
         selectedFolderID = nil
         focusedPaneID = space.layout.firstTerminalID
+        zoomedPaneID = nil
         save()
     }
 
@@ -117,6 +143,39 @@ final class WorkspaceStore: ObservableObject {
         } else {
             expandedFolderIDs.insert(id)
         }
+    }
+
+    func focusNextPane() {
+        focusAdjacentPane(offset: 1)
+    }
+
+    func focusPreviousPane() {
+        focusAdjacentPane(offset: -1)
+    }
+
+    func selectNextSpace() {
+        selectAdjacentSpace(offset: 1)
+    }
+
+    func selectPreviousSpace() {
+        selectAdjacentSpace(offset: -1)
+    }
+
+    func selectNextProject() {
+        selectAdjacentProject(offset: 1)
+    }
+
+    func selectPreviousProject() {
+        selectAdjacentProject(offset: -1)
+    }
+
+    func toggleFocusedPaneZoom() {
+        guard canZoomFocusedPane,
+            let focusedPaneID
+        else {
+            return
+        }
+        zoomedPaneID = zoomedPaneID == focusedPaneID ? nil : focusedPaneID
     }
 
     func addFolder() {
@@ -181,6 +240,7 @@ final class WorkspaceStore: ObservableObject {
         }
         selectedFolderID = nil
         focusedPaneID = pane.id
+        zoomedPaneID = nil
         save()
     }
 
@@ -231,6 +291,7 @@ final class WorkspaceStore: ObservableObject {
                 document.selectedProjectID = nil
                 document.selectedSpaceID = nil
                 focusedPaneID = nil
+                zoomedPaneID = nil
                 save()
                 return
             }
@@ -260,6 +321,7 @@ final class WorkspaceStore: ObservableObject {
                 preferredSpaceID: document.selectedSpaceID
             )
         }
+        normalizeZoom()
         save()
     }
 
@@ -268,6 +330,9 @@ final class WorkspaceStore: ObservableObject {
             return
         }
         focusedPaneID = id
+        if zoomedPaneID != nil {
+            zoomedPaneID = id
+        }
     }
 
     func splitFocusedPane(axis: PaneAxis) {
@@ -295,6 +360,7 @@ final class WorkspaceStore: ObservableObject {
             space.layout = layout
         }
         self.focusedPaneID = newPane.id
+        zoomedPaneID = nil
         save()
     }
 
@@ -311,6 +377,7 @@ final class WorkspaceStore: ObservableObject {
             }
             space.layout = layout
         }
+        zoomedPaneID = nil
         self.focusedPaneID = selectedSpace?.layout.firstTerminalID
         save()
     }
@@ -376,6 +443,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func activateProject(at index: Int, preferredSpaceID: UUID? = nil) {
+        zoomedPaneID = nil
         document.selectedProjectID = document.projects[index].id
         restoreActiveSpace(
             inProjectAt: index,
@@ -391,6 +459,11 @@ final class WorkspaceStore: ObservableObject {
             ?? project.preferredSpace
         document.projects[index].lastSelectedSpaceID = space?.id
         document.selectedSpaceID = space?.id
+        if let space {
+            expandedFolderIDs.formUnion(
+                project.ancestorFolderIDs(forSpaceWithID: space.id)
+            )
+        }
 
         if let focusedPaneID,
             space?.layout.terminalIDs.contains(focusedPaneID) == true
@@ -408,6 +481,69 @@ final class WorkspaceStore: ObservableObject {
             document.projects[index].lastSelectedSpaceID = project.firstSpace?.id
             return
         }
+    }
+
+    private func focusAdjacentPane(offset: Int) {
+        guard let layout = selectedSpace?.layout,
+            let paneID = adjacentID(
+                in: layout.orderedTerminalIDs,
+                currentID: focusedPaneID,
+                offset: offset
+            )
+        else {
+            return
+        }
+        focusedPaneID = paneID
+        if zoomedPaneID != nil {
+            zoomedPaneID = paneID
+        }
+    }
+
+    private func selectAdjacentSpace(offset: Int) {
+        guard let project = selectedProject,
+            let spaceID = adjacentID(
+                in: project.terminalSpaces.map(\.id),
+                currentID: document.selectedSpaceID,
+                offset: offset
+            )
+        else {
+            return
+        }
+        selectSpace(withID: spaceID, inProject: project.id)
+    }
+
+    private func selectAdjacentProject(offset: Int) {
+        guard
+            let projectID = adjacentID(
+                in: document.projects.map(\.id),
+                currentID: document.selectedProjectID,
+                offset: offset
+            )
+        else {
+            return
+        }
+        selectProject(withID: projectID)
+    }
+
+    private func adjacentID(in ids: [UUID], currentID: UUID?, offset: Int) -> UUID? {
+        guard ids.count > 1 else {
+            return nil
+        }
+        guard let currentID,
+            let currentIndex = ids.firstIndex(of: currentID)
+        else {
+            return offset > 0 ? ids.first : ids.last
+        }
+        return ids[(currentIndex + offset + ids.count) % ids.count]
+    }
+
+    private func normalizeZoom() {
+        guard let zoomedPaneID,
+            selectedSpace?.layout.terminalIDs.contains(zoomedPaneID) != true
+        else {
+            return
+        }
+        self.zoomedPaneID = nil
     }
 
     private func updateSelectedSpace(_ update: (inout TerminalSpace) -> Void) {
