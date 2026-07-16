@@ -199,6 +199,10 @@ struct ProjectSidebar: View {
             }
         }
         .contextMenu {
+            creationActions(for: entry)
+            if entry.canContainItems {
+                Divider()
+            }
             Button("Rename") {
                 beginRename(entry)
             }
@@ -206,6 +210,36 @@ struct ProjectSidebar: View {
             Button("\(entry.removeLabel)...", role: .destructive) {
                 pendingRemoval = entry
             }
+        }
+    }
+
+    @ViewBuilder
+    private func creationActions(for entry: SidebarEntry) -> some View {
+        switch entry {
+        case .project(let projectID, _):
+            Button("New Terminal Space") {
+                store.addSpace(toFolderWithID: nil, inProjectWithID: projectID)
+            }
+            Button("New Folder") {
+                store.addFolder(toFolderWithID: nil, inProjectWithID: projectID)
+            }
+
+        case .folder(let folderID, let projectID, _):
+            Button("New Terminal Space") {
+                store.addSpace(
+                    toFolderWithID: folderID,
+                    inProjectWithID: projectID
+                )
+            }
+            Button("New Folder") {
+                store.addFolder(
+                    toFolderWithID: folderID,
+                    inProjectWithID: projectID
+                )
+            }
+
+        case .space:
+            EmptyView()
         }
     }
 
@@ -310,6 +344,15 @@ private enum SidebarEntry: Equatable {
             "Remove Folder"
         case .space:
             "Remove Terminal Space"
+        }
+    }
+
+    var canContainItems: Bool {
+        switch self {
+        case .project, .folder:
+            true
+        case .space:
+            false
         }
     }
 

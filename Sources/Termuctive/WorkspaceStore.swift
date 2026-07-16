@@ -182,13 +182,27 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func addFolder() {
-        guard let projectIndex = selectedProjectIndex else {
+        guard let project = selectedProject else {
             return
         }
 
-        let parentID = validSelectedFolderID(in: document.projects[projectIndex])
+        addFolder(
+            toFolderWithID: validSelectedFolderID(in: project),
+            inProjectWithID: project.id
+        )
+    }
+
+    func addFolder(toFolderWithID parentID: UUID?, inProjectWithID projectID: UUID) {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }) else {
+            return
+        }
+        let project = document.projects[projectIndex]
+        guard parentID.map({ project.containsFolder(withID: $0) }) ?? true else {
+            return
+        }
+
         let existingNames =
-            document.projects[projectIndex].childNames(
+            project.childNames(
                 inFolderWithID: parentID
             ) ?? []
         let folder = WorkspaceFolder(
@@ -203,6 +217,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        activateProject(at: projectIndex)
         selectedFolderID = folder.id
         if let parentID {
             expandedFolderIDs.insert(parentID)
@@ -212,12 +227,25 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func addSpace() {
-        guard let projectIndex = selectedProjectIndex else {
+        guard let project = selectedProject else {
             return
         }
 
+        addSpace(
+            toFolderWithID: validSelectedFolderID(in: project),
+            inProjectWithID: project.id
+        )
+    }
+
+    func addSpace(toFolderWithID parentID: UUID?, inProjectWithID projectID: UUID) {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }) else {
+            return
+        }
         let project = document.projects[projectIndex]
-        let parentID = validSelectedFolderID(in: project)
+        guard parentID.map({ project.containsFolder(withID: $0) }) ?? true else {
+            return
+        }
+
         let existingNames = project.childNames(inFolderWithID: parentID) ?? []
         let pane = TerminalPane(
             title: defaultShellName,
@@ -237,6 +265,7 @@ final class WorkspaceStore: ObservableObject {
         }
 
         document.projects[projectIndex].lastSelectedSpaceID = space.id
+        document.selectedProjectID = projectID
         document.selectedSpaceID = space.id
         if let parentID {
             expandedFolderIDs.insert(parentID)

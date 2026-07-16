@@ -54,6 +54,36 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.document.selectedSpaceID, space.id)
     }
 
+    func testSpaceCanBeAddedToExplicitFolderInAnotherProject() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/first"))
+        let firstProjectID = try XCTUnwrap(store.selectedProject?.id)
+        store.addFolder()
+        let folderID = try XCTUnwrap(store.selectedFolderID)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/second"))
+
+        store.addSpace(
+            toFolderWithID: folderID,
+            inProjectWithID: firstProjectID
+        )
+
+        let firstProject = try XCTUnwrap(
+            store.document.projects.first { $0.id == firstProjectID }
+        )
+        guard case .folder(let folder) = firstProject.items.last,
+            case .space(let space) = folder.children.last
+        else {
+            return XCTFail("Expected a terminal space inside the target folder.")
+        }
+        XCTAssertEqual(store.document.selectedProjectID, firstProjectID)
+        XCTAssertEqual(store.document.selectedSpaceID, space.id)
+        XCTAssertEqual(
+            space.layout.terminal(withID: space.layout.firstTerminalID)?.workingDirectory,
+            "/tmp/first")
+        XCTAssertTrue(store.expandedFolderIDs.contains(folderID))
+    }
+
     func testSplitAndCloseRestoreSinglePaneLayout() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
