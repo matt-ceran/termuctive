@@ -23,33 +23,44 @@ struct SplitDivider: View {
     @State private var isHovered = false
 
     var body: some View {
-        Rectangle()
-            .fill(isHovered ? Color.accentColor : Color(nsColor: .separatorColor))
-            .frame(
-                width: axis == .horizontal ? 5 : nil,
-                height: axis == .vertical ? 5 : nil
-            )
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                isHovered = hovering
-                if hovering {
-                    resizeCursor.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .gesture(
-                DragGesture(
-                    minimumDistance: 0,
-                    coordinateSpace: .named(splitID)
+        ZStack {
+            Color.clear
+            Rectangle()
+                .fill(
+                    Color(nsColor: .separatorColor)
+                        .opacity(isHovered ? 0.5 : 0.28)
                 )
-                .onChanged { value in
-                    updateRatio(at: value.location, persist: false)
-                }
-                .onEnded { value in
-                    updateRatio(at: value.location, persist: true)
-                }
+                .frame(
+                    width: axis == .horizontal ? 1 : nil,
+                    height: axis == .vertical ? 1 : nil
+                )
+        }
+        .frame(
+            width: axis == .horizontal ? 5 : nil,
+            height: axis == .vertical ? 5 : nil
+        )
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering {
+                resizeCursor.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(
+                minimumDistance: 0,
+                coordinateSpace: .named(splitID)
             )
+            .onChanged { value in
+                updateRatio(at: value.location, persist: false)
+            }
+            .onEnded { value in
+                updateRatio(at: value.location, persist: true)
+            }
+        )
     }
 
     private var resizeCursor: NSCursor {
