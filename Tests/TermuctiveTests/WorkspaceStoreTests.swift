@@ -239,6 +239,29 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedProject?.lastSelectedSpaceID, secondSpace.id)
     }
 
+    func testProjectsExpandAndCollapseIndependently() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/one"))
+        let firstProjectID = try XCTUnwrap(store.selectedProject?.id)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/two"))
+        let secondProjectID = try XCTUnwrap(store.selectedProject?.id)
+
+        XCTAssertEqual(store.expandedProjectIDs, [firstProjectID, secondProjectID])
+
+        store.toggleProject(withID: firstProjectID)
+
+        XCTAssertFalse(store.expandedProjectIDs.contains(firstProjectID))
+        XCTAssertTrue(store.expandedProjectIDs.contains(secondProjectID))
+        XCTAssertEqual(store.document.selectedProjectID, secondProjectID)
+
+        store.toggleProject(withID: firstProjectID)
+        store.selectProject(withID: firstProjectID)
+
+        XCTAssertEqual(store.expandedProjectIDs, [firstProjectID, secondProjectID])
+        XCTAssertEqual(persistence.savedDocuments.last, store.document)
+    }
+
     func testRemovingSelectedNestedFolderRestoresRemainingSpace() throws {
         let fallbackPane = TerminalPane(workingDirectory: "/project")
         let fallbackSpace = TerminalSpace(

@@ -5,6 +5,7 @@ final class WorkspaceStore: ObservableObject {
     @Published private(set) var document: WorkspaceDocument
     @Published private(set) var focusedPaneID: UUID?
     @Published private(set) var zoomedPaneID: UUID?
+    @Published private(set) var expandedProjectIDs: Set<UUID> = []
     @Published private(set) var expandedFolderIDs: Set<UUID> = []
     @Published private(set) var selectedFolderID: UUID?
     @Published private(set) var errorMessage: String?
@@ -86,6 +87,7 @@ final class WorkspaceStore: ObservableObject {
         document.projects.append(project)
         document.selectedProjectID = project.id
         document.selectedSpaceID = space.id
+        expandedProjectIDs.insert(project.id)
         selectedFolderID = nil
         focusedPaneID = pane.id
         zoomedPaneID = nil
@@ -113,6 +115,7 @@ final class WorkspaceStore: ObservableObject {
         document.projects[projectIndex].lastSelectedSpaceID = id
         document.selectedProjectID = projectID
         document.selectedSpaceID = id
+        expandedProjectIDs.insert(projectID)
         expandedFolderIDs.formUnion(
             document.projects[projectIndex].ancestorFolderIDs(forSpaceWithID: id)
         )
@@ -145,6 +148,17 @@ final class WorkspaceStore: ObservableObject {
             expandedFolderIDs.remove(id)
         } else {
             expandedFolderIDs.insert(id)
+        }
+    }
+
+    func toggleProject(withID id: UUID) {
+        guard document.projects.contains(where: { $0.id == id }) else {
+            return
+        }
+        if expandedProjectIDs.contains(id) {
+            expandedProjectIDs.remove(id)
+        } else {
+            expandedProjectIDs.insert(id)
         }
     }
 
@@ -267,6 +281,7 @@ final class WorkspaceStore: ObservableObject {
         document.projects[projectIndex].lastSelectedSpaceID = space.id
         document.selectedProjectID = projectID
         document.selectedSpaceID = space.id
+        expandedProjectIDs.insert(projectID)
         if let parentID {
             expandedFolderIDs.insert(parentID)
         }
@@ -315,6 +330,7 @@ final class WorkspaceStore: ObservableObject {
         }
         let wasSelected = document.selectedProjectID == id
         document.projects.remove(at: projectIndex)
+        expandedProjectIDs.formIntersection(document.projects.map(\.id))
         expandedFolderIDs.formIntersection(document.folderIDs)
 
         if wasSelected {
@@ -497,6 +513,7 @@ final class WorkspaceStore: ObservableObject {
     private func activateProject(at index: Int, preferredSpaceID: UUID? = nil) {
         zoomedPaneID = nil
         document.selectedProjectID = document.projects[index].id
+        expandedProjectIDs.insert(document.projects[index].id)
         restoreActiveSpace(
             inProjectAt: index,
             preferredSpaceID: preferredSpaceID

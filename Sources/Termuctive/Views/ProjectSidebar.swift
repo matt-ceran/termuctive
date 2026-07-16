@@ -54,6 +54,7 @@ struct ProjectSidebar: View {
                         projectSection(project)
                     }
                 }
+                .animation(.easeInOut(duration: 0.18), value: store.expandedProjectIDs)
                 .padding(.vertical, 6)
             }
         }
@@ -90,20 +91,31 @@ struct ProjectSidebar: View {
 
     @ViewBuilder
     private func projectSection(_ project: TerminalProject) -> some View {
-        sidebarRow(
-            entry: .project(id: project.id, name: project.name),
-            icon: "folder",
-            title: project.name,
-            depth: 0,
-            selected: store.document.selectedProjectID == project.id
-                && store.selectedFolderID == nil
-        ) {
-            store.selectProject(withID: project.id)
-        }
+        let isExpanded = store.expandedProjectIDs.contains(project.id)
+        VStack(spacing: 0) {
+            sidebarRow(
+                entry: .project(id: project.id, name: project.name),
+                icon: isExpanded ? "chevron.down" : "chevron.right",
+                secondaryIcon: "folder",
+                title: project.name,
+                depth: 0,
+                selected: store.document.selectedProjectID == project.id
+                    && store.selectedFolderID == nil
+            ) {
+                if store.document.selectedProjectID == project.id {
+                    store.toggleProject(withID: project.id)
+                } else {
+                    store.selectProject(withID: project.id)
+                }
+            }
 
-        if store.document.selectedProjectID == project.id {
-            ForEach(project.items) { item in
-                itemRow(item, projectID: project.id, depth: 1)
+            if isExpanded {
+                VStack(spacing: 0) {
+                    ForEach(project.items) { item in
+                        itemRow(item, projectID: project.id, depth: 1)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -139,14 +151,19 @@ struct ProjectSidebar: View {
                         depth: depth,
                         selected: store.selectedFolderID == folder.id
                     ) {
-                        store.selectFolder(withID: folder.id, inProject: projectID)
-                        store.toggleFolder(withID: folder.id)
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            store.selectFolder(withID: folder.id, inProject: projectID)
+                            store.toggleFolder(withID: folder.id)
+                        }
                     }
 
                     if isExpanded {
-                        ForEach(folder.children) { child in
-                            itemRow(child, projectID: projectID, depth: depth + 1)
+                        VStack(spacing: 0) {
+                            ForEach(folder.children) { child in
+                                itemRow(child, projectID: projectID, depth: depth + 1)
+                            }
                         }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
             )
