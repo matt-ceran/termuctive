@@ -207,7 +207,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
             onFocus(paneID)
         }
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        view.fontSmoothing = false
+        view.fontSmoothing = true
         view.lineSpacing = 1.08
         view.nativeForegroundColor = NSColor(
             calibratedRed: 0.86,
