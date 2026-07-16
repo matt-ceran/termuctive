@@ -18,9 +18,7 @@ struct TerminalHostView: NSViewRepresentable {
         let view = sessions.terminalView(for: pane)
         context.coordinator.wasFocused = isFocused
         if isFocused {
-            DispatchQueue.main.async {
-                view.window?.makeFirstResponder(view)
-            }
+            view.requestFocus()
         }
         return view
     }
@@ -28,13 +26,9 @@ struct TerminalHostView: NSViewRepresentable {
     func updateNSView(_ view: TermuctiveTerminalView, context: Context) {
         let shouldFocus = isFocused && !context.coordinator.wasFocused
         context.coordinator.wasFocused = isFocused
-        guard shouldFocus,
-            view.window?.firstResponder !== view
-        else {
+        guard shouldFocus else {
             return
         }
-        DispatchQueue.main.async {
-            view.window?.makeFirstResponder(view)
-        }
+        view.requestFocus()
     }
 }

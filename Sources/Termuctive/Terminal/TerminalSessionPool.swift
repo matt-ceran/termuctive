@@ -69,7 +69,7 @@ final class TerminalSessionPool: ObservableObject {
         guard let view = sessions[paneID]?.view else {
             return
         }
-        view.window?.makeFirstResponder(view)
+        view.requestFocus()
     }
 
     func restart(pane: TerminalPane) {
@@ -117,10 +117,31 @@ final class TerminalSessionPool: ObservableObject {
 
 final class TermuctiveTerminalView: LocalProcessTerminalView {
     var focusHandler: (() -> Void)?
+    private var hasPendingFocusRequest = false
+
+    func requestFocus() {
+        hasPendingFocusRequest = true
+        applyPendingFocusRequest()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyPendingFocusRequest()
+    }
 
     override func mouseDown(with event: NSEvent) {
         focusHandler?()
         super.mouseDown(with: event)
+    }
+
+    private func applyPendingFocusRequest() {
+        guard hasPendingFocusRequest,
+            let window,
+            window.makeFirstResponder(self)
+        else {
+            return
+        }
+        hasPendingFocusRequest = false
     }
 }
 
