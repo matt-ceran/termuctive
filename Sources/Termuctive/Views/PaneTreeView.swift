@@ -117,13 +117,6 @@ private struct TerminalPaneView: View {
                 sessions: sessions
             )
         }
-        .overlay {
-            Rectangle()
-                .stroke(
-                    isFocused ? Color.accentColor : Color.clear,
-                    lineWidth: 1
-                )
-        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(sessions.title(for: pane)) terminal")
     }

@@ -11,6 +11,7 @@ enum TerminalSessionStatus: Equatable {
 final class TerminalSessionPool: ObservableObject {
     @Published private var titles: [UUID: String] = [:]
     @Published private var statuses: [UUID: TerminalSessionStatus] = [:]
+    @Published private(set) var fontSize: CGFloat = 11
 
     private let store: WorkspaceStore
     private var sessions: [UUID: TerminalSession] = [:]
@@ -26,6 +27,7 @@ final class TerminalSessionPool: ObservableObject {
 
         let session = TerminalSession(
             pane: pane,
+            fontSize: fontSize,
             onFocus: { [weak self] paneID in
                 Task { @MainActor in
                     self?.focus(paneID: paneID)
@@ -62,6 +64,22 @@ final class TerminalSessionPool: ObservableObject {
 
     func status(for paneID: UUID) -> TerminalSessionStatus {
         statuses[paneID] ?? .running
+    }
+
+    var canIncreaseFontSize: Bool {
+        fontSize < Self.fontSizeRange.upperBound
+    }
+
+    var canDecreaseFontSize: Bool {
+        fontSize > Self.fontSizeRange.lowerBound
+    }
+
+    func increaseFontSize() {
+        setFontSize(fontSize + 1)
+    }
+
+    func decreaseFontSize() {
+        setFontSize(fontSize - 1)
     }
 
     func focus(paneID: UUID) {
@@ -113,6 +131,20 @@ final class TerminalSessionPool: ObservableObject {
         }
         statuses[paneID] = .exited(exitCode)
     }
+
+    private func setFontSize(_ proposedSize: CGFloat) {
+        let size = min(
+            max(proposedSize, Self.fontSizeRange.lowerBound), Self.fontSizeRange.upperBound)
+        guard size != fontSize else {
+            return
+        }
+        fontSize = size
+        for session in sessions.values {
+            session.setFontSize(size)
+        }
+    }
+
+    private static let fontSizeRange: ClosedRange<CGFloat> = 8...32
 }
 
 final class TermuctiveTerminalView: LocalProcessTerminalView {
@@ -156,6 +188,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     init(
         pane: TerminalPane,
+        fontSize: CGFloat,
         onFocus: @escaping (UUID) -> Void,
         onTitleChange: @escaping (UUID, String) -> Void,
         onDirectoryChange: @escaping (UUID, String) -> Void,
@@ -173,7 +206,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         view.focusHandler = { [paneID] in
             onFocus(paneID)
         }
-        view.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+        view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.fontSmoothing = false
         view.lineSpacing = 1.08
         view.nativeForegroundColor = NSColor(
@@ -206,6 +239,10 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         if view.process.running {
             view.terminate()
         }
+    }
+
+    func setFontSize(_ size: CGFloat) {
+        view.font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
     func sizeChanged(

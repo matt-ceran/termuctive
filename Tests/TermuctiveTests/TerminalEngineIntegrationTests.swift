@@ -63,6 +63,37 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         XCTAssertTrue(window.firstResponder === terminal)
     }
 
+    func testTerminalFontSizeStartsCompactAndStaysWithinBounds() throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        XCTAssertEqual(terminal.font.pointSize, 11)
+        sessions.increaseFontSize()
+        XCTAssertEqual(terminal.font.pointSize, 12)
+        sessions.decreaseFontSize()
+        XCTAssertEqual(terminal.font.pointSize, 11)
+
+        for _ in 0..<40 {
+            sessions.decreaseFontSize()
+        }
+        XCTAssertEqual(terminal.font.pointSize, 8)
+        XCTAssertFalse(sessions.canDecreaseFontSize)
+
+        for _ in 0..<40 {
+            sessions.increaseFontSize()
+        }
+        XCTAssertEqual(terminal.font.pointSize, 32)
+        XCTAssertFalse(sessions.canIncreaseFontSize)
+    }
+
     func testShellOutputAndWorkingDirectoryReachTerminalBuffer() async throws {
         let identifier = UUID().uuidString.prefix(8)
         let directory = URL(fileURLWithPath: "/tmp", isDirectory: true)

@@ -98,6 +98,20 @@ struct TermuctiveApp: App {
                 }
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
                 .disabled(!store.canZoomFocusedPane)
+
+                Divider()
+
+                Button("Increase Font Size") {
+                    sessions.increaseFontSize()
+                }
+                .keyboardShortcut("+", modifiers: [.command])
+                .disabled(!sessions.canIncreaseFontSize)
+
+                Button("Decrease Font Size") {
+                    sessions.decreaseFontSize()
+                }
+                .keyboardShortcut("-", modifiers: [.command])
+                .disabled(!sessions.canDecreaseFontSize)
             }
         }
     }
