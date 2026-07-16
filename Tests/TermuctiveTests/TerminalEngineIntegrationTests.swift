@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftTerm
 import XCTest
 
@@ -107,6 +108,27 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         }
 
         XCTAssertTrue(terminal.fontSmoothing)
+    }
+
+    func testCreatingTerminalSessionDoesNotPublishDuringViewConstruction() throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        var publicationCount = 0
+        let observation = sessions.objectWillChange.sink {
+            publicationCount += 1
+        }
+        defer {
+            observation.cancel()
+            sessions.terminateAll()
+        }
+
+        _ = sessions.terminalView(for: pane)
+
+        XCTAssertEqual(publicationCount, 0)
     }
 
     func testShellOutputAndWorkingDirectoryReachTerminalBuffer() async throws {

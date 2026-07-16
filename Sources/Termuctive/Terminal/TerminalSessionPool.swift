@@ -53,8 +53,11 @@ final class TerminalSessionPool: ObservableObject {
             }
         )
         sessions[pane.id] = session
-        titles[pane.id] = pane.title
-        statuses[pane.id] = session.start() ? .running : .exited(nil)
+        if !session.start() {
+            Task { @MainActor [weak self] in
+                self?.markExited(paneID: pane.id, exitCode: nil)
+            }
+        }
         return session.view
     }
 
