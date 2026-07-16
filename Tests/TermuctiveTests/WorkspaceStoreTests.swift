@@ -70,7 +70,41 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(store.selectedSpace?.layout.terminalCount, 1)
         XCTAssertEqual(store.focusedPaneID, originalPaneID)
-        XCTAssertFalse(store.canCloseFocusedPane)
+        XCTAssertTrue(store.canCloseFocusedPane)
+    }
+
+    func testClosingPaneByIDPreservesAnotherFocusedPane() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let originalPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.splitFocusedPane(axis: .horizontal)
+        store.splitFocusedPane(axis: .vertical)
+        let focusedPaneID = try XCTUnwrap(store.focusedPaneID)
+
+        store.closePane(withID: originalPaneID)
+
+        XCTAssertEqual(store.selectedSpace?.layout.terminalCount, 2)
+        XCTAssertFalse(
+            store.selectedSpace?.layout.terminalIDs.contains(originalPaneID) ?? true
+        )
+        XCTAssertEqual(store.focusedPaneID, focusedPaneID)
+    }
+
+    func testClosingFinalPaneRemovesSpaceAndRestoresFallback() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let fallbackSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+        store.addSpace()
+        let removedSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+        let removedPaneID = try XCTUnwrap(store.focusedPaneID)
+
+        store.closePane(withID: removedPaneID)
+
+        XCTAssertNil(store.selectedProject?.space(withID: removedSpaceID))
+        XCTAssertEqual(store.document.selectedSpaceID, fallbackSpaceID)
+        XCTAssertEqual(store.selectedProject?.terminalSpaces.count, 1)
     }
 
     func testFolderExpansionTogglesExactlyOnce() throws {

@@ -32,7 +32,10 @@ final class WorkspaceStore: ObservableObject {
     }
 
     var canCloseFocusedPane: Bool {
-        (selectedSpace?.layout.terminalCount ?? 0) > 1 && focusedPaneID != nil
+        guard let focusedPaneID else {
+            return false
+        }
+        return selectedSpace?.layout.terminalIDs.contains(focusedPaneID) == true
     }
 
     var canCyclePanes: Bool {
@@ -365,20 +368,40 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func closeFocusedPane() {
-        guard canCloseFocusedPane,
-            let focusedPaneID
+        guard let focusedPaneID else {
+            return
+        }
+
+        closePane(withID: focusedPaneID)
+    }
+
+    func closePane(withID paneID: UUID) {
+        guard let projectID = selectedProject?.id,
+            let space = selectedSpace,
+            space.layout.terminalIDs.contains(paneID)
         else {
             return
         }
 
+        if space.layout.terminalCount == 1 {
+            removeItem(withID: space.id, inProject: projectID)
+            return
+        }
+
         updateSelectedSpace { space in
-            guard let layout = space.layout.removingTerminal(withID: focusedPaneID) else {
+            guard let layout = space.layout.removingTerminal(withID: paneID) else {
                 return
             }
             space.layout = layout
         }
         zoomedPaneID = nil
-        self.focusedPaneID = selectedSpace?.layout.firstTerminalID
+        let focusedPaneRemains =
+            focusedPaneID.map {
+                selectedSpace?.layout.terminalIDs.contains($0) == true
+            } ?? false
+        if !focusedPaneRemains {
+            focusedPaneID = selectedSpace?.layout.firstTerminalID
+        }
         save()
     }
 

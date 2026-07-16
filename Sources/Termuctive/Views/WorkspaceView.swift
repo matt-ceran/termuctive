@@ -139,9 +139,12 @@ struct WorkspaceView: View {
         } else {
             ZStack {
                 Color(nsColor: .textBackgroundColor)
-                Button("Add Project", action: chooseProject)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                Button(
+                    store.selectedProject == nil ? "Add Project" : "New Terminal Space",
+                    action: store.selectedProject == nil ? chooseProject : store.addSpace
+                )
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
         }
     }

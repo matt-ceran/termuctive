@@ -12,6 +12,7 @@ struct PaneTreeView: View {
             TerminalPaneView(
                 pane: pane,
                 isFocused: store.focusedPaneID == pane.id,
+                store: store,
                 sessions: sessions
             )
             .id(pane.id)
@@ -65,6 +66,7 @@ struct PaneTreeView: View {
 private struct TerminalPaneView: View {
     let pane: TerminalPane
     let isFocused: Bool
+    @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
 
     var body: some View {
@@ -90,6 +92,15 @@ private struct TerminalPaneView: View {
                     .help("Restart Terminal")
                     .accessibilityLabel("Restart terminal")
                 }
+
+                Button {
+                    store.closePane(withID: pane.id)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .help("Close Terminal")
+                .accessibilityLabel("Close terminal")
             }
             .font(.system(size: 11))
             .padding(.horizontal, 9)
