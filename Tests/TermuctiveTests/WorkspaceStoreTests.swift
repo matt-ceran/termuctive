@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Termuctive
@@ -101,6 +102,33 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedSpace?.layout.terminalCount, 1)
         XCTAssertEqual(store.focusedPaneID, originalPaneID)
         XCTAssertTrue(store.canCloseFocusedPane)
+    }
+
+    func testSplitRatioCommitPersistsOnce() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        store.splitFocusedPane(axis: .horizontal)
+        guard case .split(let split) = store.selectedSpace?.layout else {
+            return XCTFail("Expected a split layout.")
+        }
+        persistence.savedDocuments.removeAll()
+        var publicationCount = 0
+        let observation = store.objectWillChange.sink {
+            publicationCount += 1
+        }
+        defer {
+            observation.cancel()
+        }
+
+        store.commitSplitRatio(splitID: split.id, ratio: 0.7)
+
+        guard case .split(let resizedSplit) = store.selectedSpace?.layout else {
+            return XCTFail("Expected the resized split layout.")
+        }
+        XCTAssertEqual(resizedSplit.ratio, 0.7)
+        XCTAssertEqual(publicationCount, 1)
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
     }
 
     func testClosingPaneByIDPreservesAnotherFocusedPane() throws {

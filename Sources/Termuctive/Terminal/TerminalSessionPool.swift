@@ -7,6 +7,16 @@ enum TerminalSessionStatus: Equatable {
     case exited(Int32?)
 }
 
+enum TerminalAppearance {
+    static let foregroundColor = NSColor(calibratedWhite: 0.94, alpha: 1)
+    static let backgroundColor = NSColor(
+        calibratedRed: 0.055,
+        green: 0.059,
+        blue: 0.067,
+        alpha: 1
+    )
+}
+
 @MainActor
 final class TerminalSessionPool: ObservableObject {
     @Published private var titles: [UUID: String] = [:]
@@ -153,6 +163,7 @@ final class TerminalSessionPool: ObservableObject {
 final class TermuctiveTerminalView: LocalProcessTerminalView {
     var focusHandler: (() -> Void)?
     private var hasPendingFocusRequest = false
+    private var hasAttemptedAcceleratedRendering = false
 
     func requestFocus() {
         hasPendingFocusRequest = true
@@ -161,6 +172,7 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        enableAcceleratedRenderingIfAvailable()
         applyPendingFocusRequest()
     }
 
@@ -177,6 +189,16 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
             return
         }
         hasPendingFocusRequest = false
+    }
+
+    private func enableAcceleratedRenderingIfAvailable() {
+        guard window != nil,
+            !hasAttemptedAcceleratedRendering
+        else {
+            return
+        }
+        hasAttemptedAcceleratedRendering = true
+        try? setUseMetal(true)
     }
 }
 
@@ -212,18 +234,8 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.fontSmoothing = true
         view.lineSpacing = 1.08
-        view.nativeForegroundColor = NSColor(
-            calibratedRed: 0.86,
-            green: 0.88,
-            blue: 0.91,
-            alpha: 1
-        )
-        view.nativeBackgroundColor = NSColor(
-            calibratedRed: 0.055,
-            green: 0.059,
-            blue: 0.067,
-            alpha: 1
-        )
+        view.nativeForegroundColor = TerminalAppearance.foregroundColor
+        view.nativeBackgroundColor = TerminalAppearance.backgroundColor
         view.caretViewTracksFocus = true
         view.optionAsMetaKey = true
         view.allowMouseReporting = true

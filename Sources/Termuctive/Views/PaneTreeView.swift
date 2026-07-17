@@ -18,48 +18,103 @@ struct PaneTreeView: View {
             .id(pane.id)
 
         case .split(let split):
-            GeometryReader { proxy in
-                let available =
-                    split.axis == .horizontal
-                    ? proxy.size.width
-                    : proxy.size.height
-                let firstLength = max(0, available - 5) * split.ratio
+            SplitPaneView(split: split, store: store, sessions: sessions)
+                .id(split.id)
+        }
+    }
+}
 
-                Group {
-                    if split.axis == .horizontal {
-                        HStack(spacing: 0) {
-                            PaneTreeView(node: split.first, store: store, sessions: sessions)
-                                .frame(width: firstLength)
-                            divider(for: split, available: available)
-                            PaneTreeView(node: split.second, store: store, sessions: sessions)
-                        }
-                    } else {
-                        VStack(spacing: 0) {
-                            PaneTreeView(node: split.first, store: store, sessions: sessions)
-                                .frame(height: firstLength)
-                            divider(for: split, available: available)
-                            PaneTreeView(node: split.second, store: store, sessions: sessions)
-                        }
+private struct SplitPaneView: View {
+    let split: PaneSplit
+    @ObservedObject var store: WorkspaceStore
+    @ObservedObject var sessions: TerminalSessionPool
+
+    @State private var ratio: Double
+    @State private var dragOriginRatio: Double?
+
+    init(
+        split: PaneSplit,
+        store: WorkspaceStore,
+        sessions: TerminalSessionPool
+    ) {
+        self.split = split
+        self.store = store
+        self.sessions = sessions
+        _ratio = State(initialValue: split.ratio)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let available =
+                split.axis == .horizontal
+                ? proxy.size.width
+                : proxy.size.height
+            let paneLength = max(0, available - SplitDivider.hitThickness)
+            let firstLength = paneLength * ratio
+
+            Group {
+                if split.axis == .horizontal {
+                    HStack(spacing: 0) {
+                        PaneTreeView(node: split.first, store: store, sessions: sessions)
+                            .frame(width: firstLength)
+                        divider(availableLength: paneLength)
+                        PaneTreeView(node: split.second, store: store, sessions: sessions)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        PaneTreeView(node: split.first, store: store, sessions: sessions)
+                            .frame(height: firstLength)
+                        divider(availableLength: paneLength)
+                        PaneTreeView(node: split.second, store: store, sessions: sessions)
                     }
                 }
-                .coordinateSpace(name: split.id)
             }
+        }
+        .onChange(of: split.ratio) { _, savedRatio in
+            guard dragOriginRatio == nil else {
+                return
+            }
+            ratio = savedRatio
         }
     }
 
-    private func divider(for split: PaneSplit, available: CGFloat) -> some View {
+    private func divider(availableLength: CGFloat) -> some View {
         SplitDivider(
             axis: split.axis,
-            splitID: split.id,
-            availableLength: available,
-            onChange: { ratio, persist in
-                store.setSplitRatio(
-                    splitID: split.id,
-                    ratio: ratio,
-                    persist: persist
+            onDrag: { translation, ended in
+                resize(
+                    translation: translation,
+                    availableLength: availableLength,
+                    ended: ended
                 )
             }
         )
+    }
+
+    private func resize(
+        translation: CGFloat,
+        availableLength: CGFloat,
+        ended: Bool
+    ) {
+        guard availableLength > 0 else {
+            return
+        }
+        let origin = dragOriginRatio ?? ratio
+        if dragOriginRatio == nil {
+            dragOriginRatio = origin
+        }
+        let proposedRatio = origin + Double(translation / availableLength)
+        let resizedRatio = min(max(proposedRatio, 0.1), 0.9)
+        ratio = resizedRatio
+
+        guard ended else {
+            return
+        }
+        dragOriginRatio = nil
+        guard resizedRatio != split.ratio else {
+            return
+        }
+        store.commitSplitRatio(splitID: split.id, ratio: resizedRatio)
     }
 }
 

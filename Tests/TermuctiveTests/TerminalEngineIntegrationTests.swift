@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Metal
 import SwiftTerm
 import XCTest
 
@@ -62,6 +63,34 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         await Task.yield()
 
         XCTAssertTrue(window.firstResponder === terminal)
+    }
+
+    func testAttachedTerminalUsesAcceleratedRendererWhenMetalIsAvailable() throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+        terminal.frame = container.bounds
+        container.addSubview(terminal)
+
+        if MTLCreateSystemDefaultDevice() != nil {
+            XCTAssertTrue(terminal.isUsingMetalRenderer)
+        }
     }
 
     func testTerminalFontSizeStartsCompactAndStaysWithinBounds() throws {

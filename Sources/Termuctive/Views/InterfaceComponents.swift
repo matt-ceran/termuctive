@@ -16,28 +16,29 @@ struct SquareIconButtonStyle: ButtonStyle {
 
 struct SplitDivider: View {
     let axis: PaneAxis
-    let splitID: UUID
-    let availableLength: CGFloat
-    let onChange: (Double, Bool) -> Void
+    let onDrag: (CGFloat, Bool) -> Void
+
+    static let hitThickness: CGFloat = 5
 
     @State private var isHovered = false
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         ZStack {
-            Color.clear
+            Color(nsColor: TerminalAppearance.backgroundColor)
             Rectangle()
                 .fill(
-                    Color(nsColor: .separatorColor)
-                        .opacity(isHovered ? 0.5 : 0.28)
+                    Color(white: 0.72)
+                        .opacity(isHovered ? 0.32 : 0.18)
                 )
                 .frame(
-                    width: axis == .horizontal ? 1 : nil,
-                    height: axis == .vertical ? 1 : nil
+                    width: axis == .horizontal ? hairlineThickness : nil,
+                    height: axis == .vertical ? hairlineThickness : nil
                 )
         }
         .frame(
-            width: axis == .horizontal ? 5 : nil,
-            height: axis == .vertical ? 5 : nil
+            width: axis == .horizontal ? Self.hitThickness : nil,
+            height: axis == .vertical ? Self.hitThickness : nil
         )
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .contentShape(Rectangle())
@@ -50,28 +51,25 @@ struct SplitDivider: View {
             }
         }
         .gesture(
-            DragGesture(
-                minimumDistance: 0,
-                coordinateSpace: .named(splitID)
-            )
-            .onChanged { value in
-                updateRatio(at: value.location, persist: false)
-            }
-            .onEnded { value in
-                updateRatio(at: value.location, persist: true)
-            }
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    onDrag(translation(for: value), false)
+                }
+                .onEnded { value in
+                    onDrag(translation(for: value), true)
+                }
         )
+    }
+
+    private var hairlineThickness: CGFloat {
+        1 / max(displayScale, 1)
     }
 
     private var resizeCursor: NSCursor {
         axis == .horizontal ? .resizeLeftRight : .resizeUpDown
     }
 
-    private func updateRatio(at point: CGPoint, persist: Bool) {
-        guard availableLength > 0 else {
-            return
-        }
-        let location = axis == .horizontal ? point.x : point.y
-        onChange(location / availableLength, persist)
+    private func translation(for value: DragGesture.Value) -> CGFloat {
+        axis == .horizontal ? value.translation.width : value.translation.height
     }
 }

@@ -450,13 +450,11 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
-    func setSplitRatio(splitID: UUID, ratio: Double, persist: Bool) {
+    func commitSplitRatio(splitID: UUID, ratio: Double) {
         updateSelectedSpace { space in
             space.layout = space.layout.settingRatio(forSplitID: splitID, to: ratio)
         }
-        if persist {
-            save()
-        }
+        save()
     }
 
     func updateTerminal(
