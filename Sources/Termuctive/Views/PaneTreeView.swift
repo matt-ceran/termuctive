@@ -1,126 +1,197 @@
+import AppKit
 import SwiftUI
 
-struct PaneTreeView: View {
+struct PaneTreeView: NSViewRepresentable {
     let node: PaneNode
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
 
-    @ViewBuilder
-    var body: some View {
-        switch node {
-        case .terminal(let pane):
-            TerminalPaneView(
-                pane: pane,
-                isFocused: store.focusedPaneID == pane.id,
-                store: store,
-                sessions: sessions
-            )
-            .id(pane.id)
+    func makeNSView(context: Context) -> PaneTreeContainerView {
+        let view = PaneTreeContainerView(frame: .zero)
+        view.configure(node: node, store: store, sessions: sessions)
+        return view
+    }
 
-        case .split(let split):
-            SplitPaneView(split: split, store: store, sessions: sessions)
-                .id(split.id)
-        }
+    func updateNSView(_ view: PaneTreeContainerView, context: Context) {
+        view.configure(node: node, store: store, sessions: sessions)
     }
 }
 
-private struct SplitPaneView: View {
-    let split: PaneSplit
-    @ObservedObject var store: WorkspaceStore
-    @ObservedObject var sessions: TerminalSessionPool
+@MainActor
+final class PaneTreeContainerView: NSView {
+    private var rootController: PaneTreeNodeController?
 
-    @State private var ratio: Double
-    @State private var dragOriginRatio: Double?
+    override var isFlipped: Bool {
+        true
+    }
 
-    init(
-        split: PaneSplit,
+    func configure(
+        node: PaneNode,
         store: WorkspaceStore,
         sessions: TerminalSessionPool
     ) {
-        self.split = split
-        self.store = store
-        self.sessions = sessions
-        _ratio = State(initialValue: split.ratio)
+        if let rootController,
+            rootController.matchesStructure(of: node)
+        {
+            rootController.update(node: node, store: store, sessions: sessions)
+            return
+        }
+
+        rootController?.view.removeFromSuperview()
+        let controller = PaneTreeNodeController(
+            node: node,
+            store: store,
+            sessions: sessions
+        )
+        rootController = controller
+        controller.view.frame = bounds
+        controller.view.autoresizingMask = [.width, .height]
+        addSubview(controller.view)
     }
 
-    var body: some View {
-        GeometryReader { proxy in
-            let available =
-                split.axis == .horizontal
-                ? proxy.size.width
-                : proxy.size.height
-            let paneLength = max(0, available - SplitDivider.hitThickness)
-            let firstLength = paneLength * ratio
-
-            Group {
-                if split.axis == .horizontal {
-                    HStack(spacing: 0) {
-                        PaneTreeView(node: split.first, store: store, sessions: sessions)
-                            .frame(width: firstLength)
-                        divider(availableLength: paneLength)
-                        PaneTreeView(node: split.second, store: store, sessions: sessions)
-                    }
-                } else {
-                    VStack(spacing: 0) {
-                        PaneTreeView(node: split.first, store: store, sessions: sessions)
-                            .frame(height: firstLength)
-                        divider(availableLength: paneLength)
-                        PaneTreeView(node: split.second, store: store, sessions: sessions)
-                    }
-                }
-            }
-        }
-        .onChange(of: split.ratio) { _, savedRatio in
-            guard dragOriginRatio == nil else {
-                return
-            }
-            ratio = savedRatio
-        }
+    override func layout() {
+        super.layout()
+        rootController?.view.frame = bounds
     }
+}
 
-    private func divider(availableLength: CGFloat) -> some View {
-        SplitDivider(
-            axis: split.axis,
-            onDrag: { translation, ended in
-                resize(
-                    translation: translation,
-                    availableLength: availableLength,
-                    ended: ended
-                )
-            }
+@MainActor
+private final class PaneTreeNodeController {
+    private enum Content {
+        case terminal(
+            pane: TerminalPane,
+            host: NSHostingView<AnyView>
+        )
+        case split(
+            id: UUID,
+            axis: PaneAxis,
+            view: SmoothSplitView,
+            first: PaneTreeNodeController,
+            second: PaneTreeNodeController
         )
     }
 
-    private func resize(
-        translation: CGFloat,
-        availableLength: CGFloat,
-        ended: Bool
-    ) {
-        guard availableLength > 0 else {
-            return
-        }
-        let origin = dragOriginRatio ?? ratio
-        if dragOriginRatio == nil {
-            dragOriginRatio = origin
-        }
-        let proposedRatio = origin + Double(translation / availableLength)
-        let resizedRatio = min(max(proposedRatio, 0.1), 0.9)
-        ratio = resizedRatio
+    private var content: Content
 
-        guard ended else {
+    var view: NSView {
+        switch content {
+        case .terminal(_, let host):
+            host
+        case .split(_, _, let view, _, _):
+            view
+        }
+    }
+
+    init(
+        node: PaneNode,
+        store: WorkspaceStore,
+        sessions: TerminalSessionPool
+    ) {
+        switch node {
+        case .terminal(let pane):
+            let host = NSHostingView(
+                rootView: AnyView(
+                    TerminalPaneView(
+                        pane: pane,
+                        store: store,
+                        sessions: sessions
+                    )
+                    .id(pane.id)
+                )
+            )
+            host.sizingOptions = []
+            content = .terminal(pane: pane, host: host)
+
+        case .split(let split):
+            let first = PaneTreeNodeController(
+                node: split.first,
+                store: store,
+                sessions: sessions
+            )
+            let second = PaneTreeNodeController(
+                node: split.second,
+                store: store,
+                sessions: sessions
+            )
+            let splitView = SmoothSplitView(axis: split.axis)
+            splitView.addArrangedSubview(first.view)
+            splitView.addArrangedSubview(second.view)
+            splitView.setTheme(sessions.terminalTheme)
+            splitView.setRatio(split.ratio)
+            splitView.onRatioCommit = { [weak store] ratio in
+                store?.commitSplitRatio(splitID: split.id, ratio: ratio)
+            }
+            content = .split(
+                id: split.id,
+                axis: split.axis,
+                view: splitView,
+                first: first,
+                second: second
+            )
+        }
+    }
+
+    func matchesStructure(of node: PaneNode) -> Bool {
+        switch (content, node) {
+        case (.terminal(let pane, _), .terminal(let updatedPane)):
+            pane.id == updatedPane.id
+
+        case (
+            .split(let id, let axis, _, let first, let second),
+            .split(let updatedSplit)
+        ):
+            id == updatedSplit.id
+                && axis == updatedSplit.axis
+                && first.matchesStructure(of: updatedSplit.first)
+                && second.matchesStructure(of: updatedSplit.second)
+
+        default:
+            false
+        }
+    }
+
+    func update(
+        node: PaneNode,
+        store: WorkspaceStore,
+        sessions: TerminalSessionPool
+    ) {
+        switch (content, node) {
+        case (.terminal(let previousPane, let host), .terminal(let pane)):
+            guard pane != previousPane else {
+                return
+            }
+            host.rootView = AnyView(
+                TerminalPaneView(
+                    pane: pane,
+                    store: store,
+                    sessions: sessions
+                )
+                .id(pane.id)
+            )
+            content = .terminal(pane: pane, host: host)
+
+        case (
+            .split(let id, let axis, let splitView, let first, let second),
+            .split(let split)
+        ):
+            guard id == split.id,
+                axis == split.axis
+            else {
+                return
+            }
+            first.update(node: split.first, store: store, sessions: sessions)
+            second.update(node: split.second, store: store, sessions: sessions)
+            splitView.setTheme(sessions.terminalTheme)
+            splitView.setRatio(split.ratio)
+
+        default:
             return
         }
-        dragOriginRatio = nil
-        guard resizedRatio != split.ratio else {
-            return
-        }
-        store.commitSplitRatio(splitID: split.id, ratio: resizedRatio)
     }
 }
 
 private struct TerminalPaneView: View {
     let pane: TerminalPane
-    let isFocused: Bool
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
 
@@ -168,7 +239,7 @@ private struct TerminalPaneView: View {
 
             TerminalHostView(
                 pane: pane,
-                isFocused: isFocused,
+                isFocused: store.focusedPaneID == pane.id,
                 sessions: sessions
             )
         }

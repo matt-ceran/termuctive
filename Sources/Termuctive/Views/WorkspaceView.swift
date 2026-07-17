@@ -4,6 +4,7 @@ import SwiftUI
 struct WorkspaceView: View {
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
+    @ObservedObject var appearance: AppearanceSettings
 
     var body: some View {
         HStack(spacing: 0) {
@@ -78,6 +79,27 @@ struct WorkspaceView: View {
             }
 
             Spacer()
+
+            Menu {
+                Picker("App Appearance", selection: $appearance.appTheme) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.title).tag(theme)
+                    }
+                }
+
+                Picker("Terminal Appearance", selection: $appearance.terminalTheme) {
+                    ForEach(TerminalTheme.allCases) { theme in
+                        Text(theme.title).tag(theme)
+                    }
+                }
+            } label: {
+                Image(systemName: "circle.lefthalf.filled")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 30, height: 30)
+            .help("Appearance")
+            .accessibilityLabel("Appearance options")
 
             Button {
                 store.splitFocusedPane(axis: .horizontal)

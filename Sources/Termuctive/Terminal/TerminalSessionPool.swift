@@ -7,27 +7,19 @@ enum TerminalSessionStatus: Equatable {
     case exited(Int32?)
 }
 
-enum TerminalAppearance {
-    static let foregroundColor = NSColor(calibratedWhite: 0.94, alpha: 1)
-    static let backgroundColor = NSColor(
-        calibratedRed: 0.055,
-        green: 0.059,
-        blue: 0.067,
-        alpha: 1
-    )
-}
-
 @MainActor
 final class TerminalSessionPool: ObservableObject {
     @Published private var titles: [UUID: String] = [:]
     @Published private var statuses: [UUID: TerminalSessionStatus] = [:]
     @Published private(set) var fontSize: CGFloat = 11
+    @Published private(set) var terminalTheme: TerminalTheme
 
     private let store: WorkspaceStore
     private var sessions: [UUID: TerminalSession] = [:]
 
-    init(store: WorkspaceStore) {
+    init(store: WorkspaceStore, terminalTheme: TerminalTheme = .light) {
         self.store = store
+        self.terminalTheme = terminalTheme
     }
 
     func terminalView(for pane: TerminalPane) -> TermuctiveTerminalView {
@@ -38,6 +30,7 @@ final class TerminalSessionPool: ObservableObject {
         let session = TerminalSession(
             pane: pane,
             fontSize: fontSize,
+            theme: terminalTheme,
             onFocus: { [weak self] paneID in
                 Task { @MainActor in
                     self?.focus(paneID: paneID)
@@ -93,6 +86,16 @@ final class TerminalSessionPool: ObservableObject {
 
     func decreaseFontSize() {
         setFontSize(fontSize - 1)
+    }
+
+    func setTerminalTheme(_ theme: TerminalTheme) {
+        guard terminalTheme != theme else {
+            return
+        }
+        terminalTheme = theme
+        for session in sessions.values {
+            session.setTheme(theme)
+        }
     }
 
     func focus(paneID: UUID) {
@@ -164,6 +167,7 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     var focusHandler: (() -> Void)?
     private var hasPendingFocusRequest = false
     private var hasAttemptedAcceleratedRendering = false
+    private var isInteractivePaneResizeActive = false
 
     func requestFocus() {
         hasPendingFocusRequest = true
@@ -179,6 +183,42 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     override func mouseDown(with event: NSEvent) {
         focusHandler?()
         super.mouseDown(with: event)
+    }
+
+    func applyTheme(_ theme: TerminalTheme, redraw: Bool) {
+        let shouldRebuildMetalRenderer = redraw && isUsingMetalRenderer && window != nil
+        if shouldRebuildMetalRenderer {
+            try? setUseMetal(false)
+        }
+
+        nativeForegroundColor = theme.foregroundColor
+        nativeBackgroundColor = theme.backgroundColor
+        caretColor = theme.foregroundColor
+        caretTextColor = theme.backgroundColor
+        selectedTextBackgroundColor = theme.selectionColor
+        layer?.backgroundColor = theme.backgroundColor.cgColor
+        getTerminal().updateFullScreen()
+        needsDisplay = true
+
+        if shouldRebuildMetalRenderer {
+            try? setUseMetal(true)
+        }
+    }
+
+    func beginInteractivePaneResize() {
+        guard !isInteractivePaneResizeActive else {
+            return
+        }
+        isInteractivePaneResizeActive = true
+        metalBufferingMode = .perFrameAggregated
+    }
+
+    func endInteractivePaneResize() {
+        guard isInteractivePaneResizeActive else {
+            return
+        }
+        isInteractivePaneResizeActive = false
+        metalBufferingMode = .perRowPersistent
     }
 
     private func applyPendingFocusRequest() {
@@ -214,6 +254,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     init(
         pane: TerminalPane,
         fontSize: CGFloat,
+        theme: TerminalTheme,
         onFocus: @escaping (UUID) -> Void,
         onTitleChange: @escaping (UUID, String) -> Void,
         onDirectoryChange: @escaping (UUID, String) -> Void,
@@ -234,8 +275,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.fontSmoothing = true
         view.lineSpacing = 1.08
-        view.nativeForegroundColor = TerminalAppearance.foregroundColor
-        view.nativeBackgroundColor = TerminalAppearance.backgroundColor
+        view.applyTheme(theme, redraw: false)
         view.caretViewTracksFocus = true
         view.optionAsMetaKey = true
         view.allowMouseReporting = true
@@ -258,6 +298,10 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     func setFontSize(_ size: CGFloat) {
         view.font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
+    func setTheme(_ theme: TerminalTheme) {
+        view.applyTheme(theme, redraw: true)
     }
 
     func sizeChanged(

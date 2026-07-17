@@ -139,6 +139,27 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         XCTAssertTrue(terminal.fontSmoothing)
     }
 
+    func testTerminalThemeChangesWithoutReplacingTheSessionView() throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store, terminalTheme: .light)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        XCTAssertEqual(terminal.nativeBackgroundColor, TerminalTheme.light.backgroundColor)
+
+        sessions.setTerminalTheme(.dark)
+
+        XCTAssertTrue(terminal === sessions.terminalView(for: pane))
+        XCTAssertEqual(terminal.nativeForegroundColor, TerminalTheme.dark.foregroundColor)
+        XCTAssertEqual(terminal.nativeBackgroundColor, TerminalTheme.dark.backgroundColor)
+    }
+
     func testCreatingTerminalSessionDoesNotPublishDuringViewConstruction() throws {
         let persistence = TerminalTestPersistence()
         let store = WorkspaceStore(persistence: persistence)

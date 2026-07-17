@@ -4,17 +4,33 @@ import SwiftUI
 struct TermuctiveApp: App {
     @StateObject private var store: WorkspaceStore
     @StateObject private var sessions: TerminalSessionPool
+    @StateObject private var appearance: AppearanceSettings
 
     @MainActor
     init() {
         let store = WorkspaceStore()
+        let appearance = AppearanceSettings()
         _store = StateObject(wrappedValue: store)
-        _sessions = StateObject(wrappedValue: TerminalSessionPool(store: store))
+        _sessions = StateObject(
+            wrappedValue: TerminalSessionPool(
+                store: store,
+                terminalTheme: appearance.terminalTheme
+            )
+        )
+        _appearance = StateObject(wrappedValue: appearance)
     }
 
     var body: some Scene {
         Window("Termuctive", id: "main") {
-            WorkspaceView(store: store, sessions: sessions)
+            WorkspaceView(
+                store: store,
+                sessions: sessions,
+                appearance: appearance
+            )
+            .preferredColorScheme(appearance.appTheme.colorScheme)
+            .onChange(of: appearance.terminalTheme) { _, theme in
+                sessions.setTerminalTheme(theme)
+            }
         }
         .defaultSize(width: 1180, height: 740)
         .commands {
@@ -113,6 +129,27 @@ struct TermuctiveApp: App {
                 .keyboardShortcut("-", modifiers: [.command])
                 .disabled(!sessions.canDecreaseFontSize)
             }
+
+            CommandMenu("Appearance") {
+                Picker("App Appearance", selection: $appearance.appTheme) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.title).tag(theme)
+                    }
+                }
+
+                Divider()
+
+                Picker("Terminal Appearance", selection: $appearance.terminalTheme) {
+                    ForEach(TerminalTheme.allCases) { theme in
+                        Text(theme.title).tag(theme)
+                    }
+                }
+            }
+        }
+
+        Settings {
+            AppearanceSettingsView(settings: appearance)
+                .preferredColorScheme(appearance.appTheme.colorScheme)
         }
     }
 }
