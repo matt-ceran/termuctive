@@ -14,7 +14,7 @@ struct WorkspaceView: View {
                     chooseProject: chooseProject,
                     hideSidebar: { setSidebarVisible(false) }
                 )
-                    .frame(width: 240)
+                .frame(width: 240)
                 Divider()
             }
             .frame(

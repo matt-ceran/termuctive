@@ -4,7 +4,23 @@ import XCTest
 @testable import Termuctive
 
 final class TerminalLocalCommandTests: XCTestCase {
-    func testMovePDFCommandsAreInterceptedBeforeReturnReachesTheProcess() {
+    func testLegacyAndEnhancedReturnAreRecognizedAsSubmission() {
+        XCTAssertEqual(TerminalControlInput(bytes: [0x0D][...]), .submit(enhanced: false))
+        XCTAssertEqual(
+            TerminalControlInput(bytes: Array("\u{1B}[13u".utf8)[...]),
+            .submit(enhanced: true)
+        )
+        XCTAssertEqual(
+            TerminalControlInput(bytes: Array("\u{1B}[13;1:3u".utf8)[...]),
+            .enhancedRelease(keyCode: 13)
+        )
+        XCTAssertEqual(
+            TerminalControlInput(bytes: Array("\u{1B}[1;1R".utf8)[...]),
+            .other
+        )
+    }
+
+    func testMovePDFCommandsAreRecognizedBeforeSubmissionReachesTheProcess() {
         let commands: [(String, PDFPanePlacement)] = [
             ("/movepdf", .automatic),
             ("/movepdfleft", .left),
@@ -12,35 +28,37 @@ final class TerminalLocalCommandTests: XCTestCase {
         ]
 
         for (input, placement) in commands {
-            var interceptor = TerminalLocalCommandInterceptor()
-            let decision = interceptor.process(Array("\(input)\r".utf8)[...])
+            var tracker = TerminalLocalCommandTracker()
+            tracker.insert(input)
 
-            XCTAssertEqual(decision.bytesToForward, Array(input.utf8))
-            XCTAssertTrue(decision.shouldClearCurrentLine)
-            XCTAssertEqual(decision.command, .moveRecentPDF(placement))
+            XCTAssertEqual(tracker.commandForSubmission(), .moveRecentPDF(placement))
         }
     }
 
-    func testUnknownSlashCommandPassesThroughUnchanged() {
-        var interceptor = TerminalLocalCommandInterceptor()
-        let bytes = Array("/status\r".utf8)
+    func testUnknownSlashCommandIsNotIntercepted() {
+        var tracker = TerminalLocalCommandTracker()
+        tracker.insert("/status")
 
-        let decision = interceptor.process(bytes[...])
-
-        XCTAssertEqual(decision.bytesToForward, bytes)
-        XCTAssertFalse(decision.shouldClearCurrentLine)
-        XCTAssertNil(decision.command)
+        XCTAssertNil(tracker.commandForSubmission())
     }
 
     func testBackspaceUpdatesTheTrackedCommandLine() {
-        var interceptor = TerminalLocalCommandInterceptor()
-        _ = interceptor.process(Array("/movepdfrighx".utf8)[...])
-        _ = interceptor.process([0x7F][...])
+        var tracker = TerminalLocalCommandTracker()
+        tracker.insert("/movepdfrighx")
+        tracker.deleteBackward()
+        tracker.insert("t")
 
-        let decision = interceptor.process(Array("t\r".utf8)[...])
+        XCTAssertEqual(tracker.commandForSubmission(), .moveRecentPDF(.right))
+    }
 
-        XCTAssertEqual(decision.bytesToForward, [UInt8(ascii: "t")])
-        XCTAssertTrue(decision.shouldClearCurrentLine)
-        XCTAssertEqual(decision.command, .moveRecentPDF(.right))
+    func testCursorMovementInvalidatesRecognitionUntilTheNextSubmission() {
+        var tracker = TerminalLocalCommandTracker()
+        tracker.insert("/movepdfright")
+        tracker.invalidate()
+
+        XCTAssertNil(tracker.commandForSubmission())
+
+        tracker.insert("/movepdfleft")
+        XCTAssertEqual(tracker.commandForSubmission(), .moveRecentPDF(.left))
     }
 }

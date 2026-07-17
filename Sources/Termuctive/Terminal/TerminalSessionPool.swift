@@ -308,7 +308,9 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     var localCommandHandler: ((TerminalLocalCommand) -> Void)?
     var outputHandler: ((ArraySlice<UInt8>) -> Void)?
 
-    private var localCommandInterceptor = TerminalLocalCommandInterceptor()
+    private var localCommandTracker = TerminalLocalCommandTracker()
+    private var isForwardingTrackedText = false
+    private var suppressEnhancedSubmitRelease = false
     private var hasPendingFocusRequest = false
     private var hasAttemptedAcceleratedRendering = false
     private var isInteractivePaneResizeActive = false
@@ -329,18 +331,58 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         super.mouseDown(with: event)
     }
 
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        if let text = Self.plainText(from: string) {
+            localCommandTracker.insert(text)
+        } else {
+            localCommandTracker.invalidate()
+        }
+        isForwardingTrackedText = true
+        defer { isForwardingTrackedText = false }
+        super.insertText(string, replacementRange: replacementRange)
+    }
+
+    override func paste(_ sender: Any) {
+        if let text = NSPasteboard.general.string(forType: .string) {
+            localCommandTracker.insert(text)
+        } else {
+            localCommandTracker.invalidate()
+        }
+        isForwardingTrackedText = true
+        defer { isForwardingTrackedText = false }
+        super.paste(sender)
+    }
+
     override func send(source: TerminalView, data: ArraySlice<UInt8>) {
-        let decision = localCommandInterceptor.process(data)
-        if !decision.bytesToForward.isEmpty {
-            super.send(source: source, data: decision.bytesToForward[...])
+        guard !isForwardingTrackedText else {
+            super.send(source: source, data: data)
+            return
         }
-        if decision.shouldClearCurrentLine {
-            let clearLine: [UInt8] = [0x15]
-            super.send(source: source, data: clearLine[...])
+
+        switch TerminalControlInput(bytes: data) {
+        case .submit(let enhanced):
+            if let command = localCommandTracker.commandForSubmission() {
+                suppressEnhancedSubmitRelease = enhanced
+                clearApplicationInput()
+                localCommandHandler?(command)
+                return
+            }
+            suppressEnhancedSubmitRelease = false
+        case .backspace:
+            localCommandTracker.deleteBackward()
+        case .resetLine:
+            localCommandTracker.reset()
+        case .invalidateLine:
+            localCommandTracker.invalidate()
+        case .enhancedRelease(let keyCode):
+            if keyCode == 13, suppressEnhancedSubmitRelease {
+                suppressEnhancedSubmitRelease = false
+                return
+            }
+        case .other:
+            break
         }
-        if let command = decision.command {
-            localCommandHandler?(command)
-        }
+        super.send(source: source, data: data)
     }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
@@ -366,6 +408,28 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         if shouldRebuildMetalRenderer {
             try? setUseMetal(true)
         }
+    }
+
+    private func clearApplicationInput() {
+        let bytes: [UInt8]
+        let flags = getTerminal().keyboardEnhancementFlags
+        if flags.contains(.disambiguate) || flags.contains(.reportAllKeys) {
+            // Ctrl+U encoded with the Kitty keyboard protocol.
+            bytes = Array("\u{1B}[117;5u".utf8)
+        } else {
+            bytes = [0x15]
+        }
+        super.send(source: self, data: bytes[...])
+    }
+
+    private static func plainText(from value: Any) -> String? {
+        if let text = value as? String {
+            return text
+        }
+        if let attributedText = value as? NSAttributedString {
+            return attributedText.string
+        }
+        return nil
     }
 
     func beginInteractivePaneResize() {

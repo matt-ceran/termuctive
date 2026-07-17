@@ -448,12 +448,14 @@ final class WorkspaceStore: ObservableObject {
             workingDirectory: sourcePane.workingDirectory
         )
         updateSelectedSpace { space in
-            guard let layout = space.layout.splittingTerminal(
-                withID: sourcePaneID,
-                axis: .horizontal,
-                newPane: previewPane,
-                placement: resolvedPlacement
-            ) else {
+            guard
+                let layout = space.layout.splittingTerminal(
+                    withID: sourcePaneID,
+                    axis: .horizontal,
+                    newPane: previewPane,
+                    placement: resolvedPlacement
+                )
+            else {
                 return
             }
             space.layout = layout

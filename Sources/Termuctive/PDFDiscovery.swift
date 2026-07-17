@@ -9,12 +9,14 @@ struct RecentPDFLocator {
         var visitedItemCount = 0
 
         for root in searchRoots(from: roots) {
-            guard let enumerator = FileManager.default.enumerator(
-                at: root,
-                includingPropertiesForKeys: Array(resourceKeys),
-                options: [.skipsHiddenFiles, .skipsPackageDescendants],
-                errorHandler: { _, _ in true }
-            ) else {
+            guard
+                let enumerator = FileManager.default.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: Array(resourceKeys),
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                    errorHandler: { _, _ in true }
+                )
+            else {
                 continue
             }
 
