@@ -412,6 +412,69 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
+    func preparePDFPane(
+        fromPaneID sourcePaneID: UUID,
+        placement: PDFPanePlacement
+    ) -> UUID? {
+        guard let selectedSpace,
+            selectedSpace.layout.terminalIDs.contains(sourcePaneID),
+            let sourcePane = selectedSpace.layout.terminal(withID: sourcePaneID)
+        else {
+            return nil
+        }
+
+        let orderedPaneIDs = selectedSpace.layout.orderedTerminalIDs
+        if orderedPaneIDs.count > 1 {
+            zoomedPaneID = nil
+            switch placement {
+            case .left:
+                return orderedPaneIDs.first
+            case .right:
+                return orderedPaneIDs.last
+            case .automatic:
+                guard let sourceIndex = orderedPaneIDs.firstIndex(of: sourcePaneID) else {
+                    return orderedPaneIDs.last
+                }
+                return sourceIndex < orderedPaneIDs.count / 2
+                    ? orderedPaneIDs.last
+                    : orderedPaneIDs.first
+            }
+        }
+
+        let resolvedPlacement: PaneInsertionPlacement =
+            placement == .left ? .before : .after
+        let previewPane = TerminalPane(
+            title: defaultShellName,
+            workingDirectory: sourcePane.workingDirectory
+        )
+        updateSelectedSpace { space in
+            guard let layout = space.layout.splittingTerminal(
+                withID: sourcePaneID,
+                axis: .horizontal,
+                newPane: previewPane,
+                placement: resolvedPlacement
+            ) else {
+                return
+            }
+            space.layout = layout
+        }
+        focusedPaneID = sourcePaneID
+        zoomedPaneID = nil
+        save()
+        return previewPane.id
+    }
+
+    func pdfSearchRoots(forPaneID paneID: UUID) -> [URL] {
+        guard let pane = document.terminal(withID: paneID),
+            let project = document.project(containingTerminalWithID: paneID)
+        else {
+            return []
+        }
+        return [pane.workingDirectory, project.rootDirectory].map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        }
+    }
+
     func closeFocusedPane() {
         guard let focusedPaneID else {
             return
@@ -485,6 +548,10 @@ final class WorkspaceStore: ObservableObject {
 
     func dismissError() {
         errorMessage = nil
+    }
+
+    func presentError(_ message: String) {
+        errorMessage = message
     }
 
     private var selectedProjectIndex: Int? {

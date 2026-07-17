@@ -8,11 +8,22 @@ struct WorkspaceView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if store.isSidebarVisible {
-                ProjectSidebar(store: store, chooseProject: chooseProject)
+            HStack(spacing: 0) {
+                ProjectSidebar(
+                    store: store,
+                    chooseProject: chooseProject,
+                    hideSidebar: { setSidebarVisible(false) }
+                )
                     .frame(width: 240)
                 Divider()
             }
+            .frame(
+                width: store.isSidebarVisible ? 241 : 0,
+                alignment: .leading
+            )
+            .clipped()
+            .allowsHitTesting(store.isSidebarVisible)
+            .accessibilityHidden(!store.isSidebarVisible)
 
             VStack(spacing: 0) {
                 workspaceBar
@@ -56,7 +67,7 @@ struct WorkspaceView: View {
         HStack(spacing: 6) {
             if !store.isSidebarVisible {
                 Button {
-                    store.isSidebarVisible = true
+                    setSidebarVisible(true)
                 } label: {
                     Image(systemName: "sidebar.left")
                 }
@@ -195,6 +206,18 @@ struct WorkspaceView: View {
         store.toggleFocusedPaneZoom()
         if let focusedPaneID = store.focusedPaneID {
             sessions.focus(paneID: focusedPaneID)
+        }
+    }
+
+    private func setSidebarVisible(_ isVisible: Bool) {
+        guard store.isSidebarVisible != isVisible else {
+            return
+        }
+        sessions.prepareForAnimatedLayoutTransition(
+            duration: SidebarMotion.panelDuration
+        )
+        withAnimation(SidebarMotion.panel) {
+            store.isSidebarVisible = isVisible
         }
     }
 }

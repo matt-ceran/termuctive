@@ -13,9 +13,13 @@ final class TerminalSessionPool: ObservableObject {
     @Published private var statuses: [UUID: TerminalSessionStatus] = [:]
     @Published private(set) var fontSize: CGFloat = 11
     @Published private(set) var terminalTheme: TerminalTheme
+    @Published private var pdfPreviewURLs: [UUID: URL] = [:]
+    @Published private var pdfSearchPaneIDs: Set<UUID> = []
 
     private let store: WorkspaceStore
     private var sessions: [UUID: TerminalSession] = [:]
+    private var recentPDFURLs: [UUID: [URL]] = [:]
+    private var layoutTransitionGeneration = 0
 
     init(store: WorkspaceStore, terminalTheme: TerminalTheme = .light) {
         self.store = store
@@ -49,6 +53,16 @@ final class TerminalSessionPool: ObservableObject {
                     )
                 }
             },
+            onLocalCommand: { [weak self] paneID, command in
+                Task { @MainActor in
+                    self?.perform(command, fromPaneID: paneID)
+                }
+            },
+            onPDFPathDetected: { [weak self] paneID, url in
+                Task { @MainActor in
+                    self?.rememberPDF(url, forPaneID: paneID)
+                }
+            },
             onTermination: { [weak self] paneID, exitCode in
                 Task { @MainActor in
                     self?.markExited(paneID: paneID, exitCode: exitCode)
@@ -70,6 +84,60 @@ final class TerminalSessionPool: ObservableObject {
 
     func status(for paneID: UUID) -> TerminalSessionStatus {
         statuses[paneID] ?? .running
+    }
+
+    func previewURL(for paneID: UUID) -> URL? {
+        pdfPreviewURLs[paneID]
+    }
+
+    func isFindingPDF(for paneID: UUID) -> Bool {
+        pdfSearchPaneIDs.contains(paneID)
+    }
+
+    func dismissPDFPreview(inPaneID paneID: UUID) {
+        pdfPreviewURLs.removeValue(forKey: paneID)
+        focus(paneID: paneID)
+    }
+
+    func moveRecentPDF(fromPaneID paneID: UUID, placement: PDFPanePlacement) {
+        guard !pdfSearchPaneIDs.contains(paneID) else {
+            return
+        }
+
+        if let detectedPDF = recentPDFURLs[paneID]?.last(where: Self.fileExists) {
+            presentPDF(detectedPDF, fromPaneID: paneID, placement: placement)
+            return
+        }
+
+        let roots = store.pdfSearchRoots(forPaneID: paneID)
+        guard !roots.isEmpty,
+            let sessionStart = sessions[paneID]?.startedAt
+        else {
+            store.presentError("Termuctive could not identify this terminal's project directory.")
+            return
+        }
+
+        pdfSearchPaneIDs.insert(paneID)
+        Task { [weak self] in
+            let pdf = await Task.detached(priority: .userInitiated) {
+                RecentPDFLocator.mostRecentPDF(
+                    in: roots,
+                    modifiedAfter: sessionStart.addingTimeInterval(-1)
+                )
+            }.value
+            guard let self else {
+                return
+            }
+            pdfSearchPaneIDs.remove(paneID)
+            guard let pdf else {
+                store.presentError(
+                    "No PDF created during this terminal session was found in the project."
+                )
+                return
+            }
+            rememberPDF(pdf, forPaneID: paneID)
+            presentPDF(pdf, fromPaneID: paneID, placement: placement)
+        }
     }
 
     var canIncreaseFontSize: Bool {
@@ -98,6 +166,27 @@ final class TerminalSessionPool: ObservableObject {
         }
     }
 
+    func prepareForAnimatedLayoutTransition(duration: TimeInterval) {
+        layoutTransitionGeneration &+= 1
+        let generation = layoutTransitionGeneration
+        for session in sessions.values {
+            session.view.beginInteractivePaneResize()
+        }
+
+        Task { @MainActor [weak self] in
+            let nanoseconds = UInt64(max(duration + 0.04, 0) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard let self,
+                layoutTransitionGeneration == generation
+            else {
+                return
+            }
+            for session in sessions.values {
+                session.view.endInteractivePaneResize()
+            }
+        }
+    }
+
     func focus(paneID: UUID) {
         store.focusPane(withID: paneID)
         guard let view = sessions[paneID]?.view else {
@@ -122,16 +211,67 @@ final class TerminalSessionPool: ObservableObject {
             sessions.removeValue(forKey: id)?.terminate()
             titles.removeValue(forKey: id)
             statuses.removeValue(forKey: id)
+            pdfPreviewURLs.removeValue(forKey: id)
+            pdfSearchPaneIDs.remove(id)
+            recentPDFURLs.removeValue(forKey: id)
         }
     }
 
     func terminateAll() {
+        layoutTransitionGeneration &+= 1
         for session in sessions.values {
+            session.view.endInteractivePaneResize()
             session.terminate()
         }
         sessions.removeAll()
         titles.removeAll()
         statuses.removeAll()
+        pdfPreviewURLs.removeAll()
+        pdfSearchPaneIDs.removeAll()
+        recentPDFURLs.removeAll()
+    }
+
+    private func perform(_ command: TerminalLocalCommand, fromPaneID paneID: UUID) {
+        switch command {
+        case .moveRecentPDF(let placement):
+            moveRecentPDF(fromPaneID: paneID, placement: placement)
+        }
+    }
+
+    private func presentPDF(
+        _ url: URL,
+        fromPaneID paneID: UUID,
+        placement: PDFPanePlacement
+    ) {
+        guard Self.fileExists(url),
+            let targetPaneID = store.preparePDFPane(
+                fromPaneID: paneID,
+                placement: placement
+            )
+        else {
+            store.presentError("Termuctive could not open the PDF in the requested pane.")
+            return
+        }
+        pdfPreviewURLs[targetPaneID] = url.standardizedFileURL
+    }
+
+    private func rememberPDF(_ url: URL, forPaneID paneID: UUID) {
+        let standardizedURL = url.standardizedFileURL
+        guard Self.fileExists(standardizedURL) else {
+            return
+        }
+        var urls = recentPDFURLs[paneID, default: []]
+        urls.removeAll { $0 == standardizedURL }
+        urls.append(standardizedURL)
+        recentPDFURLs[paneID] = Array(urls.suffix(20))
+    }
+
+    private static func fileExists(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(
+            atPath: url.path,
+            isDirectory: &isDirectory
+        ) && !isDirectory.boolValue
     }
 
     private func setTitle(_ title: String, for paneID: UUID) {
@@ -165,6 +305,10 @@ final class TerminalSessionPool: ObservableObject {
 
 final class TermuctiveTerminalView: LocalProcessTerminalView {
     var focusHandler: (() -> Void)?
+    var localCommandHandler: ((TerminalLocalCommand) -> Void)?
+    var outputHandler: ((ArraySlice<UInt8>) -> Void)?
+
+    private var localCommandInterceptor = TerminalLocalCommandInterceptor()
     private var hasPendingFocusRequest = false
     private var hasAttemptedAcceleratedRendering = false
     private var isInteractivePaneResizeActive = false
@@ -183,6 +327,25 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     override func mouseDown(with event: NSEvent) {
         focusHandler?()
         super.mouseDown(with: event)
+    }
+
+    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        let decision = localCommandInterceptor.process(data)
+        if !decision.bytesToForward.isEmpty {
+            super.send(source: source, data: decision.bytesToForward[...])
+        }
+        if decision.shouldClearCurrentLine {
+            let clearLine: [UInt8] = [0x15]
+            super.send(source: source, data: clearLine[...])
+        }
+        if let command = decision.command {
+            localCommandHandler?(command)
+        }
+    }
+
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        outputHandler?(slice)
+        super.dataReceived(slice: slice)
     }
 
     func applyTheme(_ theme: TerminalTheme, redraw: Bool) {
@@ -245,10 +408,14 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
 private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate {
     let paneID: UUID
     let view: TermuctiveTerminalView
+    private(set) var startedAt = Date()
 
     private var pane: TerminalPane
+    private var outputPDFTracker = TerminalOutputPDFTracker()
     private let onTitleChange: (UUID, String) -> Void
     private let onDirectoryChange: (UUID, String) -> Void
+    private let onLocalCommand: (UUID, TerminalLocalCommand) -> Void
+    private let onPDFPathDetected: (UUID, URL) -> Void
     private let onTermination: (UUID, Int32?) -> Void
 
     init(
@@ -258,12 +425,16 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         onFocus: @escaping (UUID) -> Void,
         onTitleChange: @escaping (UUID, String) -> Void,
         onDirectoryChange: @escaping (UUID, String) -> Void,
+        onLocalCommand: @escaping (UUID, TerminalLocalCommand) -> Void,
+        onPDFPathDetected: @escaping (UUID, URL) -> Void,
         onTermination: @escaping (UUID, Int32?) -> Void
     ) {
         paneID = pane.id
         self.pane = pane
         self.onTitleChange = onTitleChange
         self.onDirectoryChange = onDirectoryChange
+        self.onLocalCommand = onLocalCommand
+        self.onPDFPathDetected = onPDFPathDetected
         self.onTermination = onTermination
         view = TermuctiveTerminalView(frame: .zero)
         super.init()
@@ -271,6 +442,15 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         view.processDelegate = self
         view.focusHandler = { [paneID] in
             onFocus(paneID)
+        }
+        view.localCommandHandler = { [weak self] command in
+            guard let self else {
+                return
+            }
+            self.onLocalCommand(self.paneID, command)
+        }
+        view.outputHandler = { [weak self] bytes in
+            self?.trackPDFs(in: bytes)
         }
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.fontSmoothing = true
@@ -333,6 +513,8 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
             return true
         }
 
+        startedAt = Date()
+        outputPDFTracker = TerminalOutputPDFTracker()
         let shell = Self.shellPath
         let currentDirectory = Self.validDirectory(pane.workingDirectory)
         if currentDirectory != pane.workingDirectory {
@@ -346,6 +528,16 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
             currentDirectory: currentDirectory
         )
         return view.process.running
+    }
+
+    private func trackPDFs(in bytes: ArraySlice<UInt8>) {
+        let urls = outputPDFTracker.consume(
+            bytes,
+            workingDirectory: pane.workingDirectory
+        )
+        for url in urls {
+            onPDFPathDetected(paneID, url)
+        }
     }
 
     private static var shellPath: String {

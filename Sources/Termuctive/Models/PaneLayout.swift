@@ -5,6 +5,11 @@ enum PaneAxis: String, Codable, CaseIterable {
     case vertical
 }
 
+enum PaneInsertionPlacement {
+    case before
+    case after
+}
+
 struct TerminalPane: Codable, Equatable, Identifiable {
     let id: UUID
     var title: String
@@ -104,7 +109,8 @@ indirect enum PaneNode: Codable, Equatable, Identifiable {
     func splittingTerminal(
         withID id: UUID,
         axis: PaneAxis,
-        newPane: TerminalPane
+        newPane: TerminalPane,
+        placement: PaneInsertionPlacement = .after
     ) -> PaneNode? {
         switch self {
         case .terminal(let pane):
@@ -115,8 +121,8 @@ indirect enum PaneNode: Codable, Equatable, Identifiable {
             return .split(
                 PaneSplit(
                     axis: axis,
-                    first: self,
-                    second: .terminal(newPane)
+                    first: placement == .before ? .terminal(newPane) : self,
+                    second: placement == .before ? self : .terminal(newPane)
                 )
             )
 
@@ -124,7 +130,8 @@ indirect enum PaneNode: Codable, Equatable, Identifiable {
             if let first = split.first.splittingTerminal(
                 withID: id,
                 axis: axis,
-                newPane: newPane
+                newPane: newPane,
+                placement: placement
             ) {
                 split.first = first
                 return .split(split)
@@ -133,7 +140,8 @@ indirect enum PaneNode: Codable, Equatable, Identifiable {
             if let second = split.second.splittingTerminal(
                 withID: id,
                 axis: axis,
-                newPane: newPane
+                newPane: newPane,
+                placement: placement
             ) {
                 split.second = second
                 return .split(split)

@@ -478,6 +478,10 @@ struct WorkspaceDocument: Codable, Equatable {
         projects.lazy.compactMap { $0.terminal(withID: id) }.first
     }
 
+    func project(containingTerminalWithID id: UUID) -> TerminalProject? {
+        projects.first { $0.terminalIDs.contains(id) }
+    }
+
     mutating func updateTerminal(
         withID id: UUID,
         title: String?,

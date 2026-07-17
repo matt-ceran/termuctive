@@ -3,6 +3,7 @@ import SwiftUI
 struct ProjectSidebar: View {
     @ObservedObject var store: WorkspaceStore
     let chooseProject: () -> Void
+    let hideSidebar: () -> Void
 
     @State private var renamingEntry: SidebarEntry?
     @State private var renameDraft = ""
@@ -35,7 +36,7 @@ struct ProjectSidebar: View {
                 .accessibilityLabel("Add project item")
 
                 Button {
-                    store.isSidebarVisible = false
+                    hideSidebar()
                 } label: {
                     Image(systemName: "sidebar.left")
                 }
@@ -49,12 +50,11 @@ struct ProjectSidebar: View {
             Divider()
 
             ScrollView {
-                LazyVStack(spacing: 0) {
+                VStack(spacing: 0) {
                     ForEach(store.document.projects) { project in
                         projectSection(project)
                     }
                 }
-                .animation(.easeInOut(duration: 0.18), value: store.expandedProjectIDs)
                 .padding(.vertical, 6)
             }
         }
@@ -95,7 +95,8 @@ struct ProjectSidebar: View {
         VStack(spacing: 0) {
             sidebarRow(
                 entry: .project(id: project.id, name: project.name),
-                icon: isExpanded ? "chevron.down" : "chevron.right",
+                icon: "chevron.right",
+                rotatesDisclosureIcon: isExpanded,
                 secondaryIcon: "folder",
                 title: project.name,
                 depth: 0,
@@ -103,19 +104,20 @@ struct ProjectSidebar: View {
                     && store.selectedFolderID == nil
             ) {
                 if store.document.selectedProjectID == project.id {
-                    store.toggleProject(withID: project.id)
+                    withAnimation(SidebarMotion.disclosure) {
+                        store.toggleProject(withID: project.id)
+                    }
                 } else {
                     store.selectProject(withID: project.id)
                 }
             }
 
-            if isExpanded {
+            SidebarDisclosureSection(isExpanded: isExpanded) {
                 VStack(spacing: 0) {
                     ForEach(project.items) { item in
                         itemRow(item, projectID: project.id, depth: 1)
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -145,25 +147,25 @@ struct ProjectSidebar: View {
                 VStack(spacing: 0) {
                     sidebarRow(
                         entry: .folder(id: folder.id, projectID: projectID, name: folder.name),
-                        icon: isExpanded ? "chevron.down" : "chevron.right",
+                        icon: "chevron.right",
+                        rotatesDisclosureIcon: isExpanded,
                         secondaryIcon: "folder",
                         title: folder.name,
                         depth: depth,
                         selected: store.selectedFolderID == folder.id
                     ) {
-                        withAnimation(.easeInOut(duration: 0.18)) {
+                        withAnimation(SidebarMotion.disclosure) {
                             store.selectFolder(withID: folder.id, inProject: projectID)
                             store.toggleFolder(withID: folder.id)
                         }
                     }
 
-                    if isExpanded {
+                    SidebarDisclosureSection(isExpanded: isExpanded) {
                         VStack(spacing: 0) {
                             ForEach(folder.children) { child in
                                 itemRow(child, projectID: projectID, depth: depth + 1)
                             }
                         }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
             )
@@ -174,6 +176,7 @@ struct ProjectSidebar: View {
     private func sidebarRow(
         entry: SidebarEntry,
         icon: String,
+        rotatesDisclosureIcon: Bool = false,
         secondaryIcon: String? = nil,
         title: String,
         depth: Int,
@@ -186,6 +189,7 @@ struct ProjectSidebar: View {
             if isRenaming {
                 sidebarRowContent(
                     icon: icon,
+                    rotatesDisclosureIcon: rotatesDisclosureIcon,
                     secondaryIcon: secondaryIcon,
                     depth: depth,
                     selected: selected
@@ -204,6 +208,7 @@ struct ProjectSidebar: View {
                 Button(action: action) {
                     sidebarRowContent(
                         icon: icon,
+                        rotatesDisclosureIcon: rotatesDisclosureIcon,
                         secondaryIcon: secondaryIcon,
                         depth: depth,
                         selected: selected
@@ -262,6 +267,7 @@ struct ProjectSidebar: View {
 
     private func sidebarRowContent<Content: View>(
         icon: String,
+        rotatesDisclosureIcon: Bool,
         secondaryIcon: String?,
         depth: Int,
         selected: Bool,
@@ -270,6 +276,7 @@ struct ProjectSidebar: View {
         HStack(spacing: 7) {
             Image(systemName: icon)
                 .frame(width: 13)
+                .rotationEffect(.degrees(rotatesDisclosureIcon ? 90 : 0))
             if let secondaryIcon {
                 Image(systemName: secondaryIcon)
                     .frame(width: 13)

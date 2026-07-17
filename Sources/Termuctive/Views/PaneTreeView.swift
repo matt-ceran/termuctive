@@ -60,6 +60,7 @@ private final class PaneTreeNodeController {
     private enum Content {
         case terminal(
             pane: TerminalPane,
+            previewURL: URL?,
             host: NSHostingView<AnyView>
         )
         case split(
@@ -75,7 +76,7 @@ private final class PaneTreeNodeController {
 
     var view: NSView {
         switch content {
-        case .terminal(_, let host):
+        case .terminal(_, _, let host):
             host
         case .split(_, _, let view, _, _):
             view
@@ -89,6 +90,7 @@ private final class PaneTreeNodeController {
     ) {
         switch node {
         case .terminal(let pane):
+            let previewURL = sessions.previewURL(for: pane.id)
             let host = NSHostingView(
                 rootView: AnyView(
                     TerminalPaneView(
@@ -100,7 +102,11 @@ private final class PaneTreeNodeController {
                 )
             )
             host.sizingOptions = []
-            content = .terminal(pane: pane, host: host)
+            content = .terminal(
+                pane: pane,
+                previewURL: previewURL,
+                host: host
+            )
 
         case .split(let split):
             let first = PaneTreeNodeController(
@@ -133,7 +139,7 @@ private final class PaneTreeNodeController {
 
     func matchesStructure(of node: PaneNode) -> Bool {
         switch (content, node) {
-        case (.terminal(let pane, _), .terminal(let updatedPane)):
+        case (.terminal(let pane, _, _), .terminal(let updatedPane)):
             pane.id == updatedPane.id
 
         case (
@@ -156,8 +162,12 @@ private final class PaneTreeNodeController {
         sessions: TerminalSessionPool
     ) {
         switch (content, node) {
-        case (.terminal(let previousPane, let host), .terminal(let pane)):
-            guard pane != previousPane else {
+        case (
+            .terminal(let previousPane, let previousPreviewURL, let host),
+            .terminal(let pane)
+        ):
+            let previewURL = sessions.previewURL(for: pane.id)
+            guard pane != previousPane || previewURL != previousPreviewURL else {
                 return
             }
             host.rootView = AnyView(
@@ -168,7 +178,11 @@ private final class PaneTreeNodeController {
                 )
                 .id(pane.id)
             )
-            content = .terminal(pane: pane, host: host)
+            content = .terminal(
+                pane: pane,
+                previewURL: previewURL,
+                host: host
+            )
 
         case (
             .split(let id, let axis, let splitView, let first, let second),
@@ -198,17 +212,41 @@ private struct TerminalPaneView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "terminal")
+                Image(systemName: previewURL == nil ? "terminal" : "doc.richtext")
                     .font(.system(size: 11, weight: .medium))
-                Text(sessions.title(for: pane))
+                Text(previewURL?.lastPathComponent ?? sessions.title(for: pane))
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(abbreviatedPath)
+                Text(displayedPath)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                if case .exited = sessions.status(for: pane.id) {
+                if sessions.isFindingPDF(for: pane.id) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .help("Finding the most recent PDF")
+                }
+
+                if let previewURL {
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([previewURL])
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Reveal PDF in Finder")
+                    .accessibilityLabel("Reveal PDF in Finder")
+
+                    Button {
+                        sessions.dismissPDFPreview(inPaneID: pane.id)
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Return to Terminal")
+                    .accessibilityLabel("Return to terminal")
+                } else if case .exited = sessions.status(for: pane.id) {
                     Button {
                         sessions.restart(pane: pane)
                     } label: {
@@ -225,8 +263,8 @@ private struct TerminalPaneView: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.plain)
-                .help("Close Terminal")
-                .accessibilityLabel("Close terminal")
+                .help("Close Pane")
+                .accessibilityLabel("Close pane")
             }
             .font(.system(size: 11))
             .padding(.horizontal, 9)
@@ -234,24 +272,56 @@ private struct TerminalPaneView: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .contentShape(Rectangle())
             .onTapGesture {
-                sessions.focus(paneID: pane.id)
+                focusPane()
             }
 
-            TerminalHostView(
-                pane: pane,
-                isFocused: store.focusedPaneID == pane.id,
-                sessions: sessions
-            )
+            if let previewURL {
+                PDFPaneView(url: previewURL) {
+                    store.focusPane(withID: pane.id)
+                }
+            } else {
+                TerminalHostView(
+                    pane: pane,
+                    isFocused: store.focusedPaneID == pane.id,
+                    sessions: sessions
+                )
+            }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(sessions.title(for: pane)) terminal")
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    private var abbreviatedPath: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        guard pane.workingDirectory.hasPrefix(home) else {
-            return pane.workingDirectory
+    private var previewURL: URL? {
+        sessions.previewURL(for: pane.id)
+    }
+
+    private var displayedPath: String {
+        abbreviatedPath(
+            previewURL?.deletingLastPathComponent().path
+                ?? pane.workingDirectory
+        )
+    }
+
+    private var accessibilityLabel: String {
+        if let previewURL {
+            return "\(previewURL.lastPathComponent) PDF preview"
         }
-        return "~" + pane.workingDirectory.dropFirst(home.count)
+        return "\(sessions.title(for: pane)) terminal"
+    }
+
+    private func focusPane() {
+        if previewURL == nil {
+            sessions.focus(paneID: pane.id)
+        } else {
+            store.focusPane(withID: pane.id)
+        }
+    }
+
+    private func abbreviatedPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        guard path.hasPrefix(home) else {
+            return path
+        }
+        return "~" + path.dropFirst(home.count)
     }
 }

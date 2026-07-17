@@ -64,7 +64,7 @@ struct TermuctiveApp: App {
                 Divider()
 
                 Button(store.isSidebarVisible ? "Hide Projects" : "Show Projects") {
-                    store.isSidebarVisible.toggle()
+                    setSidebarVisible(!store.isSidebarVisible)
                 }
                 .keyboardShortcut("0", modifiers: [.command])
             }
@@ -80,6 +80,23 @@ struct TermuctiveApp: App {
                     store.splitFocusedPane(axis: .vertical)
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(store.focusedPaneID == nil)
+
+                Divider()
+
+                Button("Open Recent PDF in Opposite Pane") {
+                    moveRecentPDF(.automatic)
+                }
+                .disabled(store.focusedPaneID == nil)
+
+                Button("Open Recent PDF on Left") {
+                    moveRecentPDF(.left)
+                }
+                .disabled(store.focusedPaneID == nil)
+
+                Button("Open Recent PDF on Right") {
+                    moveRecentPDF(.right)
+                }
                 .disabled(store.focusedPaneID == nil)
 
                 Divider()
@@ -150,6 +167,28 @@ struct TermuctiveApp: App {
         Settings {
             AppearanceSettingsView(settings: appearance)
                 .preferredColorScheme(appearance.appTheme.colorScheme)
+        }
+    }
+
+    private func moveRecentPDF(_ placement: PDFPanePlacement) {
+        guard let focusedPaneID = store.focusedPaneID else {
+            return
+        }
+        sessions.moveRecentPDF(
+            fromPaneID: focusedPaneID,
+            placement: placement
+        )
+    }
+
+    private func setSidebarVisible(_ isVisible: Bool) {
+        guard store.isSidebarVisible != isVisible else {
+            return
+        }
+        sessions.prepareForAnimatedLayoutTransition(
+            duration: SidebarMotion.panelDuration
+        )
+        withAnimation(SidebarMotion.panel) {
+            store.isSidebarVisible = isVisible
         }
     }
 }

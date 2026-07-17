@@ -31,6 +31,22 @@ final class PaneLayoutTests: XCTestCase {
         XCTAssertEqual(split.axis, .horizontal)
     }
 
+    func testSplittingBeforePlacesTheNewPaneOnTheLeft() throws {
+        let original = TerminalPane(workingDirectory: "/tmp")
+        let inserted = TerminalPane(workingDirectory: "/tmp")
+
+        let layout = try XCTUnwrap(
+            PaneNode.terminal(original).splittingTerminal(
+                withID: original.id,
+                axis: .horizontal,
+                newPane: inserted,
+                placement: .before
+            )
+        )
+
+        XCTAssertEqual(layout.orderedTerminalIDs, [inserted.id, original.id])
+    }
+
     func testRemovingAPaneCollapsesItsParentSplit() throws {
         let first = TerminalPane(workingDirectory: "/first")
         let second = TerminalPane(workingDirectory: "/second")

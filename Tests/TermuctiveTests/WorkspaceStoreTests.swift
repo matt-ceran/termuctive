@@ -104,6 +104,26 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.canCloseFocusedPane)
     }
 
+    func testPreparingLeftPDFPaneKeepsTheCommandTerminalFocused() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let commandPaneID = try XCTUnwrap(store.focusedPaneID)
+
+        let pdfPaneID = try XCTUnwrap(
+            store.preparePDFPane(
+                fromPaneID: commandPaneID,
+                placement: .left
+            )
+        )
+
+        XCTAssertEqual(
+            store.selectedSpace?.layout.orderedTerminalIDs,
+            [pdfPaneID, commandPaneID]
+        )
+        XCTAssertEqual(store.focusedPaneID, commandPaneID)
+    }
+
     func testSplitRatioCommitPersistsOnce() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
