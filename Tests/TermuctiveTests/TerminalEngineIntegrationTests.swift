@@ -139,6 +139,63 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         XCTAssertTrue(terminal.fontSmoothing)
     }
 
+    func testInteractivePaneResizeCommitsOneSettledPTYSize() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let processDelegate = TerminalResizeTestDelegate()
+        terminal.processDelegate = processDelegate
+        terminal.startProcess(executable: "/bin/sh")
+        defer {
+            if terminal.process.running {
+                terminal.terminate()
+            }
+        }
+
+        let initialSize = terminal.frame.size
+        terminal.beginInteractivePaneResize()
+        for width in stride(from: 600, through: 440, by: -20) {
+            terminal.setFrameSize(
+                NSSize(width: CGFloat(width), height: 420)
+            )
+        }
+
+        XCTAssertEqual(terminal.frame.size, initialSize)
+        XCTAssertEqual(processDelegate.resizeEvents.count, 0)
+
+        terminal.endInteractivePaneResize()
+
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 440, height: 420))
+        XCTAssertEqual(processDelegate.resizeEvents.count, 1)
+    }
+
+    func testOverlappingResizeTransactionsWaitForEveryTransition() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let processDelegate = TerminalResizeTestDelegate()
+        terminal.processDelegate = processDelegate
+        terminal.startProcess(executable: "/bin/sh")
+        defer {
+            if terminal.process.running {
+                terminal.terminate()
+            }
+        }
+
+        terminal.beginInteractivePaneResize(reason: .animatedLayout)
+        terminal.beginInteractivePaneResize(reason: .divider)
+        terminal.setFrameSize(NSSize(width: 500, height: 400))
+        terminal.endInteractivePaneResize(reason: .divider)
+
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 640, height: 480))
+        XCTAssertEqual(processDelegate.resizeEvents.count, 0)
+
+        terminal.endInteractivePaneResize(reason: .animatedLayout)
+
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 500, height: 400))
+        XCTAssertEqual(processDelegate.resizeEvents.count, 1)
+    }
+
     func testTerminalThemeChangesWithoutReplacingTheSessionView() throws {
         let persistence = TerminalTestPersistence()
         let store = WorkspaceStore(persistence: persistence)
@@ -271,4 +328,22 @@ private final class TerminalTestDelegate: NSObject, LocalProcessTerminalViewDele
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         terminated.fulfill()
     }
+}
+
+private final class TerminalResizeTestDelegate: NSObject, LocalProcessTerminalViewDelegate {
+    private(set) var resizeEvents: [(columns: Int, rows: Int)] = []
+
+    func sizeChanged(
+        source: LocalProcessTerminalView,
+        newCols: Int,
+        newRows: Int
+    ) {
+        resizeEvents.append((newCols, newRows))
+    }
+
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
+
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+
+    func processTerminated(source: TerminalView, exitCode: Int32?) {}
 }

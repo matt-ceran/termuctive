@@ -151,6 +151,71 @@ final class PaneTreeRenderingTests: XCTestCase {
         XCTAssertTrue(sessions.terminalView(for: rightPane) === rightTerminalView)
     }
 
+    func testSwitchingSpacesKeepsHiddenTerminalAtItsSettledSize() async throws {
+        let persistence = PaneTreeTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let projectID = try XCTUnwrap(store.document.selectedProjectID)
+        let firstSpaceID = try XCTUnwrap(store.document.selectedSpaceID)
+        let firstLayout = try XCTUnwrap(store.selectedSpace?.layout)
+        let firstPane = try XCTUnwrap(
+            firstLayout.terminal(withID: firstLayout.firstTerminalID)
+        )
+        let sessions = TerminalSessionPool(store: store)
+        defer {
+            sessions.terminateAll()
+        }
+        let container = PaneTreeContainerView(
+            frame: NSRect(x: 0, y: 0, width: 1_000, height: 700)
+        )
+        let window = NSWindow(
+            contentRect: container.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = container
+        container.configure(
+            node: try XCTUnwrap(store.selectedSpace?.layout),
+            store: store,
+            sessions: sessions
+        )
+        container.layoutSubtreeIfNeeded()
+
+        let firstTerminal = sessions.terminalView(for: firstPane)
+        try await waitUntil {
+            firstTerminal.frame.width > 0 && firstTerminal.frame.height > 0
+        }
+        let settledSize = firstTerminal.frame.size
+
+        store.addSpace()
+        container.configure(
+            node: try XCTUnwrap(store.selectedSpace?.layout),
+            store: store,
+            sessions: sessions
+        )
+        container.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(firstTerminal.frame.size, settledSize)
+        XCTAssertFalse(firstTerminal.isDescendant(of: container))
+
+        container.setFrameSize(NSSize(width: 820, height: 560))
+        container.layoutSubtreeIfNeeded()
+        store.selectSpace(withID: firstSpaceID, inProject: projectID)
+        container.configure(
+            node: try XCTUnwrap(store.selectedSpace?.layout),
+            store: store,
+            sessions: sessions
+        )
+        container.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(firstTerminal.frame.size, settledSize)
+        try await waitUntil {
+            firstTerminal.frame.size != settledSize
+        }
+        XCTAssertTrue(firstTerminal.isDescendant(of: container))
+    }
+
     private func makeTestPDF(at url: URL) throws {
         let image = NSImage(size: NSSize(width: 612, height: 792))
         image.lockFocus()

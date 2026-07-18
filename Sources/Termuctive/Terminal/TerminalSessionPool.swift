@@ -170,7 +170,7 @@ final class TerminalSessionPool: ObservableObject {
         layoutTransitionGeneration &+= 1
         let generation = layoutTransitionGeneration
         for session in sessions.values {
-            session.view.beginInteractivePaneResize()
+            session.view.beginInteractivePaneResize(reason: .animatedLayout)
         }
 
         Task { @MainActor [weak self] in
@@ -182,7 +182,7 @@ final class TerminalSessionPool: ObservableObject {
                 return
             }
             for session in sessions.values {
-                session.view.endInteractivePaneResize()
+                session.view.endInteractivePaneResize(reason: .animatedLayout)
             }
         }
     }
@@ -220,7 +220,7 @@ final class TerminalSessionPool: ObservableObject {
     func terminateAll() {
         layoutTransitionGeneration &+= 1
         for session in sessions.values {
-            session.view.endInteractivePaneResize()
+            session.view.cancelInteractivePaneResizes()
             session.terminate()
         }
         sessions.removeAll()
@@ -303,6 +303,13 @@ final class TerminalSessionPool: ObservableObject {
     private static let fontSizeRange: ClosedRange<CGFloat> = 8...32
 }
 
+enum TerminalResizeReason: Hashable {
+    case animatedLayout
+    case attachment
+    case divider
+    case windowLiveResize
+}
+
 final class TermuctiveTerminalView: LocalProcessTerminalView {
     var focusHandler: (() -> Void)?
     var localCommandHandler: ((TerminalLocalCommand) -> Void)?
@@ -313,7 +320,36 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     private var suppressEnhancedSubmitRelease = false
     private var hasPendingFocusRequest = false
     private var hasAttemptedAcceleratedRendering = false
-    private var isInteractivePaneResizeActive = false
+    private var activeResizeReasons: Set<TerminalResizeReason> = []
+    private var pendingFrameSize: NSSize?
+    private var isFrameCoordinationReady = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isFrameCoordinationReady = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        isFrameCoordinationReady = true
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        guard isFrameCoordinationReady else {
+            super.setFrameSize(newSize)
+            return
+        }
+        guard isUsableFrameSize(newSize) else {
+            return
+        }
+        guard activeResizeReasons.isEmpty else {
+            // The viewport clips the stable grid until the final size is committed.
+            pendingFrameSize = newSize
+            return
+        }
+        pendingFrameSize = nil
+        super.setFrameSize(newSize)
+    }
 
     func requestFocus() {
         hasPendingFocusRequest = true
@@ -402,6 +438,7 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         caretTextColor = theme.backgroundColor
         selectedTextBackgroundColor = theme.selectionColor
         layer?.backgroundColor = theme.backgroundColor.cgColor
+        (superview as? TerminalViewportView)?.updateBackgroundColor()
         getTerminal().updateFullScreen()
         needsDisplay = true
 
@@ -432,20 +469,42 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         return nil
     }
 
-    func beginInteractivePaneResize() {
-        guard !isInteractivePaneResizeActive else {
-            return
-        }
-        isInteractivePaneResizeActive = true
-        metalBufferingMode = .perFrameAggregated
+    func beginInteractivePaneResize(reason: TerminalResizeReason = .divider) {
+        activeResizeReasons.insert(reason)
     }
 
-    func endInteractivePaneResize() {
-        guard isInteractivePaneResizeActive else {
+    func endInteractivePaneResize(reason: TerminalResizeReason = .divider) {
+        activeResizeReasons.remove(reason)
+        guard activeResizeReasons.isEmpty,
+            let pendingFrameSize
+        else {
             return
         }
-        isInteractivePaneResizeActive = false
-        metalBufferingMode = .perRowPersistent
+        self.pendingFrameSize = nil
+        super.setFrameSize(pendingFrameSize)
+    }
+
+    func cancelInteractivePaneResizes() {
+        activeResizeReasons.removeAll()
+        pendingFrameSize = nil
+    }
+
+    private func isUsableFrameSize(_ size: NSSize) -> Bool {
+        guard size.width.isFinite,
+            size.height.isFinite,
+            size.width > 0,
+            size.height > 0
+        else {
+            return false
+        }
+
+        // Ignore zero and sub-cell teardown frames instead of shrinking the PTY to its minimum.
+        let terminal = getTerminal()
+        let optimalSize = getOptimalFrameSize().size
+        let cellWidth = optimalSize.width / CGFloat(max(terminal.cols, 1))
+        let cellHeight = optimalSize.height / CGFloat(max(terminal.rows, 1))
+        return size.width >= max(cellWidth, 1)
+            && size.height >= max(cellHeight, 1)
     }
 
     private func applyPendingFocusRequest() {

@@ -256,9 +256,9 @@ final class SmoothSplitView: NSSplitView, NSSplitViewDelegate {
     private func setTerminalResizeMode(active: Bool) {
         for terminal in descendantTerminalViews(in: self) {
             if active {
-                terminal.beginInteractivePaneResize()
+                terminal.beginInteractivePaneResize(reason: .divider)
             } else {
-                terminal.endInteractivePaneResize()
+                terminal.endInteractivePaneResize(reason: .divider)
             }
         }
     }
