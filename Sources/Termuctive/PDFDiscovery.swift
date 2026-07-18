@@ -91,40 +91,71 @@ struct RecentPDFLocator {
 }
 
 struct TerminalOutputPDFTracker {
-    private var rollingOutput = ""
+    private var rollingBytes: [UInt8] = []
     private var reportedPaths: Set<String> = []
 
     mutating func consume(
         _ bytes: ArraySlice<UInt8>,
         workingDirectory: String
     ) -> [URL] {
-        guard let chunk = String(bytes: bytes, encoding: .utf8), !chunk.isEmpty else {
+        guard !bytes.isEmpty else {
             return []
         }
 
-        rollingOutput += Self.removingANSISequences(from: chunk)
-        if rollingOutput.count > Self.maximumOutputCharacters {
-            rollingOutput.removeFirst(rollingOutput.count - Self.maximumOutputCharacters)
+        rollingBytes.append(contentsOf: bytes)
+        if rollingBytes.count > Self.maximumOutputBytes {
+            rollingBytes.removeFirst(rollingBytes.count - Self.maximumOutputBytes)
         }
 
+        let output = String(decoding: rollingBytes, as: UTF8.self)
         var matches: [URL] = []
-        for expression in Self.pathExpressions {
-            let range = NSRange(rollingOutput.startIndex..., in: rollingOutput)
-            for match in expression.matches(in: rollingOutput, range: range) {
-                guard let matchRange = Range(match.range, in: rollingOutput),
-                    let url = Self.resolve(
-                        String(rollingOutput[matchRange]),
-                        workingDirectory: workingDirectory
-                    ),
-                    !reportedPaths.contains(url.path)
-                else {
-                    continue
-                }
-                reportedPaths.insert(url.path)
-                matches.append(url)
+        for url in Self.detectedURLs(in: output, workingDirectory: workingDirectory) {
+            guard !reportedPaths.contains(url.path) else {
+                continue
             }
+            reportedPaths.insert(url.path)
+            matches.append(url)
         }
         return matches
+    }
+
+    static func detectedURLs(
+        in output: String,
+        workingDirectory: String
+    ) -> [URL] {
+        let visibleOutput = removingANSISequences(from: output)
+        let searchRange = NSRange(visibleOutput.startIndex..., in: visibleOutput)
+        var candidates: [(range: NSRange, value: String)] = []
+
+        for expression in pathExpressions {
+            for match in expression.matches(in: visibleOutput, range: searchRange) {
+                guard let range = Range(match.range, in: visibleOutput) else {
+                    continue
+                }
+                candidates.append((match.range, String(visibleOutput[range])))
+            }
+        }
+        candidates.sort {
+            if $0.range.location == $1.range.location {
+                return $0.range.length > $1.range.length
+            }
+            return $0.range.location < $1.range.location
+        }
+
+        var acceptedRanges: [NSRange] = []
+        var urls: [URL] = []
+        for candidate in candidates {
+            guard !acceptedRanges.contains(where: { rangeContains($0, candidate.range) }) else {
+                continue
+            }
+            guard let url = resolve(candidate.value, workingDirectory: workingDirectory) else {
+                continue
+            }
+            acceptedRanges.append(candidate.range)
+            urls.removeAll { $0 == url }
+            urls.append(url)
+        }
+        return urls
     }
 
     private static func resolve(
@@ -163,15 +194,21 @@ struct TerminalOutputPDFTracker {
     }
 
     private static func removingANSISequences(from string: String) -> String {
-        guard let ansiExpression else {
-            return string
+        var result = string
+        for expression in terminalControlExpressions {
+            let range = NSRange(result.startIndex..., in: result)
+            result = expression.stringByReplacingMatches(
+                in: result,
+                range: range,
+                withTemplate: ""
+            )
         }
-        let range = NSRange(string.startIndex..., in: string)
-        return ansiExpression.stringByReplacingMatches(
-            in: string,
-            range: range,
-            withTemplate: ""
-        )
+        return result
+    }
+
+    private static func rangeContains(_ outer: NSRange, _ inner: NSRange) -> Bool {
+        outer.location <= inner.location
+            && NSMaxRange(outer) >= NSMaxRange(inner)
     }
 
     private static let pathExpressions: [NSRegularExpression] = [
@@ -179,8 +216,9 @@ struct TerminalOutputPDFTracker {
         #"(?:\.{1,2}/|[A-Za-z0-9_.%+()-]+/)[A-Za-z0-9_./%+()\-]*?\.pdf"#,
         #"[A-Za-z0-9_.%+()\-]+\.pdf"#,
     ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
-    private static let ansiExpression = try? NSRegularExpression(
-        pattern: #"\u{001B}\[[0-?]*[ -/]*[@-~]"#
-    )
-    private static let maximumOutputCharacters = 32_768
+    private static let terminalControlExpressions: [NSRegularExpression] = [
+        "\u{001B}\\[[0-?]*[ -/]*[@-~]",
+        "\u{001B}\\][^\u{0007}\u{001B}]*(?:\u{0007}|\u{001B}\\\\)",
+    ].compactMap { try? NSRegularExpression(pattern: $0) }
+    private static let maximumOutputBytes = 32_768
 }

@@ -104,6 +104,12 @@ final class TerminalSessionPool: ObservableObject {
             return
         }
 
+        if let visiblePDF = sessions[paneID]?.mostRecentVisiblePDF() {
+            rememberPDF(visiblePDF, forPaneID: paneID)
+            presentPDF(visiblePDF, fromPaneID: paneID, placement: placement)
+            return
+        }
+
         if let detectedPDF = recentPDFURLs[paneID]?.last(where: Self.fileExists) {
             presentPDF(detectedPDF, fromPaneID: paneID, placement: placement)
             return
@@ -605,6 +611,17 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     func setTheme(_ theme: TerminalTheme) {
         view.applyTheme(theme, redraw: true)
+    }
+
+    func mostRecentVisiblePDF() -> URL? {
+        let output = String(
+            decoding: view.getTerminal().getBufferAsData(),
+            as: UTF8.self
+        )
+        return TerminalOutputPDFTracker.detectedURLs(
+            in: output,
+            workingDirectory: pane.workingDirectory
+        ).last
     }
 
     func sizeChanged(

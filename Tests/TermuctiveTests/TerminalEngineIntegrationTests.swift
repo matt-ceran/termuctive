@@ -196,6 +196,68 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(processDelegate.resizeEvents.count, 1)
     }
 
+    func testMovePDFPrefersLatestVisibleCodexPathOverStaleDetection() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("termuctive-visible-pdf-\(UUID().uuidString)")
+        let outputDirectory = directory.appendingPathComponent("output/pdf", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true
+        )
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let stalePDF = directory.appendingPathComponent("old-report.pdf")
+        let visiblePDF = outputDirectory.appendingPathComponent(
+            "biohub_phase9_appearance_cnn_foundation.pdf"
+        )
+        try Data("%PDF-stale".utf8).write(to: stalePDF)
+        try Data("%PDF-visible".utf8).write(to: visiblePDF)
+
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: directory)
+        let sourcePaneID = try XCTUnwrap(store.focusedPaneID)
+        let sourcePane = try XCTUnwrap(
+            store.selectedSpace?.layout.terminal(withID: sourcePaneID)
+        )
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: sourcePane)
+        defer {
+            sessions.terminateAll()
+        }
+        terminal.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
+
+        terminal.dataReceived(
+            slice: Array("Previously opened \(stalePDF.path)\n".utf8)[...]
+        )
+        terminal.dataReceived(
+            slice: Array("Opened latest Biohub PDF: output/pdf/biohub_phase9_X".utf8)[...]
+        )
+        terminal.dataReceived(
+            slice: Array("\u{8}appearance_cnn_foundation.pdf. It is 14 pages.\n".utf8)[...]
+        )
+        await Task.yield()
+
+        let renderedOutput = String(
+            decoding: terminal.getTerminal().getBufferAsData(),
+            as: UTF8.self
+        )
+        XCTAssertTrue(
+            renderedOutput.contains("output/pdf/biohub_phase9_appearance_cnn_foundation.pdf")
+        )
+
+        store.splitFocusedPane(axis: .horizontal)
+        let targetPaneID = try XCTUnwrap(store.selectedSpace?.layout.orderedTerminalIDs.last)
+        sessions.moveRecentPDF(fromPaneID: sourcePaneID, placement: .right)
+
+        XCTAssertEqual(
+            sessions.previewURL(for: targetPaneID),
+            visiblePDF.standardizedFileURL
+        )
+    }
+
     func testTerminalThemeChangesWithoutReplacingTheSessionView() throws {
         let persistence = TerminalTestPersistence()
         let store = WorkspaceStore(persistence: persistence)

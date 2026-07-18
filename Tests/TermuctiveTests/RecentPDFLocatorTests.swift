@@ -70,6 +70,32 @@ final class RecentPDFLocatorTests: XCTestCase {
         XCTAssertEqual(matches, [pdf.standardizedFileURL])
     }
 
+    func testTerminalOutputTrackerReassemblesSplitANSIPath() throws {
+        let outputDirectory = temporaryDirectory.appendingPathComponent(
+            "output/pdf",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true
+        )
+        let pdf = outputDirectory.appendingPathComponent("styled-report.pdf")
+        try Data("%PDF-1.4".utf8).write(to: pdf)
+        var tracker = TerminalOutputPDFTracker()
+
+        let firstMatches = tracker.consume(
+            Array("Opened output/pdf/styled-\u{1B}[".utf8)[...],
+            workingDirectory: temporaryDirectory.path
+        )
+        let finalMatches = tracker.consume(
+            Array("36mreport.pdf\u{1B}[0m\n".utf8)[...],
+            workingDirectory: temporaryDirectory.path
+        )
+
+        XCTAssertTrue(firstMatches.isEmpty)
+        XCTAssertEqual(finalMatches, [pdf.standardizedFileURL])
+    }
+
     private func setModificationDate(_ date: Date, for url: URL) throws {
         try FileManager.default.setAttributes(
             [.modificationDate: date],
