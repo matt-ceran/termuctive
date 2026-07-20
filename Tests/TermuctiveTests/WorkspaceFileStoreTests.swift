@@ -85,4 +85,40 @@ final class WorkspaceFileStoreTests: XCTestCase {
         XCTAssertFalse(json.contains("lastSelectedSpaceID"))
         XCTAssertEqual(try persistence.load(), document)
     }
+
+    func testDocumentWithoutSectionKindLoadsAsProject() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let pane = TerminalPane(workingDirectory: "/project")
+        let space = TerminalSpace(name: "Terminal", layout: .terminal(pane))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(space)]
+        )
+        let document = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: space.id
+        )
+        let fileURL = directory.appendingPathComponent("workspace.json")
+        let persistence = WorkspaceFileStore(fileURL: fileURL)
+        try persistence.save(document)
+        let savedData = try Data(contentsOf: fileURL)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: savedData) as? [String: Any]
+        )
+        var projects = try XCTUnwrap(json["projects"] as? [[String: Any]])
+        projects[0].removeValue(forKey: "kind")
+        json["projects"] = projects
+        try JSONSerialization.data(withJSONObject: json).write(to: fileURL)
+
+        let loaded = try XCTUnwrap(persistence.load())
+
+        XCTAssertEqual(loaded.projects.first?.kind, .project)
+        XCTAssertEqual(loaded, document)
+    }
 }

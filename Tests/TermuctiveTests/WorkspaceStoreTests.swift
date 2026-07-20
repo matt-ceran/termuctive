@@ -34,48 +34,96 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.document.projects.count, 1)
     }
 
-    func testGlobalFolderCreationAddsRootSiblingWhenFolderIsSelected() throws {
+    func testTopLevelFolderUsesActiveTerminalDirectory() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
         store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
-        store.addFolder()
-        let firstFolderID = try XCTUnwrap(store.selectedFolderID)
+        let paneID = try XCTUnwrap(store.focusedPaneID)
+        store.updateTerminal(
+            paneID: paneID,
+            workingDirectory: "/tmp/project/service"
+        )
+        persistence.savedDocuments.removeAll()
 
         store.addFolder()
 
-        let project = try XCTUnwrap(store.selectedProject)
-        guard project.items.count == 3 else {
-            return XCTFail("Expected the original terminal and two root-level folders.")
+        XCTAssertEqual(store.selectedProject?.kind, .folder)
+        XCTAssertEqual(store.selectedProject?.rootDirectory, "/tmp/project/service")
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
+    }
+
+    func testTopLevelFolderDoesNotBlockAddingProjectAtSameDirectory() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        let url = URL(fileURLWithPath: "/tmp/shared")
+        store.addProject(at: url)
+        let originalProjectID = try XCTUnwrap(store.selectedProject?.id)
+        store.addFolder()
+        let folder = try XCTUnwrap(store.selectedProject)
+        store.removeProject(withID: originalProjectID)
+
+        store.addProject(at: url)
+
+        XCTAssertEqual(store.document.projects.count, 2)
+        XCTAssertEqual(store.document.projects.first, folder)
+        XCTAssertEqual(store.document.projects.last?.kind, .project)
+        XCTAssertEqual(store.document.projects.last?.rootDirectory, url.path)
+        XCTAssertEqual(store.document.selectedProjectID, store.document.projects.last?.id)
+    }
+
+    func testGlobalFolderCreationCreatesIndependentTopLevelContainer() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let sourceProject = try XCTUnwrap(store.selectedProject)
+
+        store.addFolder()
+
+        guard store.document.projects.count == 2 else {
+            return XCTFail("Expected a new top-level container beside the project.")
         }
-        guard case .folder(let firstFolder) = project.items[1],
-            case .folder(let secondFolder) = project.items[2]
-        else {
-            return XCTFail("Expected two root-level sibling folders.")
-        }
-        XCTAssertEqual(firstFolder.id, firstFolderID)
-        XCTAssertTrue(firstFolder.children.isEmpty)
-        XCTAssertEqual(store.selectedFolderID, secondFolder.id)
+        XCTAssertEqual(store.document.projects[0], sourceProject)
+        let folder = store.document.projects[1]
+        XCTAssertEqual(folder.kind, .folder)
+        XCTAssertEqual(folder.name, "Folder")
+        XCTAssertEqual(folder.rootDirectory, sourceProject.rootDirectory)
+        XCTAssertTrue(folder.items.isEmpty)
+        XCTAssertEqual(store.document.selectedProjectID, folder.id)
+        XCTAssertNil(store.document.selectedSpaceID)
+        XCTAssertNil(store.selectedFolderID)
+        XCTAssertNil(store.focusedPaneID)
 
         store.addSpace()
 
-        let updatedProject = try XCTUnwrap(store.selectedProject)
-        guard case .folder(let unchangedFirstFolder) = updatedProject.items[1],
-            case .folder(let updatedSecondFolder) = updatedProject.items[2],
-            case .space(let newSpace) = updatedSecondFolder.children.first
-        else {
-            return XCTFail("Expected a terminal space inside the new root folder.")
+        let updatedFolder = try XCTUnwrap(store.selectedProject)
+        guard case .space(let newSpace) = updatedFolder.items.first else {
+            return XCTFail("Expected a terminal space inside the new top-level folder.")
         }
-        XCTAssertTrue(unchangedFirstFolder.children.isEmpty)
-        XCTAssertEqual(updatedSecondFolder.children.count, 1)
+        XCTAssertEqual(updatedFolder.items.count, 1)
         XCTAssertEqual(store.document.selectedSpaceID, newSpace.id)
+        XCTAssertEqual(
+            newSpace.layout.terminal(withID: newSpace.layout.firstTerminalID)?.workingDirectory,
+            sourceProject.rootDirectory
+        )
+
+        persistence.savedDocuments.removeAll()
+        store.removeProject(withID: folder.id)
+
+        XCTAssertEqual(store.document.projects, [sourceProject])
+        XCTAssertEqual(store.document.selectedProjectID, sourceProject.id)
+        XCTAssertEqual(store.document.selectedSpaceID, sourceProject.firstSpace?.id)
+        XCTAssertEqual(store.focusedPaneID, sourceProject.firstSpace?.layout.firstTerminalID)
+        XCTAssertFalse(store.document.terminalIDs.contains(newSpace.layout.firstTerminalID))
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
     }
 
     func testSpaceCanBeAddedInsideSelectedFolder() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
         store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
 
-        store.addFolder()
+        store.addFolder(toFolderWithID: nil, inProjectWithID: projectID)
         let folderID = try XCTUnwrap(store.selectedFolderID)
         store.addSpace()
 
@@ -96,7 +144,7 @@ final class WorkspaceStoreTests: XCTestCase {
         let store = WorkspaceStore(persistence: persistence)
         store.addProject(at: URL(fileURLWithPath: "/tmp/first"))
         let firstProjectID = try XCTUnwrap(store.selectedProject?.id)
-        store.addFolder()
+        store.addFolder(toFolderWithID: nil, inProjectWithID: firstProjectID)
         let folderID = try XCTUnwrap(store.selectedFolderID)
         store.addProject(at: URL(fileURLWithPath: "/tmp/second"))
 
@@ -126,7 +174,7 @@ final class WorkspaceStoreTests: XCTestCase {
         let store = WorkspaceStore(persistence: persistence)
         store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
         let projectID = try XCTUnwrap(store.selectedProject?.id)
-        store.addFolder()
+        store.addFolder(toFolderWithID: nil, inProjectWithID: projectID)
         let parentFolderID = try XCTUnwrap(store.selectedFolderID)
 
         store.addFolder(
@@ -287,9 +335,9 @@ final class WorkspaceStoreTests: XCTestCase {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
         store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
-        store.addFolder()
-        let folderID = try XCTUnwrap(store.selectedFolderID)
         let projectID = try XCTUnwrap(store.selectedProject?.id)
+        store.addFolder(toFolderWithID: nil, inProjectWithID: projectID)
+        let folderID = try XCTUnwrap(store.selectedFolderID)
 
         XCTAssertTrue(store.expandedFolderIDs.contains(folderID))
 

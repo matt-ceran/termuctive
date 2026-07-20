@@ -282,8 +282,14 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
     }
 }
 
+enum WorkspaceSectionKind: String, Codable {
+    case project
+    case folder
+}
+
 struct TerminalProject: Codable, Equatable, Identifiable {
     let id: UUID
+    var kind: WorkspaceSectionKind
     var name: String
     var rootDirectory: String
     var items: [WorkspaceItem]
@@ -291,16 +297,47 @@ struct TerminalProject: Codable, Equatable, Identifiable {
 
     init(
         id: UUID = UUID(),
+        kind: WorkspaceSectionKind = .project,
         name: String,
         rootDirectory: String,
         items: [WorkspaceItem] = [],
         lastSelectedSpaceID: UUID? = nil
     ) {
         self.id = id
+        self.kind = kind
         self.name = name
         self.rootDirectory = rootDirectory
         self.items = items
         self.lastSelectedSpaceID = lastSelectedSpaceID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case name
+        case rootDirectory
+        case items
+        case lastSelectedSpaceID
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        kind = try container.decodeIfPresent(WorkspaceSectionKind.self, forKey: .kind) ?? .project
+        name = try container.decode(String.self, forKey: .name)
+        rootDirectory = try container.decode(String.self, forKey: .rootDirectory)
+        items = try container.decode([WorkspaceItem].self, forKey: .items)
+        lastSelectedSpaceID = try container.decodeIfPresent(UUID.self, forKey: .lastSelectedSpaceID)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(name, forKey: .name)
+        try container.encode(rootDirectory, forKey: .rootDirectory)
+        try container.encode(items, forKey: .items)
+        try container.encodeIfPresent(lastSelectedSpaceID, forKey: .lastSelectedSpaceID)
     }
 
     var firstSpace: TerminalSpace? {

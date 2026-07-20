@@ -61,7 +61,9 @@ final class WorkspaceStore: ObservableObject {
 
     func addProject(at url: URL) {
         let path = url.standardizedFileURL.path
-        if let existing = document.projects.first(where: { $0.rootDirectory == path }) {
+        if let existing = document.projects.first(where: {
+            $0.kind == .project && $0.rootDirectory == path
+        }) {
             selectProject(withID: existing.id)
             return
         }
@@ -200,10 +202,22 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
-        addFolder(
-            toFolderWithID: nil,
-            inProjectWithID: project.id
+        let rootDirectory =
+            focusedPaneID.flatMap {
+                project.terminal(withID: $0)?.workingDirectory
+            } ?? project.rootDirectory
+        let folder = TerminalProject(
+            kind: .folder,
+            name: uniqueName(
+                base: "Folder",
+                existing: document.projects.map(\.name)
+            ),
+            rootDirectory: rootDirectory
         )
+        document.projects.append(folder)
+        activateProject(at: document.projects.count - 1)
+        selectedFolderID = nil
+        save()
     }
 
     func addFolder(toFolderWithID parentID: UUID?, inProjectWithID projectID: UUID) {

@@ -33,7 +33,7 @@ struct ProjectSidebar: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .frame(width: 30, height: 30)
-                .accessibilityLabel("Add project item")
+                .accessibilityLabel("Add workspace item")
 
                 Button {
                     hideSidebar()
@@ -94,8 +94,8 @@ struct ProjectSidebar: View {
         let isExpanded = store.expandedProjectIDs.contains(project.id)
         VStack(spacing: 0) {
             sidebarRow(
-                entry: .project(id: project.id, name: project.name),
-                icon: "chevron.right",
+                entry: .project(id: project.id, name: project.name, kind: project.kind),
+                disclosureIcon: "chevron.right",
                 rotatesDisclosureIcon: isExpanded,
                 secondaryIcon: "folder",
                 title: project.name,
@@ -132,10 +132,12 @@ struct ProjectSidebar: View {
             return AnyView(
                 sidebarRow(
                     entry: .space(id: space.id, projectID: projectID, name: space.name),
-                    icon: "rectangle",
+                    disclosureIcon: nil,
+                    secondaryIcon: "rectangle",
                     title: space.name,
                     depth: depth,
                     selected: store.document.selectedSpaceID == space.id
+                        && store.selectedFolderID == nil
                 ) {
                     store.selectSpace(withID: space.id, inProject: projectID)
                 }
@@ -147,7 +149,7 @@ struct ProjectSidebar: View {
                 VStack(spacing: 0) {
                     sidebarRow(
                         entry: .folder(id: folder.id, projectID: projectID, name: folder.name),
-                        icon: "chevron.right",
+                        disclosureIcon: "chevron.right",
                         rotatesDisclosureIcon: isExpanded,
                         secondaryIcon: "folder",
                         title: folder.name,
@@ -175,7 +177,7 @@ struct ProjectSidebar: View {
     @ViewBuilder
     private func sidebarRow(
         entry: SidebarEntry,
-        icon: String,
+        disclosureIcon: String?,
         rotatesDisclosureIcon: Bool = false,
         secondaryIcon: String? = nil,
         title: String,
@@ -188,7 +190,7 @@ struct ProjectSidebar: View {
         Group {
             if isRenaming {
                 sidebarRowContent(
-                    icon: icon,
+                    disclosureIcon: disclosureIcon,
                     rotatesDisclosureIcon: rotatesDisclosureIcon,
                     secondaryIcon: secondaryIcon,
                     depth: depth,
@@ -207,7 +209,7 @@ struct ProjectSidebar: View {
             } else {
                 Button(action: action) {
                     sidebarRowContent(
-                        icon: icon,
+                        disclosureIcon: disclosureIcon,
                         rotatesDisclosureIcon: rotatesDisclosureIcon,
                         secondaryIcon: secondaryIcon,
                         depth: depth,
@@ -238,11 +240,11 @@ struct ProjectSidebar: View {
     @ViewBuilder
     private func creationActions(for entry: SidebarEntry) -> some View {
         switch entry {
-        case .project(let projectID, _):
+        case .project(let projectID, _, _):
             Button("New Terminal Space") {
                 store.addSpace(toFolderWithID: nil, inProjectWithID: projectID)
             }
-            Button("New Folder") {
+            Button("New Folder Here") {
                 store.addFolder(toFolderWithID: nil, inProjectWithID: projectID)
             }
 
@@ -253,7 +255,7 @@ struct ProjectSidebar: View {
                     inProjectWithID: projectID
                 )
             }
-            Button("New Folder") {
+            Button("New Folder Here") {
                 store.addFolder(
                     toFolderWithID: folderID,
                     inProjectWithID: projectID
@@ -266,7 +268,7 @@ struct ProjectSidebar: View {
     }
 
     private func sidebarRowContent<Content: View>(
-        icon: String,
+        disclosureIcon: String?,
         rotatesDisclosureIcon: Bool,
         secondaryIcon: String?,
         depth: Int,
@@ -274,9 +276,14 @@ struct ProjectSidebar: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: icon)
-                .frame(width: 13)
-                .rotationEffect(.degrees(rotatesDisclosureIcon ? 90 : 0))
+            if let disclosureIcon {
+                Image(systemName: disclosureIcon)
+                    .frame(width: 13)
+                    .rotationEffect(.degrees(rotatesDisclosureIcon ? 90 : 0))
+            } else {
+                Color.clear
+                    .frame(width: 13, height: 13)
+            }
             if let secondaryIcon {
                 Image(systemName: secondaryIcon)
                     .frame(width: 13)
@@ -307,7 +314,7 @@ struct ProjectSidebar: View {
         focusedRenameID = nil
 
         switch entry {
-        case .project(let id, _):
+        case .project(let id, _, _):
             store.renameProject(withID: id, to: name)
         case .folder(let id, let projectID, _),
             .space(let id, let projectID, _):
@@ -328,7 +335,7 @@ struct ProjectSidebar: View {
         pendingRemoval = nil
 
         switch entry {
-        case .project(let id, _):
+        case .project(let id, _, _):
             store.removeProject(withID: id)
         case .folder(let id, let projectID, _),
             .space(let id, let projectID, _):
@@ -338,13 +345,13 @@ struct ProjectSidebar: View {
 }
 
 private enum SidebarEntry: Equatable {
-    case project(id: UUID, name: String)
+    case project(id: UUID, name: String, kind: WorkspaceSectionKind)
     case folder(id: UUID, projectID: UUID, name: String)
     case space(id: UUID, projectID: UUID, name: String)
 
     var id: UUID {
         switch self {
-        case .project(let id, _),
+        case .project(let id, _, _),
             .folder(let id, _, _),
             .space(let id, _, _):
             id
@@ -353,7 +360,7 @@ private enum SidebarEntry: Equatable {
 
     var name: String {
         switch self {
-        case .project(_, let name),
+        case .project(_, let name, _),
             .folder(_, _, let name),
             .space(_, _, let name):
             name
@@ -362,8 +369,8 @@ private enum SidebarEntry: Equatable {
 
     var removeLabel: String {
         switch self {
-        case .project:
-            "Remove Project"
+        case .project(_, _, let kind):
+            kind == .folder ? "Remove Folder" : "Remove Project"
         case .folder:
             "Remove Folder"
         case .space:
@@ -386,8 +393,12 @@ private enum SidebarEntry: Equatable {
 
     var removalMessage: String {
         switch self {
-        case .project:
-            "Its saved terminal spaces will be removed and their running terminals will stop."
+        case .project(_, _, let kind):
+            if kind == .folder {
+                "Everything inside this folder will be removed and its running terminals will stop."
+            } else {
+                "Its saved terminal spaces will be removed and their running terminals will stop."
+            }
         case .folder:
             "Everything inside this folder will be removed and its running terminals will stop."
         case .space:
