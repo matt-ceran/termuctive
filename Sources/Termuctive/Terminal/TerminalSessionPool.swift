@@ -328,6 +328,9 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     private var hasAttemptedAcceleratedRendering = false
     private var activeResizeReasons: Set<TerminalResizeReason> = []
     private var pendingFrameSize: NSSize?
+    private var mouseDownForCurrentGesture: NSEvent?
+    private var shouldReportCurrentMouseClick = false
+    private var didDragCurrentMouseGesture = false
     private var isFrameCoordinationReady = false
 
     override init(frame: CGRect) {
@@ -370,7 +373,56 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
 
     override func mouseDown(with event: NSEvent) {
         focusHandler?()
+        didDragCurrentMouseGesture = false
+        mouseDownForCurrentGesture = event
+        shouldReportCurrentMouseClick = allowMouseReporting
+        allowMouseReporting = false
         super.mouseDown(with: event)
+        if selectionActive {
+            shouldReportCurrentMouseClick = false
+        }
+        allowMouseReporting = !selectionActive
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let shouldSeedSelection = !selectionActive
+        didDragCurrentMouseGesture = true
+        shouldReportCurrentMouseClick = false
+        allowMouseReporting = false
+        if shouldSeedSelection,
+            let mouseDownForCurrentGesture
+        {
+            super.mouseDragged(with: mouseDownForCurrentGesture)
+        }
+        super.mouseDragged(with: event)
+        allowMouseReporting = !selectionActive
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer {
+            mouseDownForCurrentGesture = nil
+            shouldReportCurrentMouseClick = false
+            didDragCurrentMouseGesture = false
+            allowMouseReporting = !selectionActive
+        }
+
+        if let mouseDownForCurrentGesture,
+            shouldReportCurrentMouseClick,
+            !didDragCurrentMouseGesture
+        {
+            allowMouseReporting = true
+            super.mouseDown(with: mouseDownForCurrentGesture)
+            super.mouseUp(with: event)
+            return
+        }
+
+        allowMouseReporting = false
+        super.mouseUp(with: event)
+    }
+
+    override func selectionChanged(source: Terminal) {
+        super.selectionChanged(source: source)
+        allowMouseReporting = !selectionActive
     }
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
@@ -428,8 +480,8 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
-        outputHandler?(slice)
         super.dataReceived(slice: slice)
+        outputHandler?(slice)
     }
 
     func applyTheme(_ theme: TerminalTheme, redraw: Bool) {

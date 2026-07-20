@@ -102,19 +102,35 @@ struct TerminalOutputPDFTracker {
             return []
         }
 
+        let firstNewExtensionStart = max(0, rollingBytes.count - 3)
         rollingBytes.append(contentsOf: bytes)
-        if rollingBytes.count > Self.maximumOutputBytes {
-            rollingBytes.removeFirst(rollingBytes.count - Self.maximumOutputBytes)
-        }
 
-        let output = String(decoding: rollingBytes, as: UTF8.self)
         var matches: [URL] = []
-        for url in Self.detectedURLs(in: output, workingDirectory: workingDirectory) {
-            guard !reportedPaths.contains(url.path) else {
+        for extensionEnd in Self.pdfExtensionEndOffsets(
+            in: rollingBytes,
+            startingAt: firstNewExtensionStart
+        ) {
+            let candidateStart = max(0, extensionEnd - Self.maximumCandidateBytes)
+            let candidateOutput = String(
+                decoding: rollingBytes[candidateStart..<extensionEnd],
+                as: UTF8.self
+            )
+            guard
+                let url = Self.detectedURLAtEnd(
+                    in: candidateOutput,
+                    workingDirectory: workingDirectory
+                )
+            else {
                 continue
             }
-            reportedPaths.insert(url.path)
+            guard reportedPaths.insert(url.path).inserted else {
+                continue
+            }
             matches.append(url)
+        }
+
+        if rollingBytes.count > Self.maximumBufferedBytes {
+            rollingBytes.removeFirst(rollingBytes.count - Self.retainedOutputBytes)
         }
         return matches
     }
@@ -156,6 +172,48 @@ struct TerminalOutputPDFTracker {
             urls.append(url)
         }
         return urls
+    }
+
+    private static func detectedURLAtEnd(
+        in output: String,
+        workingDirectory: String
+    ) -> URL? {
+        let visibleOutput = removingANSISequences(from: output)
+        guard
+            let extensionRange = visibleOutput.range(
+                of: ".pdf",
+                options: [.caseInsensitive, .backwards]
+            )
+        else {
+            return nil
+        }
+
+        let prefix = visibleOutput[..<extensionRange.upperBound]
+        let tokenStart =
+            prefix.lastIndex(where: { $0.isWhitespace }).map {
+                prefix.index(after: $0)
+            } ?? prefix.startIndex
+        let token = String(prefix[tokenStart...])
+        let searchRange = NSRange(token.startIndex..., in: token)
+        var candidates: [String] = []
+        for expression in pathExpressions {
+            for match in expression.matches(in: token, range: searchRange) {
+                guard NSMaxRange(match.range) == searchRange.length,
+                    let range = Range(match.range, in: token)
+                else {
+                    continue
+                }
+                candidates.append(String(token[range]))
+            }
+        }
+        candidates.sort { $0.utf16.count > $1.utf16.count }
+
+        for candidate in candidates {
+            if let url = resolve(candidate, workingDirectory: workingDirectory) {
+                return url
+            }
+        }
+        return nil
     }
 
     private static func resolve(
@@ -211,6 +269,37 @@ struct TerminalOutputPDFTracker {
             && NSMaxRange(outer) >= NSMaxRange(inner)
     }
 
+    private static func pdfExtensionEndOffsets(
+        in bytes: [UInt8],
+        startingAt proposedStart: Int
+    ) -> [Int] {
+        guard bytes.count >= 4 else {
+            return []
+        }
+
+        let finalStart = bytes.count - 4
+        let start = min(max(proposedStart, 0), finalStart)
+        var offsets: [Int] = []
+        for index in start...finalStart {
+            guard bytes[index] == 0x2E,
+                lowercasedASCII(bytes[index + 1]) == 0x70,
+                lowercasedASCII(bytes[index + 2]) == 0x64,
+                lowercasedASCII(bytes[index + 3]) == 0x66
+            else {
+                continue
+            }
+            offsets.append(index + 4)
+        }
+        return offsets
+    }
+
+    private static func lowercasedASCII(_ byte: UInt8) -> UInt8 {
+        guard byte >= 0x41, byte <= 0x5A else {
+            return byte
+        }
+        return byte + 0x20
+    }
+
     private static let pathExpressions: [NSRegularExpression] = [
         #"(?:file://)?(?:~|/)[^\s\]\[<>\"']*?\.pdf"#,
         #"(?:\.{1,2}/|[A-Za-z0-9_.%+()-]+/)[A-Za-z0-9_./%+()\-]*?\.pdf"#,
@@ -220,5 +309,7 @@ struct TerminalOutputPDFTracker {
         "\u{001B}\\[[0-?]*[ -/]*[@-~]",
         "\u{001B}\\][^\u{0007}\u{001B}]*(?:\u{0007}|\u{001B}\\\\)",
     ].compactMap { try? NSRegularExpression(pattern: $0) }
-    private static let maximumOutputBytes = 32_768
+    private static let maximumCandidateBytes = 4_096
+    private static let retainedOutputBytes = maximumCandidateBytes
+    private static let maximumBufferedBytes = retainedOutputBytes * 2
 }

@@ -149,6 +149,7 @@ final class PaneTreeRenderingTests: XCTestCase {
             rightTerminalView.isDescendant(of: container)
         }
         XCTAssertTrue(sessions.terminalView(for: rightPane) === rightTerminalView)
+        XCTAssertTrue(window.firstResponder === rightTerminalView)
     }
 
     func testSwitchingSpacesKeepsHiddenTerminalAtItsSettledSize() async throws {

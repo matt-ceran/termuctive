@@ -96,6 +96,24 @@ final class RecentPDFLocatorTests: XCTestCase {
         XCTAssertEqual(finalMatches, [pdf.standardizedFileURL])
     }
 
+    func testTerminalOutputTrackerReassemblesSplitPDFExtension() throws {
+        let pdf = temporaryDirectory.appendingPathComponent("split-extension.pdf")
+        try Data("%PDF-1.4".utf8).write(to: pdf)
+        var tracker = TerminalOutputPDFTracker()
+
+        let firstMatches = tracker.consume(
+            Array("Created split-extension.p".utf8)[...],
+            workingDirectory: temporaryDirectory.path
+        )
+        let finalMatches = tracker.consume(
+            Array("df\n".utf8)[...],
+            workingDirectory: temporaryDirectory.path
+        )
+
+        XCTAssertTrue(firstMatches.isEmpty)
+        XCTAssertEqual(finalMatches, [pdf.standardizedFileURL])
+    }
+
     private func setModificationDate(_ date: Date, for url: URL) throws {
         try FileManager.default.setAttributes(
             [.modificationDate: date],

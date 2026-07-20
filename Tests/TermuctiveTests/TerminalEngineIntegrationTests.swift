@@ -196,6 +196,210 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(processDelegate.resizeEvents.count, 1)
     }
 
+    func testCodexStyleStreamingDoesNotDelayEscapeInput() async throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+        terminal.frame = container.bounds
+        container.addSubview(terminal)
+        sessions.focus(paneID: pane.id)
+
+        terminal.send(
+            txt: "printf 'TERMUCTIVE_ESCAPE_%s\\n' READY; "
+                + "saved_tty=$(stty -g); stty raw -echo; "
+                + "escape_byte=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' '); "
+                + "stty \"$saved_tty\"; printf '\\nTERMUCTIVE_ESCAPE_BYTE_%s\\n' \"$escape_byte\"\n"
+        )
+        _ = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_ESCAPE_READY"],
+            timeout: 5
+        )
+
+        let escapeEvent = try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: window.windowNumber,
+                context: nil,
+                characters: "\u{1B}",
+                charactersIgnoringModifiers: "\u{1B}",
+                isARepeat: false,
+                keyCode: 53
+            )
+        )
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        DispatchQueue.main.async {
+            terminal.keyDown(with: escapeEvent)
+        }
+
+        let codexFrame = Array(
+            "\u{1B}[?25l\u{1B}[2K\rCodex is generating output/report.pdf".utf8
+        )
+        for _ in 0..<2_000 {
+            terminal.dataReceived(slice: codexFrame[...])
+        }
+
+        let output = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_ESCAPE_BYTE_1b"],
+            timeout: 5
+        )
+        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+
+        XCTAssertTrue(output.contains("TERMUCTIVE_ESCAPE_BYTE_1b"))
+        XCTAssertLessThan(
+            elapsed,
+            2,
+            "Escape was delayed for \(elapsed) seconds while terminal output was streaming."
+        )
+    }
+
+    func testMouseClickReportingStillReachesTerminalApplication() async throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+        terminal.frame = container.bounds
+        container.addSubview(terminal)
+
+        terminal.send(
+            txt: "saved_tty=$(stty -g); stty raw -echo; "
+                + "printf '\\033[?1000hTERMUCTIVE_MOUSE_%s\\n' READY; "
+                + "mouse_byte=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' '); "
+                + "stty \"$saved_tty\"; "
+                + "printf '\\033[?1000l\\nTERMUCTIVE_MOUSE_BYTE_%s\\n' \"$mouse_byte\"\n"
+        )
+        _ = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_MOUSE_READY"],
+            timeout: 5
+        )
+        guard case .vt200 = terminal.getTerminal().mouseMode else {
+            XCTFail("The terminal application did not enable VT200 mouse reporting.")
+            return
+        }
+
+        let location = NSPoint(x: 40, y: terminal.bounds.height - 20)
+        terminal.mouseDown(
+            with: try XCTUnwrap(mouseEvent(.leftMouseDown, at: location, in: window))
+        )
+        terminal.mouseUp(
+            with: try XCTUnwrap(mouseEvent(.leftMouseUp, at: location, in: window))
+        )
+
+        let output = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_MOUSE_BYTE_1b"],
+            timeout: 2
+        )
+
+        XCTAssertTrue(output.contains("TERMUCTIVE_MOUSE_BYTE_1b"))
+    }
+
+    func testManualSelectionSurvivesStreamingOutput() throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+        terminal.frame = container.bounds
+        container.addSubview(terminal)
+
+        terminal.dataReceived(
+            slice: Array(
+                "\u{1B}[?1000h\u{1B}[?1002h\u{1B}[2J\u{1B}[H"
+                    .appending("first selectable line\r\nsecond selectable line")
+                    .utf8
+            )[...]
+        )
+        let rowHeight =
+            terminal.getOptimalFrameSize().height
+            / CGFloat(terminal.getTerminal().rows)
+        let start = NSPoint(x: 8, y: terminal.bounds.height - (rowHeight * 0.5))
+        let end = NSPoint(x: 180, y: terminal.bounds.height - (rowHeight * 1.5))
+        terminal.mouseDown(
+            with: try XCTUnwrap(mouseEvent(.leftMouseDown, at: start, in: window))
+        )
+        terminal.mouseDragged(
+            with: try XCTUnwrap(mouseEvent(.leftMouseDragged, at: end, in: window))
+        )
+        terminal.mouseUp(
+            with: try XCTUnwrap(mouseEvent(.leftMouseUp, at: end, in: window))
+        )
+
+        let buffer = String(
+            decoding: terminal.getTerminal().getBufferAsData(),
+            as: UTF8.self
+        )
+        let selectedText = terminal.getSelection()
+        XCTAssertTrue(terminal.selectionActive)
+        XCTAssertFalse(
+            selectedText?.isEmpty ?? true,
+            "The drag selected no text from buffer: \(buffer)"
+        )
+        XCTAssertFalse(terminal.allowMouseReporting)
+
+        terminal.dataReceived(slice: Array("\nstreamed response line\n".utf8)[...])
+
+        XCTAssertTrue(
+            terminal.selectionActive,
+            "Streaming output cleared the user's active terminal selection."
+        )
+        XCTAssertEqual(terminal.getSelection(), selectedText)
+
+        terminal.selectNone()
+
+        XCTAssertTrue(terminal.allowMouseReporting)
+    }
+
     func testMovePDFPrefersLatestVisibleCodexPathOverStaleDetection() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("termuctive-visible-pdf-\(UUID().uuidString)")
@@ -358,6 +562,24 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         return String(
             decoding: terminal.getTerminal().getBufferAsData(),
             as: UTF8.self
+        )
+    }
+
+    private func mouseEvent(
+        _ type: NSEvent.EventType,
+        at location: NSPoint,
+        in window: NSWindow
+    ) -> NSEvent? {
+        NSEvent.mouseEvent(
+            with: type,
+            location: location,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1
         )
     }
 }
