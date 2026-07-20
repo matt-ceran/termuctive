@@ -34,6 +34,42 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.document.projects.count, 1)
     }
 
+    func testGlobalFolderCreationAddsRootSiblingWhenFolderIsSelected() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        store.addFolder()
+        let firstFolderID = try XCTUnwrap(store.selectedFolderID)
+
+        store.addFolder()
+
+        let project = try XCTUnwrap(store.selectedProject)
+        guard project.items.count == 3 else {
+            return XCTFail("Expected the original terminal and two root-level folders.")
+        }
+        guard case .folder(let firstFolder) = project.items[1],
+            case .folder(let secondFolder) = project.items[2]
+        else {
+            return XCTFail("Expected two root-level sibling folders.")
+        }
+        XCTAssertEqual(firstFolder.id, firstFolderID)
+        XCTAssertTrue(firstFolder.children.isEmpty)
+        XCTAssertEqual(store.selectedFolderID, secondFolder.id)
+
+        store.addSpace()
+
+        let updatedProject = try XCTUnwrap(store.selectedProject)
+        guard case .folder(let unchangedFirstFolder) = updatedProject.items[1],
+            case .folder(let updatedSecondFolder) = updatedProject.items[2],
+            case .space(let newSpace) = updatedSecondFolder.children.first
+        else {
+            return XCTFail("Expected a terminal space inside the new root folder.")
+        }
+        XCTAssertTrue(unchangedFirstFolder.children.isEmpty)
+        XCTAssertEqual(updatedSecondFolder.children.count, 1)
+        XCTAssertEqual(store.document.selectedSpaceID, newSpace.id)
+    }
+
     func testSpaceCanBeAddedInsideSelectedFolder() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
@@ -83,6 +119,68 @@ final class WorkspaceStoreTests: XCTestCase {
             space.layout.terminal(withID: space.layout.firstTerminalID)?.workingDirectory,
             "/tmp/first")
         XCTAssertTrue(store.expandedFolderIDs.contains(folderID))
+    }
+
+    func testFolderCanBeAddedToExplicitParentWithoutChangingRootStructure() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        store.addFolder()
+        let parentFolderID = try XCTUnwrap(store.selectedFolderID)
+
+        store.addFolder(
+            toFolderWithID: parentFolderID,
+            inProjectWithID: projectID
+        )
+
+        let project = try XCTUnwrap(store.selectedProject)
+        XCTAssertEqual(project.items.count, 2)
+        guard case .folder(let parentFolder) = project.items.last,
+            case .folder(let childFolder) = parentFolder.children.first
+        else {
+            return XCTFail("Expected a nested folder inside the explicit parent.")
+        }
+        XCTAssertEqual(parentFolder.id, parentFolderID)
+        XCTAssertEqual(parentFolder.children.count, 1)
+        XCTAssertEqual(store.selectedFolderID, childFolder.id)
+        XCTAssertTrue(store.expandedFolderIDs.isSuperset(of: [parentFolder.id, childFolder.id]))
+    }
+
+    func testInvalidCreationAndRemovalTargetsDoNotMutateOrPersist() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        let originalDocument = store.document
+        let originalFocusedPaneID = store.focusedPaneID
+        let originalExpandedProjectIDs = store.expandedProjectIDs
+        persistence.savedDocuments.removeAll()
+
+        store.addFolder(
+            toFolderWithID: UUID(),
+            inProjectWithID: projectID
+        )
+        store.addSpace(
+            toFolderWithID: UUID(),
+            inProjectWithID: projectID
+        )
+        store.addFolder(
+            toFolderWithID: nil,
+            inProjectWithID: UUID()
+        )
+        store.addSpace(
+            toFolderWithID: nil,
+            inProjectWithID: UUID()
+        )
+        store.removeItem(withID: UUID(), inProject: projectID)
+        store.removeItem(withID: UUID(), inProject: UUID())
+        store.removeProject(withID: UUID())
+
+        XCTAssertEqual(store.document, originalDocument)
+        XCTAssertEqual(store.focusedPaneID, originalFocusedPaneID)
+        XCTAssertEqual(store.expandedProjectIDs, originalExpandedProjectIDs)
+        XCTAssertTrue(persistence.savedDocuments.isEmpty)
     }
 
     func testSplitAndCloseRestoreSinglePaneLayout() throws {
@@ -349,6 +447,85 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(store.expandedFolderIDs.contains(folder.id))
         XCTAssertFalse(store.document.terminalIDs.contains(removedPane.id))
         XCTAssertEqual(persistence.savedDocuments.count, 1)
+    }
+
+    func testRemovingPopulatedUnselectedFolderPreservesActiveTerminal() throws {
+        let activePane = TerminalPane(workingDirectory: "/project")
+        let activeSpace = TerminalSpace(
+            name: "Active",
+            layout: .terminal(activePane)
+        )
+        let firstRemovedPane = TerminalPane(workingDirectory: "/project/service")
+        let firstRemovedSpace = TerminalSpace(
+            name: "Service",
+            layout: .terminal(firstRemovedPane)
+        )
+        let secondRemovedPane = TerminalPane(workingDirectory: "/project/tests")
+        let secondRemovedSpace = TerminalSpace(
+            name: "Tests",
+            layout: .terminal(secondRemovedPane)
+        )
+        let nestedFolder = WorkspaceFolder(
+            name: "Nested",
+            children: [.space(secondRemovedSpace)]
+        )
+        let removedFolder = WorkspaceFolder(
+            name: "Services",
+            children: [.space(firstRemovedSpace), .folder(nestedFolder)]
+        )
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(activeSpace), .folder(removedFolder)],
+            lastSelectedSpaceID: activeSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: activeSpace.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+        store.toggleFolder(withID: removedFolder.id)
+        store.toggleFolder(withID: nestedFolder.id)
+
+        store.removeItem(withID: removedFolder.id, inProject: project.id)
+
+        XCTAssertEqual(store.document.selectedSpaceID, activeSpace.id)
+        XCTAssertEqual(store.focusedPaneID, activePane.id)
+        XCTAssertEqual(store.selectedProject?.items, [.space(activeSpace)])
+        XCTAssertFalse(store.document.terminalIDs.contains(firstRemovedPane.id))
+        XCTAssertFalse(store.document.terminalIDs.contains(secondRemovedPane.id))
+        XCTAssertFalse(store.expandedFolderIDs.contains(removedFolder.id))
+        XCTAssertFalse(store.expandedFolderIDs.contains(nestedFolder.id))
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
+    }
+
+    func testRemovingOnlyTerminalSpaceAllowsCreatingReplacement() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        let removedSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+        persistence.savedDocuments.removeAll()
+
+        store.removeItem(withID: removedSpaceID, inProject: projectID)
+
+        XCTAssertTrue(try XCTUnwrap(store.selectedProject).items.isEmpty)
+        XCTAssertNil(store.document.selectedSpaceID)
+        XCTAssertNil(store.focusedPaneID)
+
+        store.addSpace()
+
+        let replacementSpace = try XCTUnwrap(store.selectedSpace)
+        let replacementPaneID = try XCTUnwrap(replacementSpace.layout.firstTerminalID)
+        XCTAssertEqual(try XCTUnwrap(store.selectedProject).items, [.space(replacementSpace)])
+        XCTAssertEqual(store.focusedPaneID, replacementPaneID)
+        XCTAssertEqual(
+            replacementSpace.layout.terminal(withID: replacementPaneID)?.workingDirectory,
+            "/tmp/project"
+        )
+        XCTAssertEqual(persistence.savedDocuments.count, 2)
     }
 
     func testRemovingSelectedProjectsChoosesNeighborThenClearsSelection() {

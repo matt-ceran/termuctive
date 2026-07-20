@@ -201,7 +201,7 @@ final class WorkspaceStore: ObservableObject {
         }
 
         addFolder(
-            toFolderWithID: validSelectedFolderID(in: project),
+            toFolderWithID: nil,
             inProjectWithID: project.id
         )
     }
