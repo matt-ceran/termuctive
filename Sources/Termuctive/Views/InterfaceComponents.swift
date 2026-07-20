@@ -15,11 +15,12 @@ struct SquareIconButtonStyle: ButtonStyle {
 }
 
 @MainActor
-final class SmoothSplitView: NSSplitView, NSSplitViewDelegate {
+final class SmoothSplitView: NSSplitView {
     static let hitThickness: CGFloat = 5
 
     var onRatioCommit: ((Double) -> Void)?
 
+    private let splitViewDelegate = SmoothSplitViewDelegate()
     private var desiredRatio = 0.5
     private var terminalTheme: TerminalTheme = .light
     private var isTrackingDivider = false
@@ -33,14 +34,14 @@ final class SmoothSplitView: NSSplitView, NSSplitViewDelegate {
         super.init(frame: .zero)
         isVertical = axis == .horizontal
         dividerStyle = .thin
-        delegate = self
+        delegate = splitViewDelegate
         wantsLayer = true
         setAccessibilityRole(.splitGroup)
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        delegate = self
+        delegate = splitViewDelegate
         wantsLayer = true
         setAccessibilityRole(.splitGroup)
     }
@@ -191,18 +192,6 @@ final class SmoothSplitView: NSSplitView, NSSplitViewDelegate {
         needsDisplay = true
     }
 
-    func splitView(
-        _ splitView: NSSplitView,
-        constrainSplitPosition proposedPosition: CGFloat,
-        ofSubviewAt dividerIndex: Int
-    ) -> CGFloat {
-        let availableLength = max(0, primaryLength - dividerThickness)
-        return min(
-            max(proposedPosition, availableLength * 0.1),
-            availableLength * 0.9
-        )
-    }
-
     private var primaryLength: CGFloat {
         isVertical ? bounds.width : bounds.height
     }
@@ -270,5 +259,24 @@ final class SmoothSplitView: NSSplitView, NSSplitViewDelegate {
             }
             return descendantTerminalViews(in: subview)
         }
+    }
+}
+
+@MainActor
+private final class SmoothSplitViewDelegate: NSObject, NSSplitViewDelegate {
+    func splitView(
+        _ splitView: NSSplitView,
+        constrainSplitPosition proposedPosition: CGFloat,
+        ofSubviewAt dividerIndex: Int
+    ) -> CGFloat {
+        let primaryLength =
+            splitView.isVertical
+            ? splitView.bounds.width
+            : splitView.bounds.height
+        let availableLength = max(0, primaryLength - splitView.dividerThickness)
+        return min(
+            max(proposedPosition, availableLength * 0.1),
+            availableLength * 0.9
+        )
     }
 }

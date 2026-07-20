@@ -33,6 +33,16 @@ final class SmoothSplitViewTests: XCTestCase {
         XCTAssertEqual(splitView.ratio, 0.1, accuracy: 0.01)
     }
 
+    func testSidebarActionLookupDoesNotRecurseThroughSplitViewDelegate() {
+        let splitView = makeSplitView(axis: .horizontal)
+
+        guard let delegate = splitView.delegate else {
+            return XCTFail("Expected SmoothSplitView to retain a delegate.")
+        }
+        XCTAssertFalse((delegate as AnyObject) === splitView)
+        XCTAssertFalse(splitView.responds(to: NSSelectorFromString("toggleSidebar:")))
+    }
+
     private func makeSplitView(axis: PaneAxis) -> SmoothSplitView {
         let splitView = SmoothSplitView(axis: axis)
         splitView.frame = NSRect(x: 0, y: 0, width: 1_000, height: 700)
