@@ -549,6 +549,63 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(persistence.savedDocuments, [store.document])
     }
 
+    func testRemovalScopeFindsEveryTerminalInANestedFolder() {
+        let activePane = TerminalPane(workingDirectory: "/project")
+        let activeSpace = TerminalSpace(
+            name: "Active",
+            layout: .terminal(activePane)
+        )
+        let firstNestedPane = TerminalPane(workingDirectory: "/project/service")
+        let firstNestedSpace = TerminalSpace(
+            name: "Service",
+            layout: .terminal(firstNestedPane)
+        )
+        let secondNestedPane = TerminalPane(workingDirectory: "/project/tests")
+        let secondNestedSpace = TerminalSpace(
+            name: "Tests",
+            layout: .terminal(secondNestedPane)
+        )
+        let nestedFolder = WorkspaceFolder(
+            name: "Nested",
+            children: [.space(secondNestedSpace)]
+        )
+        let rootFolder = WorkspaceFolder(
+            name: "Services",
+            children: [.space(firstNestedSpace), .folder(nestedFolder)]
+        )
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(activeSpace), .folder(rootFolder)]
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: activeSpace.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        XCTAssertEqual(
+            store.terminalIDs(
+                inItemWithID: rootFolder.id,
+                inProjectWithID: project.id
+            ),
+            [firstNestedPane.id, secondNestedPane.id]
+        )
+        XCTAssertEqual(
+            store.terminalIDs(
+                inItemWithID: nestedFolder.id,
+                inProjectWithID: project.id
+            ),
+            [secondNestedPane.id]
+        )
+        XCTAssertEqual(
+            store.terminalIDs(inProjectWithID: project.id),
+            [activePane.id, firstNestedPane.id, secondNestedPane.id]
+        )
+    }
+
     func testRemovingOnlyTerminalSpaceAllowsCreatingReplacement() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)

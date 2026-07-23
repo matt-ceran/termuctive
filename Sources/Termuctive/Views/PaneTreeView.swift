@@ -5,16 +5,33 @@ struct PaneTreeView: NSViewRepresentable {
     let node: PaneNode
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
+    @ObservedObject var editors: EditorSessionPool
 
     func makeNSView(context: Context) -> PaneTreeContainerView {
         let view = PaneTreeContainerView(frame: .zero)
-        view.configure(node: node, store: store, sessions: sessions)
+        view.configure(
+            node: node,
+            store: store,
+            sessions: sessions,
+            editors: editors
+        )
         return view
     }
 
     func updateNSView(_ view: PaneTreeContainerView, context: Context) {
-        view.configure(node: node, store: store, sessions: sessions)
+        view.configure(
+            node: node,
+            store: store,
+            sessions: sessions,
+            editors: editors
+        )
     }
+}
+
+private enum PaneLeafPresentation: Equatable {
+    case terminal
+    case pdf(URL)
+    case editor
 }
 
 @MainActor
@@ -28,12 +45,18 @@ final class PaneTreeContainerView: NSView {
     func configure(
         node: PaneNode,
         store: WorkspaceStore,
-        sessions: TerminalSessionPool
+        sessions: TerminalSessionPool,
+        editors: EditorSessionPool
     ) {
         if let rootController,
             rootController.matchesStructure(of: node)
         {
-            rootController.update(node: node, store: store, sessions: sessions)
+            rootController.update(
+                node: node,
+                store: store,
+                sessions: sessions,
+                editors: editors
+            )
             return
         }
 
@@ -41,7 +64,8 @@ final class PaneTreeContainerView: NSView {
         let controller = PaneTreeNodeController(
             node: node,
             store: store,
-            sessions: sessions
+            sessions: sessions,
+            editors: editors
         )
         rootController = controller
         controller.view.frame = bounds
@@ -60,7 +84,7 @@ private final class PaneTreeNodeController {
     private enum Content {
         case terminal(
             pane: TerminalPane,
-            previewURL: URL?,
+            presentation: PaneLeafPresentation,
             host: NSHostingView<AnyView>
         )
         case split(
@@ -86,25 +110,29 @@ private final class PaneTreeNodeController {
     init(
         node: PaneNode,
         store: WorkspaceStore,
-        sessions: TerminalSessionPool
+        sessions: TerminalSessionPool,
+        editors: EditorSessionPool
     ) {
         switch node {
         case .terminal(let pane):
-            let previewURL = sessions.previewURL(for: pane.id)
+            let presentation = Self.presentation(
+                forPaneID: pane.id,
+                sessions: sessions,
+                editors: editors
+            )
             let host = NSHostingView(
-                rootView: AnyView(
-                    TerminalPaneView(
-                        pane: pane,
-                        store: store,
-                        sessions: sessions
-                    )
-                    .id(pane.id)
+                rootView: Self.leafView(
+                    pane: pane,
+                    presentation: presentation,
+                    store: store,
+                    sessions: sessions,
+                    editors: editors
                 )
             )
             host.sizingOptions = []
             content = .terminal(
                 pane: pane,
-                previewURL: previewURL,
+                presentation: presentation,
                 host: host
             )
 
@@ -112,12 +140,14 @@ private final class PaneTreeNodeController {
             let first = PaneTreeNodeController(
                 node: split.first,
                 store: store,
-                sessions: sessions
+                sessions: sessions,
+                editors: editors
             )
             let second = PaneTreeNodeController(
                 node: split.second,
                 store: store,
-                sessions: sessions
+                sessions: sessions,
+                editors: editors
             )
             let splitView = SmoothSplitView(axis: split.axis)
             splitView.addArrangedSubview(first.view)
@@ -159,28 +189,32 @@ private final class PaneTreeNodeController {
     func update(
         node: PaneNode,
         store: WorkspaceStore,
-        sessions: TerminalSessionPool
+        sessions: TerminalSessionPool,
+        editors: EditorSessionPool
     ) {
         switch (content, node) {
         case (
-            .terminal(let previousPane, let previousPreviewURL, let host),
+            .terminal(let previousPane, let previousPresentation, let host),
             .terminal(let pane)
         ):
-            let previewURL = sessions.previewURL(for: pane.id)
-            guard pane != previousPane || previewURL != previousPreviewURL else {
+            let presentation = Self.presentation(
+                forPaneID: pane.id,
+                sessions: sessions,
+                editors: editors
+            )
+            guard pane != previousPane || presentation != previousPresentation else {
                 return
             }
-            host.rootView = AnyView(
-                TerminalPaneView(
-                    pane: pane,
-                    store: store,
-                    sessions: sessions
-                )
-                .id(pane.id)
+            host.rootView = Self.leafView(
+                pane: pane,
+                presentation: presentation,
+                store: store,
+                sessions: sessions,
+                editors: editors
             )
             content = .terminal(
                 pane: pane,
-                previewURL: previewURL,
+                presentation: presentation,
                 host: host
             )
 
@@ -193,8 +227,18 @@ private final class PaneTreeNodeController {
             else {
                 return
             }
-            first.update(node: split.first, store: store, sessions: sessions)
-            second.update(node: split.second, store: store, sessions: sessions)
+            first.update(
+                node: split.first,
+                store: store,
+                sessions: sessions,
+                editors: editors
+            )
+            second.update(
+                node: split.second,
+                store: store,
+                sessions: sessions,
+                editors: editors
+            )
             splitView.setTheme(sessions.terminalTheme)
             splitView.setRatio(split.ratio)
 
@@ -202,12 +246,59 @@ private final class PaneTreeNodeController {
             return
         }
     }
+
+    private static func presentation(
+        forPaneID paneID: UUID,
+        sessions: TerminalSessionPool,
+        editors: EditorSessionPool
+    ) -> PaneLeafPresentation {
+        if let previewURL = sessions.previewURL(for: paneID) {
+            return .pdf(previewURL)
+        }
+        if editors.isEditorPresented(inPaneID: paneID) {
+            return .editor
+        }
+        return .terminal
+    }
+
+    private static func leafView(
+        pane: TerminalPane,
+        presentation: PaneLeafPresentation,
+        store: WorkspaceStore,
+        sessions: TerminalSessionPool,
+        editors: EditorSessionPool
+    ) -> AnyView {
+        if presentation == .editor,
+            let editorSession = editors.session(forPaneID: pane.id)
+        {
+            return AnyView(
+                EditorPaneContainerView(
+                    pane: pane,
+                    store: store,
+                    terminalSessions: sessions,
+                    editorSessions: editors,
+                    session: editorSession
+                )
+                .id(pane.id)
+            )
+        }
+        return AnyView(
+            TerminalPaneView(
+                pane: pane,
+                store: store,
+                sessions: sessions,
+                editors: editors
+            )
+            .id(pane.id)
+        )
+    }
 }
 
 private struct TerminalPaneView: View {
     let pane: TerminalPane
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
+    @ObservedObject var editors: EditorSessionPool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -244,21 +335,40 @@ private struct TerminalPaneView: View {
                         Image(systemName: "arrow.uturn.backward")
                     }
                     .buttonStyle(.plain)
-                    .help("Return to Terminal")
-                    .accessibilityLabel("Return to terminal")
-                } else if case .exited = sessions.status(for: pane.id) {
+                    .help(
+                        editors.isEditorPresented(inPaneID: pane.id)
+                            ? "Return to IDE"
+                            : "Return to Terminal"
+                    )
+                    .accessibilityLabel(
+                        editors.isEditorPresented(inPaneID: pane.id)
+                            ? "Return to IDE"
+                            : "Return to terminal"
+                    )
+                } else {
                     Button {
-                        sessions.restart(pane: pane)
+                        editors.presentEditor(inPaneID: pane.id)
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
                     }
                     .buttonStyle(.plain)
-                    .help("Restart Terminal")
-                    .accessibilityLabel("Restart terminal")
+                    .help("Open IDE")
+                    .accessibilityLabel("Open IDE")
+
+                    if case .exited = sessions.status(for: pane.id) {
+                        Button {
+                            sessions.restart(pane: pane)
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.plain)
+                        .help("Restart Terminal")
+                        .accessibilityLabel("Restart terminal")
+                    }
                 }
 
                 Button {
-                    store.closePane(withID: pane.id)
+                    editors.requestClosePane(withID: pane.id)
                 } label: {
                     Image(systemName: "xmark")
                 }

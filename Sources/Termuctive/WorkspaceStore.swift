@@ -491,6 +491,29 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    func projectRootURL(forPaneID paneID: UUID) -> URL? {
+        guard let project = document.project(containingTerminalWithID: paneID) else {
+            return nil
+        }
+        return URL(
+            fileURLWithPath: project.rootDirectory,
+            isDirectory: true
+        ).standardizedFileURL
+    }
+
+    func terminalIDs(inProjectWithID projectID: UUID) -> Set<UUID> {
+        document.projects.first { $0.id == projectID }?.terminalIDs ?? []
+    }
+
+    func terminalIDs(
+        inItemWithID itemID: UUID,
+        inProjectWithID projectID: UUID
+    ) -> Set<UUID> {
+        document.projects.first { $0.id == projectID }?
+            .item(withID: itemID)?
+            .terminalIDs ?? []
+    }
+
     func closeFocusedPane() {
         guard let focusedPaneID else {
             return

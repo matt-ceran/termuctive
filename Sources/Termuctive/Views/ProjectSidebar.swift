@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProjectSidebar: View {
     @ObservedObject var store: WorkspaceStore
+    @ObservedObject var editors: EditorSessionPool
     let chooseProject: () -> Void
     let hideSidebar: () -> Void
 
@@ -81,11 +82,23 @@ struct ProjectSidebar: View {
             Button("Cancel", role: .cancel) {
                 pendingRemoval = nil
             }
-            Button(pendingRemoval?.removeLabel ?? "Remove", role: .destructive) {
-                removePendingEntry()
+            if pendingRemovalHasUnsavedChanges {
+                Button("Save All and \(pendingRemoval?.removeLabel ?? "Remove")") {
+                    saveAndRemovePendingEntry()
+                }
+                Button(
+                    "\(pendingRemoval?.removeLabel ?? "Remove") Without Saving",
+                    role: .destructive
+                ) {
+                    removePendingEntry()
+                }
+            } else {
+                Button(pendingRemoval?.removeLabel ?? "Remove", role: .destructive) {
+                    removePendingEntry()
+                }
             }
         } message: {
-            Text(pendingRemoval?.removalMessage ?? "")
+            Text(pendingRemovalMessage)
         }
     }
 
@@ -333,13 +346,65 @@ struct ProjectSidebar: View {
             return
         }
         pendingRemoval = nil
+        performRemoval(entry)
+    }
 
+    private func saveAndRemovePendingEntry() {
+        guard let entry = pendingRemoval else {
+            return
+        }
+        let paneIDs = paneIDs(affectedBy: entry)
+        pendingRemoval = nil
+        Task {
+            do {
+                try await editors.saveAllBuffers(inPaneIDs: paneIDs)
+                performRemoval(entry)
+            } catch {
+                store.presentError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func performRemoval(_ entry: SidebarEntry) {
         switch entry {
         case .project(let id, _, _):
             store.removeProject(withID: id)
         case .folder(let id, let projectID, _),
             .space(let id, let projectID, _):
             store.removeItem(withID: id, inProject: projectID)
+        }
+    }
+
+    private var pendingRemovalHasUnsavedChanges: Bool {
+        guard let pendingRemoval else {
+            return false
+        }
+        return editors.hasUnsavedChanges(
+            inPaneIDs: paneIDs(affectedBy: pendingRemoval)
+        )
+    }
+
+    private var pendingRemovalMessage: String {
+        guard let pendingRemoval else {
+            return ""
+        }
+        if pendingRemovalHasUnsavedChanges {
+            return pendingRemoval.removalMessage
+                + " One or more files in the affected IDE panes have unsaved changes."
+        }
+        return pendingRemoval.removalMessage
+    }
+
+    private func paneIDs(affectedBy entry: SidebarEntry) -> Set<UUID> {
+        switch entry {
+        case .project(let projectID, _, _):
+            return store.terminalIDs(inProjectWithID: projectID)
+        case .folder(let itemID, let projectID, _),
+            .space(let itemID, let projectID, _):
+            return store.terminalIDs(
+                inItemWithID: itemID,
+                inProjectWithID: projectID
+            )
         }
     }
 }

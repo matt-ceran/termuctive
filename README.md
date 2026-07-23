@@ -1,5 +1,14 @@
 # Termuctive
 
+## IDE panes
+
+Focus any pane and use its code button, the workspace toolbar, or Pane > Open IDE in Focused Pane to replace that pane with a project editor.
+The original terminal process remains alive behind the editor.
+The editor includes a searchable file navigator, tabs, syntax coloring, line numbers, conflict-safe saving, and a compact layout for narrow split panes.
+Files changed by a terminal, an LLM CLI, or another editor reload automatically when the Termuctive buffer is clean.
+If the same file changes on disk while it has unsaved Termuctive edits, the editor asks which version to keep instead of overwriting either version silently.
+Use Command-S to save and the terminal button to return to the existing live terminal.
+
 ## PDF panes
 
 Termuctive can open the newest PDF created during the current terminal session without stopping the terminal process behind that pane.

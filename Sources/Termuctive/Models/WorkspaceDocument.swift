@@ -104,6 +104,16 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         }
     }
 
+    func item(withID id: UUID) -> WorkspaceItem? {
+        if self.id == id {
+            return self
+        }
+        guard case .folder(let folder) = self else {
+            return nil
+        }
+        return folder.children.lazy.compactMap { $0.item(withID: id) }.first
+    }
+
     func ancestorFolderIDs(forSpaceWithID id: UUID) -> [UUID]? {
         switch self {
         case .space(let space):
@@ -375,6 +385,10 @@ struct TerminalProject: Codable, Equatable, Identifiable {
 
     func terminal(withID id: UUID) -> TerminalPane? {
         items.lazy.compactMap { $0.terminal(withID: id) }.first
+    }
+
+    func item(withID id: UUID) -> WorkspaceItem? {
+        items.lazy.compactMap { $0.item(withID: id) }.first
     }
 
     func ancestorFolderIDs(forSpaceWithID id: UUID) -> [UUID] {

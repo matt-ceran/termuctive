@@ -2,8 +2,12 @@ import SwiftUI
 
 @main
 struct TermuctiveApp: App {
+    @NSApplicationDelegateAdaptor(TermuctiveApplicationDelegate.self)
+    private var applicationDelegate
+
     @StateObject private var store: WorkspaceStore
     @StateObject private var sessions: TerminalSessionPool
+    @StateObject private var editors: EditorSessionPool
     @StateObject private var appearance: AppearanceSettings
 
     @MainActor
@@ -17,6 +21,7 @@ struct TermuctiveApp: App {
                 terminalTheme: appearance.terminalTheme
             )
         )
+        _editors = StateObject(wrappedValue: EditorSessionPool(store: store))
         _appearance = StateObject(wrappedValue: appearance)
     }
 
@@ -25,9 +30,13 @@ struct TermuctiveApp: App {
             WorkspaceView(
                 store: store,
                 sessions: sessions,
+                editors: editors,
                 appearance: appearance
             )
             .preferredColorScheme(appearance.appTheme.colorScheme)
+            .onAppear {
+                applicationDelegate.editorSessions = editors
+            }
             .onChange(of: appearance.terminalTheme) { _, theme in
                 sessions.setTerminalTheme(theme)
             }
@@ -70,6 +79,18 @@ struct TermuctiveApp: App {
             }
 
             CommandMenu("Pane") {
+                Button(
+                    isFocusedPaneEditorPresented
+                        ? "Return Focused Pane to Terminal"
+                        : "Open IDE in Focused Pane"
+                ) {
+                    toggleFocusedPaneEditor()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(store.focusedPaneID == nil)
+
+                Divider()
+
                 Button("Split Right") {
                     store.splitFocusedPane(axis: .horizontal)
                 }
@@ -102,7 +123,10 @@ struct TermuctiveApp: App {
                 Divider()
 
                 Button("Close Pane") {
-                    store.closeFocusedPane()
+                    guard let focusedPaneID = store.focusedPaneID else {
+                        return
+                    }
+                    editors.requestClosePane(withID: focusedPaneID)
                 }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
                 .disabled(!store.canCloseFocusedPane)
@@ -147,6 +171,14 @@ struct TermuctiveApp: App {
                 .disabled(!sessions.canDecreaseFontSize)
             }
 
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") {
+                    saveFocusedEditorFile()
+                }
+                .keyboardShortcut("s", modifiers: [.command])
+                .disabled(!canSaveFocusedEditorFile)
+            }
+
             CommandMenu("Appearance") {
                 Picker("App Appearance", selection: $appearance.appTheme) {
                     ForEach(AppTheme.allCases) { theme in
@@ -178,6 +210,46 @@ struct TermuctiveApp: App {
             fromPaneID: focusedPaneID,
             placement: placement
         )
+    }
+
+    private var isFocusedPaneEditorPresented: Bool {
+        guard let focusedPaneID = store.focusedPaneID else {
+            return false
+        }
+        return editors.isEditorPresented(inPaneID: focusedPaneID)
+    }
+
+    private var canSaveFocusedEditorFile: Bool {
+        guard let focusedPaneID = store.focusedPaneID,
+            let buffer = editors.session(forPaneID: focusedPaneID)?.selectedBuffer
+        else {
+            return false
+        }
+        return buffer.canSave
+    }
+
+    private func toggleFocusedPaneEditor() {
+        guard let focusedPaneID = store.focusedPaneID else {
+            return
+        }
+        if editors.isEditorPresented(inPaneID: focusedPaneID) {
+            editors.dismissEditor(inPaneID: focusedPaneID)
+            sessions.focus(paneID: focusedPaneID)
+        } else {
+            sessions.dismissPDFPreview(inPaneID: focusedPaneID)
+            editors.presentEditor(inPaneID: focusedPaneID)
+        }
+    }
+
+    private func saveFocusedEditorFile() {
+        guard let focusedPaneID = store.focusedPaneID,
+            let session = editors.session(forPaneID: focusedPaneID)
+        else {
+            return
+        }
+        Task {
+            await session.saveSelectedBuffer()
+        }
     }
 
     private func setSidebarVisible(_ isVisible: Bool) {
