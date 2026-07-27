@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.architecture }})
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Report toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+
+      - name: Validate scripts and formatting
+        run: |
+          zsh -n Scripts/*.sh
+          xcrun swift-format lint --recursive Sources Tests
+          git diff --check
+
+      - name: Test
+        run: |
+          xcodebuild test -quiet \
+            -project Termuctive.xcodeproj \
+            -scheme Termuctive \
+            -destination 'platform=macOS,arch=${{ matrix.architecture }}' \
+            -derivedDataPath '.build/ci-${{ matrix.architecture }}' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
+
+      - name: Build and install from source
+        env:
+          TERMUCTIVE_LOCAL_DERIVED_DATA_PATH: ${{ github.workspace }}/.build/ci-local-${{ matrix.architecture }}
+          TERMUCTIVE_INSTALL_DIRECTORY: ${{ runner.temp }}/Applications
+        run: |
+          ./Scripts/install-local.sh
+          application="$TERMUCTIVE_INSTALL_DIRECTORY/Termuctive.app"
+          codesign --verify --deep --strict --verbose=2 "$application"
+          lipo "$application/Contents/MacOS/Termuctive" \
+            -verify_arch '${{ matrix.architecture }}'
+          test -f "$application/Contents/Resources/LICENSE"
+          test -f "$application/Contents/Resources/THIRD_PARTY_NOTICES.md"
+
+  universal-release-build:
+    name: Universal Release build
+    timeout-minutes: 30
+    runs-on: macos-26
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build both Mac architectures
+        run: |
+          xcodebuild build -quiet \
+            -project Termuctive.xcodeproj \
+            -scheme Termuctive \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath .build/ci-universal \
+            ARCHS='arm64 x86_64' \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
+
+      - name: Verify universal hardened bundle
+        run: |
+          application=.build/ci-universal/Build/Products/Release/Termuctive.app
+          executable="$application/Contents/MacOS/Termuctive"
+          lipo "$executable" -verify_arch arm64 x86_64
+          codesign --force --sign - --options runtime "$application"
+          codesign --verify --deep --strict --verbose=2 "$application"
+          codesign -d --verbose=4 "$application" 2>&1 | grep runtime
+          test -f "$application/Contents/Resources/LICENSE"
+          test -f "$application/Contents/Resources/THIRD_PARTY_NOTICES.md"
+          test "$(
+            otool -l "$executable" \
+              | awk '$1 == "minos" && $2 == "14.0" { count += 1 } END { print count + 0 }'
+          )" = 2
