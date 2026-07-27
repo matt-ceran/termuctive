@@ -45,6 +45,7 @@ jobs:
             CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
 
       - name: Build notarized distribution
+        shell: zsh {0}
         env:
           MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
