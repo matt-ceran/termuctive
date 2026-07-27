@@ -745,7 +745,9 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         environment["TERM"] = "xterm-256color"
         environment["COLORTERM"] = "truecolor"
         environment["TERM_PROGRAM"] = "Termuctive"
-        environment["TERM_PROGRAM_VERSION"] = "0.1.0"
+        environment["TERM_PROGRAM_VERSION"] =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "development"
         return environment.map { "\($0.key)=\($0.value)" }.sorted()
     }
 

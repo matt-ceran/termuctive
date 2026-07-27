@@ -17,6 +17,7 @@
 		1BBA8945F77B0783C4B3C55D /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2AC0D63CFFAFA3D2810C3DD /* AppearanceSettingsView.swift */; };
 		25186387237B615DBEFC34E4 /* SmoothSplitViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235FCBD56ABAE515873A9965 /* SmoothSplitViewTests.swift */; };
 		254FD56E48913C15D84564A7 /* AppearanceSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA8DBD841EDCDC86C484C4D /* AppearanceSettingsTests.swift */; };
+		2B1BD699F66EE2910D871C19 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */; };
 		2CFCD8602C26E670DB86BBDC /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 9C0A6106B64EBFA9AD5852B9 /* SwiftTerm */; };
 		302A072D04C87EEA57B49B00 /* EditorFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */; };
 		4E14C04A360FFAC7566B8A48 /* EditorDocumentBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D0500E417D40684B01F061 /* EditorDocumentBuffer.swift */; };
@@ -38,6 +39,7 @@
 		ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */; };
 		AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */; };
 		B0FE1456E747245CEF613181 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = C35DC00077448A260ABFB4B1 /* SwiftTerm */; };
+		B4FDEAFEECFCE89EDCDB0F40 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 7420D65C7E04E4E5D0041305 /* LICENSE */; };
 		BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */; };
 		BEB1CE16AA3870EA44E435F0 /* InterfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */; };
 		BFF498023A8D1DE7A21A6FB9 /* PaneTreeRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 227D7BC89388CB5CC769553E /* PaneTreeRenderingTests.swift */; };
@@ -78,6 +80,7 @@
 		6328DE9953E850606960A464 /* TerminalLocalCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalLocalCommandTests.swift; sourceTree = "<group>"; };
 		6CA65A8586FB9E0FCE1486BB /* EditorSessionPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionPoolTests.swift; sourceTree = "<group>"; };
 		6E09168D4C22B0C86EB85EA2 /* Termuctive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Termuctive.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7420D65C7E04E4E5D0041305 /* LICENSE */ = {isa = PBXFileReference; path = LICENSE; sourceTree = "<group>"; };
 		8831E1AFCA62E16522DAFF8E /* EditorFileSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystemTests.swift; sourceTree = "<group>"; };
 		8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystem.swift; sourceTree = "<group>"; };
 		8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayoutTests.swift; sourceTree = "<group>"; };
@@ -94,6 +97,7 @@
 		DB732E6729E4ED88756FCF76 /* PaneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayout.swift; sourceTree = "<group>"; };
 		DDA25954BE817B9B05BBCF51 /* EditorSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionPool.swift; sourceTree = "<group>"; };
 		E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEngineIntegrationTests.swift; sourceTree = "<group>"; };
+		E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
 		E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermuctiveApp.swift; sourceTree = "<group>"; };
 		EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
 		EEA8DBD841EDCDC86C484C4D /* AppearanceSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsTests.swift; sourceTree = "<group>"; };
@@ -160,6 +164,8 @@
 		2E5C9385C42F2AAA61CC09C7 = {
 			isa = PBXGroup;
 			children = (
+				7420D65C7E04E4E5D0041305 /* LICENSE */,
+				E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */,
 				5BBAF8A6D19F517C0E2B3E93 /* Sources */,
 				2CD727C985ACF4BE3C344A9D /* Tests */,
 				8BBEF82D98EDDFA56D58E10B /* Products */,
@@ -328,6 +334,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				8D565FB0A8CADB805744D23F /* Assets.xcassets in Resources */,
+				B4FDEAFEECFCE89EDCDB0F40 /* LICENSE in Resources */,
+				2B1BD699F66EE2910D871C19 /* THIRD_PARTY_NOTICES.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,9 +408,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Termuctive;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -565,9 +574,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Termuctive;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
