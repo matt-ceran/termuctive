@@ -48,10 +48,16 @@ Use Command-S to save and the terminal button to return to the existing live ter
 ## PDF panes
 
 Termuctive can open the newest PDF created during the current terminal session without stopping the terminal process behind that pane.
-Ask Codex to create or identify the PDF first, then type one of these Termuctive commands directly in the same terminal pane and press Return.
-Termuctive intercepts these commands before Codex sees them.
+Inside an active Codex conversation, type `/makepdf` and press Return to request a compact educational PDF about the recent work.
+Termuctive replaces that short command with a detailed request that tells Codex to use the bundled Compact Textbook template, explain the concepts in simple terms, include a useful visual, and inspect every rendered page.
+When Codex finishes, it prints one valid PDF path that Termuctive can remember.
+The installed Times New Roman fonts and a local Python environment with ReportLab are required by the bundled renderer.
+
+After the path appears, type one of these Termuctive placement commands directly in the same terminal pane and press Return.
+Termuctive intercepts placement commands before Codex sees them.
 It prefers the latest PDF path shown in that terminal session, then falls back to the newest PDF created in the project since the session began.
 
+- `/makepdf` asks the active Codex conversation to create and verify the learning PDF.
 - `/movepdf` opens the PDF opposite the command terminal.
 - `/movepdfleft` opens the PDF in the leftmost pane.
 - `/movepdfright` opens the PDF in the rightmost pane.

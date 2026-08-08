@@ -273,6 +273,61 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         )
     }
 
+    func testMakePDFReplacesTheTypedCommandWithOneCodexRequest() async throws {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 900, height: 600)
+        )
+        let processDelegate = TerminalTestDelegate(testCase: self)
+        terminal.processDelegate = processDelegate
+        defer {
+            if terminal.process.running {
+                terminal.terminate()
+            }
+        }
+
+        let request = "TERMUCTIVE LEARNING REQUEST"
+        let expectedBytes = Array("/makepdf".utf8) + [0x15] + Array(request.utf8) + [0x0D]
+        let expectedHex = expectedBytes.map { String(format: "%02x", $0) }.joined()
+        terminal.startProcess(
+            executable: "/bin/sh",
+            args: [
+                "-c",
+                "saved_tty=$(stty -g); stty raw -echo; "
+                    + "printf 'TERMUCTIVE_MAKEPDF_READY\\n'; "
+                    + "captured=$(dd bs=1 count=\(expectedBytes.count) 2>/dev/null "
+                    + "| od -An -tx1 | tr -d '[:space:]'); "
+                    + "stty \"$saved_tty\"; "
+                    + "printf '\\nTERMUCTIVE_MAKEPDF_BYTES_%s\\n' \"$captured\"",
+            ]
+        )
+        _ = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_MAKEPDF_READY"],
+            timeout: 5
+        )
+
+        var handledCommands: [TerminalLocalCommand] = []
+        terminal.localCommandHandler = { command in
+            handledCommands.append(command)
+            terminal.submitApplicationLine(request)
+        }
+        terminal.insertText(
+            "/makepdf",
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        terminal.send(source: terminal, data: [0x0D][...])
+
+        let output = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_MAKEPDF_BYTES_\(expectedHex)"],
+            timeout: 5
+        )
+        await fulfillment(of: [processDelegate.terminated], timeout: 5)
+
+        XCTAssertEqual(handledCommands, [.makeLearningPDF])
+        XCTAssertTrue(output.contains("TERMUCTIVE_MAKEPDF_BYTES_\(expectedHex)"))
+    }
+
     func testMouseClickReportingStillReachesTerminalApplication() async throws {
         let persistence = TerminalTestPersistence()
         let store = WorkspaceStore(persistence: persistence)

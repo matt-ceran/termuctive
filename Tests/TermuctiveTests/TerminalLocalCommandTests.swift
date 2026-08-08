@@ -35,6 +35,37 @@ final class TerminalLocalCommandTests: XCTestCase {
         }
     }
 
+    func testMakePDFCommandIsRecognizedBeforeSubmissionReachesTheProcess() {
+        XCTAssertEqual(TerminalLocalCommand(line: "/makepdf"), .makeLearningPDF)
+        XCTAssertEqual(TerminalLocalCommand(line: "  /MAKEPDF  "), .makeLearningPDF)
+    }
+
+    func testLearningPDFRequestUsesTheBundledCompactTextbookSkill() {
+        let skillURL = URL(
+            fileURLWithPath:
+                "/Applications/Termuctive.app/Contents/Resources/termuctive-learning-pdf/SKILL.md"
+        )
+
+        let prompt = LearningPDFRequest.prompt(skillURL: skillURL)
+
+        XCTAssertTrue(prompt.contains(skillURL.path))
+        XCTAssertTrue(prompt.contains("Compact Textbook"))
+        XCTAssertTrue(prompt.contains("exactly one canonical absolute path"))
+        XCTAssertTrue(prompt.contains("/movepdfright"))
+        XCTAssertFalse(prompt.contains("\n"))
+        XCTAssertFalse(prompt.contains("\r"))
+    }
+
+    func testLearningPDFSkillIsBundledInTheApplicationResources() throws {
+        let skillURL = try XCTUnwrap(LearningPDFRequest.bundledSkillURL)
+
+        XCTAssertEqual(skillURL.lastPathComponent, "SKILL.md")
+        XCTAssertTrue(
+            try String(contentsOf: skillURL, encoding: .utf8)
+                .contains("name: termuctive-learning-pdf")
+        )
+    }
+
     func testUnknownSlashCommandIsNotIntercepted() {
         var tracker = TerminalLocalCommandTracker()
         tracker.insert("/status")

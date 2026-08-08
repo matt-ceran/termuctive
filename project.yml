@@ -26,6 +26,9 @@ targets:
     platform: macOS
     sources:
       - Sources/Termuctive
+      - path: Resources/termuctive-learning-pdf
+        buildPhase: resources
+        type: folder
       - path: LICENSE
         buildPhase: resources
       - path: THIRD_PARTY_NOTICES.md

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Termuctive Learning PDF"
+  short_description: "Create compact visual learning PDFs"
+  default_prompt: "Use $termuctive-learning-pdf to explain this session in a compact visual PDF."

@@ -22,6 +22,7 @@
 		302A072D04C87EEA57B49B00 /* EditorFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */; };
 		4E14C04A360FFAC7566B8A48 /* EditorDocumentBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D0500E417D40684B01F061 /* EditorDocumentBuffer.swift */; };
 		4F042792EDC288E707443E7D /* PDFDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */; };
+		4FA2A817A915D6D914CCE3C4 /* LearningPDF.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F22CF52B8769F1072F775FF /* LearningPDF.swift */; };
 		55537C6EED8FAC9A59D679B8 /* TerminalLocalCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6328DE9953E850606960A464 /* TerminalLocalCommandTests.swift */; };
 		6057584FA9BADB24B356BC77 /* PDFPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35EA800971A4F8606824C500 /* PDFPreview.swift */; };
 		6367DCA53C3632194454440A /* PaneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB732E6729E4ED88756FCF76 /* PaneLayout.swift */; };
@@ -36,6 +37,7 @@
 		8D565FB0A8CADB805744D23F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F784C4BBAE43A7B6C7F23B1 /* Assets.xcassets */; };
 		9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */; };
 		A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */; };
+		AB094E7B3BB14654DDC4023A /* termuctive-learning-pdf in Resources */ = {isa = PBXBuildFile; fileRef = DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */; };
 		ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */; };
 		AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */; };
 		B0FE1456E747245CEF613181 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = C35DC00077448A260ABFB4B1 /* SwiftTerm */; };
@@ -62,6 +64,7 @@
 
 /* Begin PBXFileReference section */
 		1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDocument.swift; sourceTree = "<group>"; };
+		1F22CF52B8769F1072F775FF /* LearningPDF.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningPDF.swift; sourceTree = "<group>"; };
 		1F784C4BBAE43A7B6C7F23B1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		227D7BC89388CB5CC769553E /* PaneTreeRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeRenderingTests.swift; sourceTree = "<group>"; };
 		235FCBD56ABAE515873A9965 /* SmoothSplitViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmoothSplitViewTests.swift; sourceTree = "<group>"; };
@@ -95,6 +98,7 @@
 		D6D0500E417D40684B01F061 /* EditorDocumentBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDocumentBuffer.swift; sourceTree = "<group>"; };
 		D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStore.swift; sourceTree = "<group>"; };
 		DB732E6729E4ED88756FCF76 /* PaneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayout.swift; sourceTree = "<group>"; };
+		DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "termuctive-learning-pdf"; path = "Resources/termuctive-learning-pdf"; sourceTree = SOURCE_ROOT; };
 		DDA25954BE817B9B05BBCF51 /* EditorSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionPool.swift; sourceTree = "<group>"; };
 		E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEngineIntegrationTests.swift; sourceTree = "<group>"; };
 		E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
@@ -166,6 +170,7 @@
 			children = (
 				7420D65C7E04E4E5D0041305 /* LICENSE */,
 				E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */,
+				9E2D2DFE7C7482A7EBA2560E /* Resources */,
 				5BBAF8A6D19F517C0E2B3E93 /* Sources */,
 				2CD727C985ACF4BE3C344A9D /* Tests */,
 				8BBEF82D98EDDFA56D58E10B /* Products */,
@@ -223,12 +228,21 @@
 			path = Persistence;
 			sourceTree = "<group>";
 		};
+		9E2D2DFE7C7482A7EBA2560E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		C7A8E0CD44EC188068DE0B53 /* Termuctive */ = {
 			isa = PBXGroup;
 			children = (
 				C619C2D8D39C031484E264A4 /* AppearanceSettings.swift */,
 				268474801E729AD15FCB6E04 /* ApplicationLifecycle.swift */,
 				1F784C4BBAE43A7B6C7F23B1 /* Assets.xcassets */,
+				1F22CF52B8769F1072F775FF /* LearningPDF.swift */,
 				613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */,
 				35EA800971A4F8606824C500 /* PDFPreview.swift */,
 				E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */,
@@ -336,6 +350,7 @@
 				8D565FB0A8CADB805744D23F /* Assets.xcassets in Resources */,
 				B4FDEAFEECFCE89EDCDB0F40 /* LICENSE in Resources */,
 				2B1BD699F66EE2910D871C19 /* THIRD_PARTY_NOTICES.md in Resources */,
+				AB094E7B3BB14654DDC4023A /* termuctive-learning-pdf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -355,6 +370,7 @@
 				12D3E55E6022C1E6195A8901 /* EditorPaneView.swift in Sources */,
 				69720620AF7C6CAE0F0C7C9C /* EditorSessionPool.swift in Sources */,
 				BEB1CE16AA3870EA44E435F0 /* InterfaceComponents.swift in Sources */,
+				4FA2A817A915D6D914CCE3C4 /* LearningPDF.swift in Sources */,
 				4F042792EDC288E707443E7D /* PDFDiscovery.swift in Sources */,
 				07B2F323B929A148128D94CB /* PDFPaneView.swift in Sources */,
 				6057584FA9BADB24B356BC77 /* PDFPreview.swift in Sources */,

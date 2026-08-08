@@ -239,6 +239,19 @@ final class TerminalSessionPool: ObservableObject {
 
     private func perform(_ command: TerminalLocalCommand, fromPaneID paneID: UUID) {
         switch command {
+        case .makeLearningPDF:
+            guard let session = sessions[paneID] else {
+                return
+            }
+            guard let skillURL = LearningPDFRequest.bundledSkillURL else {
+                store.presentError(
+                    "This Termuctive build is missing its learning PDF template."
+                )
+                return
+            }
+            session.submitApplicationLine(
+                LearningPDFRequest.prompt(skillURL: skillURL)
+            )
         case .moveRecentPDF(let placement):
             moveRecentPDF(fromPaneID: paneID, placement: placement)
         }
@@ -484,6 +497,18 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         outputHandler?(slice)
     }
 
+    func submitApplicationLine(_ line: String) {
+        guard !line.contains(where: \Character.isNewline) else {
+            assertionFailure("A local command replacement must be a single line.")
+            return
+        }
+        localCommandTracker.reset()
+        let textBytes = Array(line.utf8)
+        super.send(source: self, data: textBytes[...])
+        let submitBytes = applicationSubmitBytes()
+        super.send(source: self, data: submitBytes[...])
+    }
+
     func applyTheme(_ theme: TerminalTheme, redraw: Bool) {
         let shouldRebuildMetalRenderer = redraw && isUsingMetalRenderer && window != nil
         if shouldRebuildMetalRenderer {
@@ -515,6 +540,14 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
             bytes = [0x15]
         }
         super.send(source: self, data: bytes[...])
+    }
+
+    private func applicationSubmitBytes() -> [UInt8] {
+        let flags = getTerminal().keyboardEnhancementFlags
+        if flags.contains(.disambiguate) || flags.contains(.reportAllKeys) {
+            return Array("\u{1B}[13u".utf8)
+        }
+        return [0x0D]
     }
 
     private static func plainText(from value: Any) -> String? {
@@ -663,6 +696,10 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     func setTheme(_ theme: TerminalTheme) {
         view.applyTheme(theme, redraw: true)
+    }
+
+    func submitApplicationLine(_ line: String) {
+        view.submitApplicationLine(line)
     }
 
     func mostRecentVisiblePDF() -> URL? {

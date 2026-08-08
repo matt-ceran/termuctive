@@ -7,10 +7,13 @@ enum PDFPanePlacement: Equatable {
 }
 
 enum TerminalLocalCommand: Equatable {
+    case makeLearningPDF
     case moveRecentPDF(PDFPanePlacement)
 
     init?(line: String) {
         switch line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "/makepdf":
+            self = .makeLearningPDF
         case "/movepdf":
             self = .moveRecentPDF(.automatic)
         case "/movepdfleft":
