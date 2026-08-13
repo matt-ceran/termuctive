@@ -186,8 +186,11 @@ final class PaneTreeRenderingTests: XCTestCase {
             editors: editors,
             notes: notes
         )
+        var pdfView: FocusablePDFView?
         try await waitUntil {
-            !rightTerminalView.isDescendant(of: container)
+            pdfView = self.firstSubview(of: FocusablePDFView.self, in: container)
+            return !rightTerminalView.isDescendant(of: container)
+                && pdfView?.document != nil
         }
         XCTAssertTrue(leftTerminalView.isDescendant(of: container))
 
@@ -201,7 +204,10 @@ final class PaneTreeRenderingTests: XCTestCase {
         )
         try await waitUntil {
             rightTerminalView.isDescendant(of: container)
+                && pdfView?.document == nil
+                && pdfView?.focusHandler == nil
         }
+        XCTAssertFalse(try XCTUnwrap(pdfView).autoScales)
         XCTAssertTrue(sessions.terminalView(for: rightPane) === rightTerminalView)
         XCTAssertTrue(window.firstResponder === rightTerminalView)
     }
@@ -400,8 +406,10 @@ final class PaneTreeRenderingTests: XCTestCase {
             editors: editors,
             notes: notes
         )
+        var pdfView: FocusablePDFView?
         try await waitUntil {
-            self.firstSubview(of: PDFView.self, in: container) != nil
+            pdfView = self.firstSubview(of: FocusablePDFView.self, in: container)
+            return pdfView?.document != nil
                 && self.firstSubview(of: SourceTextView.self, in: container) == nil
         }
 
@@ -415,7 +423,10 @@ final class PaneTreeRenderingTests: XCTestCase {
         )
         try await waitUntil {
             self.firstSubview(of: SourceTextView.self, in: container) != nil
+                && pdfView?.document == nil
+                && pdfView?.focusHandler == nil
         }
+        XCTAssertFalse(try XCTUnwrap(pdfView).autoScales)
         XCTAssertTrue(editors.session(forPaneID: rightPaneID) === editorSession)
         XCTAssertEqual(editorSession.selectedBuffer?.url, sourceURL)
         XCTAssertTrue(sessions.terminalView(for: rightPane) === rightTerminal)

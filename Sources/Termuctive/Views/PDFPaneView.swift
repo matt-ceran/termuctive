@@ -33,6 +33,16 @@ struct PDFPaneView: NSViewRepresentable {
         loadDocument(in: view, coordinator: context.coordinator)
     }
 
+    static func dismantleNSView(
+        _ view: FocusablePDFView,
+        coordinator: Coordinator
+    ) {
+        view.focusHandler = nil
+        view.document = nil
+        view.autoScales = false
+        coordinator.loadedURL = nil
+    }
+
     private func loadDocument(
         in view: PDFView,
         coordinator: Coordinator
