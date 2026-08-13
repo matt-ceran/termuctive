@@ -317,15 +317,23 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         )
         terminal.send(source: terminal, data: [0x0D][...])
 
-        let output = try await terminalOutput(
+        _ = try await terminalOutput(
             from: terminal,
-            containing: ["TERMUCTIVE_MAKEPDF_BYTES_\(expectedHex)"],
+            containing: ["TERMUCTIVE_MAKEPDF_BYTES_"],
             timeout: 5
         )
         await fulfillment(of: [processDelegate.terminated], timeout: 5)
+        let output = String(
+            decoding: terminal.getTerminal().getBufferAsData(),
+            as: UTF8.self
+        )
+        let unwrappedOutput = output.filter { !$0.isWhitespace }
 
         XCTAssertEqual(handledCommands, [.makeLearningPDF])
-        XCTAssertTrue(output.contains("TERMUCTIVE_MAKEPDF_BYTES_\(expectedHex)"))
+        XCTAssertTrue(
+            unwrappedOutput.contains("TERMUCTIVE_MAKEPDF_BYTES_\(expectedHex)"),
+            "Terminal output was \(output.debugDescription)"
+        )
     }
 
     func testMouseClickReportingStillReachesTerminalApplication() async throws {
