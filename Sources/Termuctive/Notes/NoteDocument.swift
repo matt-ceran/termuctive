@@ -19,6 +19,17 @@ enum NoteWorkspaceMode: String, Codable, CaseIterable, Identifiable, Sendable {
             "Draw"
         }
     }
+
+    var systemImage: String {
+        switch self {
+        case .text:
+            "textformat"
+        case .split:
+            "rectangle.split.2x1"
+        case .drawing:
+            "pencil.and.outline"
+        }
+    }
 }
 
 struct NoteRGBAColor: Codable, Equatable, Sendable {

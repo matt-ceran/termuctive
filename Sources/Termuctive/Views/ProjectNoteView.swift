@@ -1,16 +1,65 @@
 import AppKit
 import SwiftUI
 
+enum NoteToolbarLayout: Equatable {
+    case expanded
+    case regular
+    case compact
+    case narrow
+    case minimal
+
+    static func resolve(width: CGFloat, mode: NoteWorkspaceMode) -> NoteToolbarLayout {
+        let expandedMinimum: CGFloat
+        switch mode {
+        case .text:
+            expandedMinimum = 900
+        case .drawing:
+            expandedMinimum = 760
+        case .split:
+            expandedMinimum = 1_240
+        }
+        if width >= expandedMinimum {
+            return .expanded
+        }
+        if width >= 680 {
+            return .regular
+        }
+        if width >= 410 {
+            return .compact
+        }
+        if width >= 180 {
+            return .narrow
+        }
+        return .minimal
+    }
+}
+
+private enum NoteActiveSurface {
+    case text
+    case drawing
+}
+
 struct ProjectNoteView: View {
     let note: ProjectNote
     @ObservedObject var session: NoteDocumentSession
+    let onFocus: () -> Void
+    let isPaneFocused: Bool
 
     @StateObject private var richTextController: NoteRichTextController
     @StateObject private var drawingController: NoteDrawingController
     @State private var isConfirmingClear = false
+    @State private var activeSurface = NoteActiveSurface.text
+    @Environment(\.colorScheme) private var colorScheme
 
-    init(note: ProjectNote, session: NoteDocumentSession) {
+    init(
+        note: ProjectNote,
+        session: NoteDocumentSession,
+        onFocus: @escaping () -> Void = {},
+        isPaneFocused: Bool = false
+    ) {
         self.note = note
+        self.onFocus = onFocus
+        self.isPaneFocused = isPaneFocused
         _session = ObservedObject(wrappedValue: session)
         _richTextController = StateObject(wrappedValue: NoteRichTextController())
         _drawingController = StateObject(
@@ -24,7 +73,9 @@ struct ProjectNoteView: View {
             Divider()
             noteContent
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(
+            Color(nsColor: NoteEditorPalette.backgroundColor(for: colorScheme))
+        )
         .onAppear {
             drawingController.onDrawingChange = { drawing in
                 session.updateDrawing(drawing)
@@ -46,61 +97,84 @@ struct ProjectNoteView: View {
     }
 
     private var noteToolbar: some View {
-        HStack(spacing: 6) {
-            ViewThatFits(in: .horizontal) {
-                fullEditorControls
-                    .fixedSize(horizontal: true, vertical: false)
-                compactEditorControls
-            }
-            .padding(.leading, 7)
-
-            Divider()
-                .frame(height: 22)
-
-            saveStatus
-
-            Picker("Note layout", selection: workspaceModeBinding) {
-                ForEach(NoteWorkspaceMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 168)
-            .accessibilityLabel("Note layout")
-            .padding(.trailing, 7)
+        GeometryReader { geometry in
+            toolbarContent(
+                layout: NoteToolbarLayout.resolve(
+                    width: geometry.size.width,
+                    mode: session.document.workspaceMode
+                )
+            )
         }
-        .frame(height: 38)
+        .frame(height: 44)
         .background(Color(nsColor: .controlBackgroundColor))
+        .accessibilityIdentifier("note-toolbar")
     }
 
-    private var fullEditorControls: some View {
-        HStack(spacing: 5) {
+    @ViewBuilder
+    private func toolbarContent(layout: NoteToolbarLayout) -> some View {
+        HStack(spacing: 8) {
+            switch layout {
+            case .expanded:
+                expandedEditorControls
+            case .regular:
+                regularEditorControls
+            case .compact:
+                labeledEditorMenus
+            case .narrow:
+                iconEditorMenus
+            case .minimal:
+                minimalEditorMenu
+            }
+
+            Spacer(minLength: layout == .minimal ? 0 : 4)
+            if layout != .minimal {
+                saveStatus
+                if layout == .narrow {
+                    workspaceModeMenu
+                } else {
+                    workspaceModePicker(compact: layout == .compact)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onFocus)
+    }
+
+    @ViewBuilder
+    private var expandedEditorControls: some View {
+        HStack(spacing: 8) {
             if showsTextEditor {
-                textFormattingControls
+                toolbarGroup { typographyControls(includeFontFamily: true) }
+                toolbarGroup { emphasisControls(includeStrikethrough: true) }
+                toolbarGroup { paragraphControls }
+                toolbarGroup { textHistoryControls }
             }
             if session.document.workspaceMode == .split {
                 Divider()
-                    .frame(height: 22)
-                    .padding(.horizontal, 2)
+                    .frame(height: 26)
             }
             if showsDrawingEditor {
-                drawingControls
+                toolbarGroup { drawingControls }
             }
         }
     }
 
-    private var compactEditorControls: some View {
-        HStack(spacing: 4) {
+    @ViewBuilder
+    private var regularEditorControls: some View {
+        HStack(spacing: 8) {
             if showsTextEditor {
+                toolbarGroup { typographyControls(includeFontFamily: false) }
+                toolbarGroup { emphasisControls(includeStrikethrough: false) }
                 Menu {
                     compactTextMenuContent
                 } label: {
-                    Label("Text", systemImage: "textformat")
+                    Image(systemName: "ellipsis")
                 }
                 .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Text formatting")
+                .frame(width: 30, height: 30)
+                .help("More text formatting")
             }
             if showsDrawingEditor {
                 Menu {
@@ -110,6 +184,75 @@ struct ProjectNoteView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .help("Drawing tools")
+            }
+        }
+    }
+
+    private var labeledEditorMenus: some View {
+        editorMenus(showsLabels: true)
+    }
+
+    private var iconEditorMenus: some View {
+        editorMenus(showsLabels: false)
+    }
+
+    private var minimalEditorMenu: some View {
+        Menu {
+            if showsTextEditor {
+                Menu("Text Formatting") {
+                    compactTextMenuContent
+                }
+            }
+            if showsDrawingEditor {
+                Menu("Drawing Tools") {
+                    compactDrawingMenuContent
+                }
+            }
+            Divider()
+            Picker("Note Layout", selection: workspaceModeBinding) {
+                ForEach(NoteWorkspaceMode.allCases) { mode in
+                    Label(mode.title, systemImage: mode.systemImage)
+                        .tag(mode)
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 30, height: 30)
+        .help("Note tools and layout")
+        .accessibilityLabel("Note tools and layout")
+    }
+
+    private func editorMenus(showsLabels: Bool) -> some View {
+        HStack(spacing: 6) {
+            if showsTextEditor {
+                Menu {
+                    compactTextMenuContent
+                } label: {
+                    if showsLabels {
+                        Label("Format", systemImage: "textformat")
+                    } else {
+                        Image(systemName: "textformat")
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .frame(minWidth: showsLabels ? 72 : 30, minHeight: 30)
+                .help("Text formatting")
+            }
+            if showsDrawingEditor {
+                Menu {
+                    compactDrawingMenuContent
+                } label: {
+                    if showsLabels {
+                        Label("Draw", systemImage: "pencil.and.outline")
+                    } else {
+                        Image(systemName: "pencil.and.outline")
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .frame(minWidth: showsLabels ? 62 : 30, minHeight: 30)
                 .help("Drawing tools")
             }
         }
@@ -194,7 +337,7 @@ struct ProjectNoteView: View {
     }
 
     @ViewBuilder
-    private var textFormattingControls: some View {
+    private func typographyControls(includeFontFamily: Bool) -> some View {
         Menu {
             ForEach(NoteTextStyle.allCases) { style in
                 Button(style.title) {
@@ -208,19 +351,21 @@ struct ProjectNoteView: View {
         .menuStyle(.borderlessButton)
         .help("Paragraph style")
 
-        Menu {
-            ForEach(NoteRichTextController.availableFontFamilies, id: \.self) { family in
-                Button(family) {
-                    richTextController.setFontFamily(family)
+        if includeFontFamily {
+            Menu {
+                ForEach(NoteRichTextController.availableFontFamilies, id: \.self) { family in
+                    Button(family) {
+                        richTextController.setFontFamily(family)
+                    }
                 }
+            } label: {
+                Text(richTextController.fontFamily)
+                    .lineLimit(1)
+                    .frame(width: 106, alignment: .leading)
             }
-        } label: {
-            Text(richTextController.fontFamily)
-                .lineLimit(1)
-                .frame(width: 112, alignment: .leading)
+            .menuStyle(.borderlessButton)
+            .help("Font family")
         }
-        .menuStyle(.borderlessButton)
-        .help("Font family")
 
         Menu {
             ForEach([9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64], id: \.self) { size in
@@ -235,7 +380,10 @@ struct ProjectNoteView: View {
         }
         .menuStyle(.borderlessButton)
         .help("Font size")
+    }
 
+    @ViewBuilder
+    private func emphasisControls(includeStrikethrough: Bool) -> some View {
         formattingButton(
             systemImage: "bold",
             active: richTextController.isBold,
@@ -254,17 +402,24 @@ struct ProjectNoteView: View {
             help: "Underline",
             action: richTextController.toggleUnderline
         )
-        formattingButton(
-            systemImage: "strikethrough",
-            active: richTextController.isStruckThrough,
-            help: "Strikethrough",
-            action: richTextController.toggleStrikethrough
-        )
+        if includeStrikethrough {
+            formattingButton(
+                systemImage: "strikethrough",
+                active: richTextController.isStruckThrough,
+                help: "Strikethrough",
+                action: richTextController.toggleStrikethrough
+            )
+        }
+    }
 
-        ColorPicker("Text color", selection: textColorBinding, supportsOpacity: false)
-            .labelsHidden()
-            .frame(width: 24)
-            .help("Text color")
+    @ViewBuilder
+    private var paragraphControls: some View {
+        NoteColorPicker(
+            color: textColorBinding,
+            accessibilityLabel: "Text color"
+        )
+        .frame(width: 24, height: 24)
+        .help("Text color")
 
         Menu {
             ForEach(NoteTextAlignment.allCases) { alignment in
@@ -293,7 +448,10 @@ struct ProjectNoteView: View {
             help: "Insert numbered item",
             action: richTextController.insertNumberedItem
         )
+    }
 
+    @ViewBuilder
+    private var textHistoryControls: some View {
         formattingButton(
             systemImage: "arrow.uturn.backward",
             active: false,
@@ -324,11 +482,13 @@ struct ProjectNoteView: View {
         .frame(width: 96)
         .accessibilityLabel("Drawing tool")
 
-        ColorPicker("Ink color", selection: inkColorBinding, supportsOpacity: false)
-            .labelsHidden()
-            .frame(width: 24)
-            .disabled(drawingController.tool == .eraser)
-            .help("Ink color")
+        NoteColorPicker(
+            color: inkColorBinding,
+            accessibilityLabel: "Ink color"
+        )
+        .frame(width: 24, height: 24)
+        .disabled(drawingController.tool == .eraser)
+        .help("Ink color")
 
         Image(systemName: "line.diagonal")
             .font(.system(size: 10))
@@ -369,6 +529,54 @@ struct ProjectNoteView: View {
         .disabled(drawingController.drawing.strokes.isEmpty)
     }
 
+    private func toolbarGroup<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 3) {
+            content()
+        }
+        .padding(.horizontal, 4)
+        .frame(height: 30)
+        .background(Color.primary.opacity(0.055))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private func workspaceModePicker(compact: Bool) -> some View {
+        Picker("Note layout", selection: workspaceModeBinding) {
+            ForEach(NoteWorkspaceMode.allCases) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: compact ? 150 : 168)
+        .accessibilityLabel("Note layout")
+    }
+
+    private var workspaceModeMenu: some View {
+        Menu {
+            Picker("Note layout", selection: workspaceModeBinding) {
+                ForEach(NoteWorkspaceMode.allCases) { mode in
+                    Label(mode.title, systemImage: mode.systemImage)
+                        .tag(mode)
+                }
+            }
+        } label: {
+            Label(
+                session.document.workspaceMode.title,
+                systemImage: session.document.workspaceMode.systemImage
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Note layout")
+        .accessibilityLabel("Note layout: \(session.document.workspaceMode.title)")
+    }
+
     @ViewBuilder
     private var noteContent: some View {
         switch session.document.workspaceMode {
@@ -377,11 +585,22 @@ struct ProjectNoteView: View {
         case .drawing:
             drawingEditor
         case .split:
-            HSplitView {
-                richTextEditor
-                    .frame(minWidth: 300)
-                drawingEditor
-                    .frame(minWidth: 260)
+            GeometryReader { geometry in
+                if geometry.size.width >= 620 {
+                    HSplitView {
+                        richTextEditor
+                            .frame(minWidth: 240)
+                        drawingEditor
+                            .frame(minWidth: 220)
+                    }
+                } else {
+                    VSplitView {
+                        richTextEditor
+                            .frame(minHeight: 150)
+                        drawingEditor
+                            .frame(minHeight: 140)
+                    }
+                }
             }
         }
     }
@@ -390,19 +609,25 @@ struct ProjectNoteView: View {
         NoteRichTextEditorView(
             rtfData: session.document.richTextRTF,
             controller: richTextController,
+            onFocus: focusTextSurface,
+            requestsFocus: textSurfaceRequestsFocus,
             onChange: session.updateRichText
         )
         .accessibilityLabel("\(note.name) text")
     }
 
     private var drawingEditor: some View {
-        NoteDrawingCanvasView(controller: drawingController)
-            .overlay {
-                Rectangle()
-                    .stroke(Color.primary.opacity(0.14), lineWidth: 1)
-                    .allowsHitTesting(false)
-            }
-            .accessibilityLabel("\(note.name) drawing")
+        NoteDrawingCanvasView(
+            controller: drawingController,
+            onFocus: focusDrawingSurface,
+            requestsFocus: drawingSurfaceRequestsFocus
+        )
+        .overlay {
+            Rectangle()
+                .stroke(Color.primary.opacity(0.14), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .accessibilityLabel("\(note.name) drawing")
     }
 
     private var workspaceModeBinding: Binding<NoteWorkspaceMode> {
@@ -414,7 +639,14 @@ struct ProjectNoteView: View {
 
     private var textColorBinding: Binding<Color> {
         Binding(
-            get: { Color(nsColor: richTextController.textColor.nsColor) },
+            get: {
+                Color(
+                    nsColor: NoteEditorPalette.displayColor(
+                        for: richTextController.textColor,
+                        colorScheme: colorScheme
+                    )
+                )
+            },
             set: { color in
                 richTextController.setTextColor(
                     NoteRGBAColor(nsColor: NSColor(color))
@@ -425,7 +657,14 @@ struct ProjectNoteView: View {
 
     private var inkColorBinding: Binding<Color> {
         Binding(
-            get: { Color(nsColor: drawingController.color.nsColor) },
+            get: {
+                Color(
+                    nsColor: NoteEditorPalette.displayColor(
+                        for: drawingController.color,
+                        colorScheme: colorScheme
+                    )
+                )
+            },
             set: { color in
                 drawingController.color = NoteRGBAColor(nsColor: NSColor(color))
             }
@@ -438,6 +677,44 @@ struct ProjectNoteView: View {
 
     private var showsDrawingEditor: Bool {
         session.document.workspaceMode != .text
+    }
+
+    private var textSurfaceRequestsFocus: Bool {
+        guard isPaneFocused else {
+            return false
+        }
+        switch session.document.workspaceMode {
+        case .text:
+            return true
+        case .split:
+            return activeSurface == .text
+        case .drawing:
+            return false
+        }
+    }
+
+    private var drawingSurfaceRequestsFocus: Bool {
+        guard isPaneFocused else {
+            return false
+        }
+        switch session.document.workspaceMode {
+        case .text:
+            return false
+        case .split:
+            return activeSurface == .drawing
+        case .drawing:
+            return true
+        }
+    }
+
+    private func focusTextSurface() {
+        activeSurface = .text
+        onFocus()
+    }
+
+    private func focusDrawingSurface() {
+        activeSurface = .drawing
+        onFocus()
     }
 
     private var saveStatus: some View {
@@ -480,5 +757,38 @@ struct ProjectNoteView: View {
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)
+    }
+}
+
+private struct NoteColorPicker: View {
+    @Binding var color: Color
+    let accessibilityLabel: String
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(color)
+                Circle()
+                    .stroke(Color.primary.opacity(0.38), lineWidth: 1)
+            }
+            .frame(width: 16, height: 16)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 24, height: 24)
+        .contentShape(Rectangle())
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            ColorPicker(
+                accessibilityLabel,
+                selection: $color,
+                supportsOpacity: false
+            )
+            .padding(12)
+            .frame(width: 220)
+        }
+        .accessibilityLabel(accessibilityLabel)
     }
 }

@@ -58,6 +58,7 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             notes: notes,
             appearance: appearance
         )
+        .preferredColorScheme(.dark)
         let hostingView = NSHostingView(rootView: rootView)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1_180, height: 740),
@@ -82,6 +83,14 @@ final class ProjectNotesIntegrationTests: XCTestCase {
         }
         try await Task.sleep(nanoseconds: 20_000_000)
         let textView = try XCTUnwrap(firstSubview(of: NSTextView.self, in: hostingView))
+        let textBackground = try XCTUnwrap(
+            textView.backgroundColor.usingColorSpace(.deviceRGB)
+        )
+        let insertionColor = try XCTUnwrap(
+            textView.insertionPointColor.usingColorSpace(.deviceRGB)
+        )
+        XCTAssertLessThan(textBackground.redComponent, 0.2)
+        XCTAssertGreaterThan(insertionColor.redComponent, 0.9)
         textView.insertText("Concept notes", replacementRange: NSRange(location: 0, length: 0))
         try await waitUntil("the rich-text edit to reach the note document") {
             NoteRichTextArchive.attributedString(from: noteSession.document.richTextRTF).string
@@ -157,6 +166,16 @@ final class ProjectNotesIntegrationTests: XCTestCase {
         attachment.name = "Project note split mode"
         attachment.lifetime = .keepAlways
         add(attachment)
+
+        store.isSidebarVisible = false
+        window.setContentSize(NSSize(width: 1_440, height: 700))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let expandedToolbarAttachment = XCTAttachment(image: try renderedImage(of: hostingView))
+        expandedToolbarAttachment.name = "Expanded dark note toolbar"
+        expandedToolbarAttachment.lifetime = .keepAlways
+        add(expandedToolbarAttachment)
+
+        store.isSidebarVisible = true
         window.setContentSize(NSSize(width: 760, height: 480))
         try await Task.sleep(nanoseconds: 50_000_000)
         let compactAttachment = XCTAttachment(image: try renderedImage(of: hostingView))
@@ -178,6 +197,148 @@ final class ProjectNotesIntegrationTests: XCTestCase {
 
         XCTAssertTrue(sessions.terminalView(for: pane) === terminalView)
         XCTAssertTrue(notes.retainedSession(forNoteID: note.id) === noteSession)
+
+        noteSession.updateWorkspaceMode(.split)
+        let notePaneID = try XCTUnwrap(
+            store.openNoteInNewPane(
+                noteID: note.id,
+                inProjectWithID: projectID,
+                axis: .horizontal
+            )
+        )
+        try await waitUntil("the note to render beside the original terminal") {
+            terminalView.isDescendant(of: hostingView)
+                && self.firstSubview(of: NSTextView.self, in: hostingView) != nil
+                && self.firstSubview(of: NoteDrawingCanvasNSView.self, in: hostingView) != nil
+        }
+        try await waitUntil("the focused note pane to receive keyboard focus") {
+            window.firstResponder is NSTextView
+        }
+        let renderedNotePane = try XCTUnwrap(
+            store.selectedSpace?.layout.terminal(withID: notePaneID)
+        )
+        XCTAssertEqual(renderedNotePane.content, .note(note.id))
+        XCTAssertEqual(store.focusedPaneNote, note)
+        XCTAssertEqual(store.selectedProject?.notes.filter { $0.id == note.id }.count, 1)
+        XCTAssertTrue(sessions.terminalView(for: pane) === terminalView)
+
+        sessions.focus(paneID: pane.id)
+        try await waitUntil("the terminal pane to become focused") {
+            store.focusedPaneID == pane.id
+        }
+        let focusedCanvas = try XCTUnwrap(
+            firstSubview(of: NoteDrawingCanvasNSView.self, in: hostingView)
+        )
+        let canvasPoint = focusedCanvas.convert(NSPoint(x: 40, y: 40), to: nil)
+        focusedCanvas.mouseDown(
+            with: try XCTUnwrap(mouseEvent(.leftMouseDown, at: canvasPoint, in: window))
+        )
+        focusedCanvas.mouseUp(
+            with: try XCTUnwrap(mouseEvent(.leftMouseUp, at: canvasPoint, in: window))
+        )
+        try await waitUntil("the split drawing surface to retain keyboard focus") {
+            store.focusedPaneID == notePaneID
+                && window.firstResponder === focusedCanvas
+        }
+
+        let notePaneAttachment = XCTAttachment(image: try renderedImage(of: hostingView))
+        notePaneAttachment.name = "Dark note beside terminal"
+        notePaneAttachment.lifetime = .keepAlways
+        add(notePaneAttachment)
+
+        window.setContentSize(NSSize(width: 760, height: 480))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(terminalView.isDescendant(of: hostingView))
+        XCTAssertNotNil(firstSubview(of: NSTextView.self, in: hostingView))
+        XCTAssertNotNil(firstSubview(of: NoteDrawingCanvasNSView.self, in: hostingView))
+        let narrowNotePaneAttachment = XCTAttachment(image: try renderedImage(of: hostingView))
+        narrowNotePaneAttachment.name = "Narrow dark note beside terminal"
+        narrowNotePaneAttachment.lifetime = .keepAlways
+        add(narrowNotePaneAttachment)
+
+        let resizedLayout = try XCTUnwrap(store.selectedSpace?.layout)
+        guard case .split(let split) = resizedLayout else {
+            XCTFail("Expected the terminal and note to share a split")
+            return
+        }
+        store.commitSplitRatio(splitID: split.id, ratio: 0.9)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let minimalNotePaneAttachment = XCTAttachment(image: try renderedImage(of: hostingView))
+        minimalNotePaneAttachment.name = "Minimal dark note pane"
+        minimalNotePaneAttachment.lifetime = .keepAlways
+        add(minimalNotePaneAttachment)
+
+        store.closePane(withID: notePaneID)
+        try await waitUntil("the original terminal to remain after closing the note pane") {
+            terminalView.isDescendant(of: hostingView)
+                && store.selectedSpace?.layout.terminalCount == 1
+        }
+        XCTAssertEqual(store.selectedProject?.note(withID: note.id), note)
+        XCTAssertTrue(notes.retainedSession(forNoteID: note.id) === noteSession)
+    }
+
+    func testNoteTextFollowsLightDarkLightAppearanceWithoutChangingStoredRTF() async throws {
+        let note = ProjectNote(name: "Theme")
+        let source = NSAttributedString(
+            string: "Automatic text",
+            attributes: NoteRichTextArchive.defaultBodyAttributes
+        )
+        let originalRTF = try NoteRichTextArchive.data(from: source)
+        let persistence = ThemeNotePersistence(
+            loadedDocument: NoteDocument(
+                noteID: note.id,
+                richTextRTF: originalRTF
+            )
+        )
+        let session = NoteDocumentSession(noteID: note.id, persistence: persistence)
+        let theme = NoteThemeModel()
+        let hostingView = NSHostingView(
+            rootView: NoteThemeHarness(
+                note: note,
+                session: session,
+                theme: theme
+            )
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 480),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+        let textView = try XCTUnwrap(firstSubview(of: NSTextView.self, in: hostingView))
+
+        try await waitUntil("the light note palette") {
+            textView.backgroundColor.usingColorSpace(.deviceRGB)?.redComponent ?? 0 > 0.9
+        }
+        XCTAssertNil(temporaryForegroundColor(in: textView))
+
+        theme.scheme = .dark
+        try await waitUntil("the dark note palette") {
+            textView.backgroundColor.usingColorSpace(.deviceRGB)?.redComponent ?? 1 < 0.2
+                && (self.temporaryForegroundColor(in: textView)?
+                    .usingColorSpace(.deviceRGB)?.redComponent ?? 0) > 0.9
+        }
+
+        theme.scheme = .light
+        try await waitUntil("the restored light note palette") {
+            textView.backgroundColor.usingColorSpace(.deviceRGB)?.redComponent ?? 0 > 0.9
+                && self.temporaryForegroundColor(in: textView) == nil
+        }
+
+        XCTAssertEqual(session.document.richTextRTF, originalRTF)
+        let storedColor = try XCTUnwrap(
+            textView.textStorage?.attribute(
+                .foregroundColor,
+                at: 0,
+                effectiveRange: nil
+            ) as? NSColor
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(storedColor.usingColorSpace(.deviceRGB)).redComponent,
+            0.2
+        )
     }
 
     private func renderedImage(of view: NSView) throws -> NSImage {
@@ -201,6 +362,14 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             }
         }
         return nil
+    }
+
+    private func temporaryForegroundColor(in textView: NSTextView) -> NSColor? {
+        textView.layoutManager?.temporaryAttribute(
+            .foregroundColor,
+            atCharacterIndex: 0,
+            effectiveRange: nil
+        ) as? NSColor
     }
 
     private func mouseEvent(
@@ -235,6 +404,38 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
     }
+}
+
+@MainActor
+private final class NoteThemeModel: ObservableObject {
+    @Published var scheme: ColorScheme = .light
+}
+
+private struct NoteThemeHarness: View {
+    let note: ProjectNote
+    @ObservedObject var session: NoteDocumentSession
+    @ObservedObject var theme: NoteThemeModel
+
+    var body: some View {
+        ProjectNoteView(note: note, session: session)
+            .preferredColorScheme(theme.scheme)
+    }
+}
+
+private final class ThemeNotePersistence: NotePersisting {
+    let loadedDocument: NoteDocument
+
+    init(loadedDocument: NoteDocument) {
+        self.loadedDocument = loadedDocument
+    }
+
+    func load(noteID: UUID) throws -> NoteDocument? {
+        loadedDocument.noteID == noteID ? loadedDocument : nil
+    }
+
+    func save(_ document: NoteDocument) throws {}
+
+    func archive(noteID: UUID) throws {}
 }
 
 private final class ProjectNotesWorkspacePersistence: WorkspacePersisting {

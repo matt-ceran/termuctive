@@ -3,6 +3,21 @@ import XCTest
 @testable import Termuctive
 
 final class PaneLayoutTests: XCTestCase {
+    func testLegacyPaneWithoutContentDecodesAsTerminal() throws {
+        let pane = TerminalPane(workingDirectory: "/project")
+        let encoded = try JSONEncoder().encode(pane)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        json.removeValue(forKey: "content")
+        let legacyData = try JSONSerialization.data(withJSONObject: json)
+
+        let decoded = try JSONDecoder().decode(TerminalPane.self, from: legacyData)
+
+        XCTAssertEqual(decoded, pane)
+        XCTAssertEqual(decoded.content, .terminal)
+    }
+
     func testSplittingTargetsOnlyTheRequestedPane() throws {
         let first = TerminalPane(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,

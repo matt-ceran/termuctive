@@ -2,6 +2,9 @@ import Foundation
 
 @MainActor
 final class NoteDocumentSession: ObservableObject, Identifiable {
+    private static let autosaveDelay: UInt64 = 600_000_000
+    private static let retryDelay: UInt64 = 1_000_000_000
+
     let id: UUID
 
     @Published private(set) var document: NoteDocument
@@ -9,6 +12,7 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
     @Published private(set) var isSaving = false
     @Published private(set) var lastSavedAt: Date?
     @Published private(set) var errorMessage: String?
+    private(set) var isStopped = false
 
     private let persistence: any NotePersisting
     private var autosaveTask: Task<Void, Never>?
@@ -31,7 +35,9 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
     }
 
     func updateRichText(_ data: Data) {
-        guard document.richTextRTF != data else {
+        guard !isStopped,
+            document.richTextRTF != data
+        else {
             return
         }
         document.richTextRTF = data
@@ -39,7 +45,9 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
     }
 
     func updateDrawing(_ drawing: NoteDrawing) {
-        guard document.drawing != drawing else {
+        guard !isStopped,
+            document.drawing != drawing
+        else {
             return
         }
         document.drawing = drawing
@@ -47,7 +55,9 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
     }
 
     func updateWorkspaceMode(_ mode: NoteWorkspaceMode) {
-        guard document.workspaceMode != mode else {
+        guard !isStopped,
+            document.workspaceMode != mode
+        else {
             return
         }
         document.workspaceMode = mode
@@ -55,6 +65,9 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
     }
 
     func saveNow() throws {
+        guard !isStopped else {
+            return
+        }
         autosaveTask?.cancel()
         autosaveTask = nil
         guard isDirty else {
@@ -72,6 +85,7 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+            scheduleAutosave(after: Self.retryDelay)
             throw error
         }
     }
@@ -86,6 +100,7 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
         if flushing {
             try saveNow()
         }
+        isStopped = true
     }
 
     private func markDirty() {
@@ -96,9 +111,13 @@ final class NoteDocumentSession: ObservableObject, Identifiable {
     }
 
     private func scheduleAutosave() {
+        scheduleAutosave(after: Self.autosaveDelay)
+    }
+
+    private func scheduleAutosave(after delay: UInt64) {
         autosaveTask?.cancel()
         autosaveTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            try? await Task.sleep(nanoseconds: delay)
             guard let self, !Task.isCancelled else {
                 return
             }
@@ -135,6 +154,10 @@ final class NoteSessionPool: ObservableObject {
         sessions[noteID]
     }
 
+    var hasUnsavedChanges: Bool {
+        sessions.values.contains(where: \.isDirty)
+    }
+
     func save(noteID: UUID) {
         do {
             try sessions[noteID]?.saveNow()
@@ -144,14 +167,20 @@ final class NoteSessionPool: ObservableObject {
         }
     }
 
-    func saveAll() {
+    func saveAll() throws {
+        var firstError: (any Error)?
         for noteID in sessions.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
             do {
                 try sessions[noteID]?.saveNow()
             } catch {
-                errorMessage = error.localizedDescription
-                return
+                if firstError == nil {
+                    firstError = error
+                }
             }
+        }
+        if let firstError {
+            errorMessage = firstError.localizedDescription
+            throw firstError
         }
         errorMessage = nil
     }
@@ -184,7 +213,6 @@ final class NoteSessionPool: ObservableObject {
     }
 
     func terminateAll() {
-        saveAll()
         for session in sessions.values {
             try? session.stop(flushing: false)
         }

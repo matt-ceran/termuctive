@@ -5,6 +5,42 @@ import XCTest
 
 @MainActor
 final class NoteRichTextTests: XCTestCase {
+    func testDarkPaletteUsesDarkCanvasAndAutomaticWhiteText() throws {
+        let background = try XCTUnwrap(
+            NoteEditorPalette.backgroundColor(for: .dark).usingColorSpace(.deviceRGB)
+        )
+        let text = try XCTUnwrap(
+            NoteEditorPalette.textColor(for: .dark).usingColorSpace(.deviceRGB)
+        )
+        let automatic = try XCTUnwrap(
+            NoteEditorPalette.displayColor(
+                for: .black,
+                colorScheme: .dark
+            ).usingColorSpace(.deviceRGB)
+        )
+        let explicitRed = try XCTUnwrap(
+            NoteEditorPalette.displayColor(
+                for: .red,
+                colorScheme: .dark
+            ).usingColorSpace(.deviceRGB)
+        )
+
+        XCTAssertLessThan(background.redComponent, 0.2)
+        XCTAssertGreaterThan(text.redComponent, 0.9)
+        XCTAssertGreaterThan(automatic.redComponent, 0.9)
+        XCTAssertGreaterThan(explicitRed.redComponent, explicitRed.blueComponent)
+    }
+
+    func testToolbarLayoutRespondsToPaneWidthAndWorkspaceMode() {
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 1_300, mode: .split), .expanded)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 900, mode: .split), .regular)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 520, mode: .split), .compact)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 320, mode: .split), .narrow)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 120, mode: .split), .minimal)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 920, mode: .text), .expanded)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 820, mode: .text), .regular)
+    }
+
     func testArchiveRoundTripPreservesFontColorAndParagraphStyle() throws {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center

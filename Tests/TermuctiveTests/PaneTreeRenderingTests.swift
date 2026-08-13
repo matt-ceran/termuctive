@@ -17,7 +17,9 @@ final class PaneTreeRenderingTests: XCTestCase {
         )
         let sessions = TerminalSessionPool(store: store)
         let editors = EditorSessionPool(store: store)
+        let notes = NoteSessionPool()
         defer {
+            notes.terminateAll()
             editors.terminateAll()
             sessions.terminateAll()
         }
@@ -36,7 +38,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
         await Task.yield()
@@ -53,7 +56,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
         await Task.yield()
@@ -66,7 +70,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
         await Task.yield()
@@ -102,7 +107,9 @@ final class PaneTreeRenderingTests: XCTestCase {
 
         let sessions = TerminalSessionPool(store: store)
         let editors = EditorSessionPool(store: store)
+        let notes = NoteSessionPool()
         defer {
+            notes.terminateAll()
             editors.terminateAll()
             sessions.terminateAll()
         }
@@ -120,7 +127,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
         await Task.yield()
@@ -141,7 +149,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         try await waitUntil {
             !rightTerminalView.isDescendant(of: container)
@@ -153,7 +162,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         try await waitUntil {
             rightTerminalView.isDescendant(of: container)
@@ -195,7 +205,9 @@ final class PaneTreeRenderingTests: XCTestCase {
             shellConfiguration: try isolatedShellConfiguration(in: directory)
         )
         let editors = EditorSessionPool(store: store)
+        let notes = NoteSessionPool()
         defer {
+            notes.terminateAll()
             editors.terminateAll()
             sessions.terminateAll()
         }
@@ -214,7 +226,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
         let leftTerminal = sessions.terminalView(for: leftPane)
@@ -231,7 +244,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
 
@@ -262,7 +276,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         try await waitUntil {
             leftTerminal.isDescendant(of: container)
@@ -302,7 +317,9 @@ final class PaneTreeRenderingTests: XCTestCase {
         )
         let sessions = TerminalSessionPool(store: store)
         let editors = EditorSessionPool(store: store)
+        let notes = NoteSessionPool()
         defer {
+            notes.terminateAll()
             editors.terminateAll()
             sessions.terminateAll()
         }
@@ -326,7 +343,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
         try await waitUntil {
@@ -345,7 +363,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         try await waitUntil {
             self.firstSubview(of: PDFView.self, in: container) != nil
@@ -357,7 +376,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         try await waitUntil {
             self.firstSubview(of: SourceTextView.self, in: container) != nil
@@ -379,7 +399,9 @@ final class PaneTreeRenderingTests: XCTestCase {
         )
         let sessions = TerminalSessionPool(store: store)
         let editors = EditorSessionPool(store: store)
+        let notes = NoteSessionPool()
         defer {
+            notes.terminateAll()
             editors.terminateAll()
             sessions.terminateAll()
         }
@@ -397,7 +419,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
 
@@ -412,7 +435,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
 
@@ -426,7 +450,8 @@ final class PaneTreeRenderingTests: XCTestCase {
             node: try XCTUnwrap(store.selectedSpace?.layout),
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         container.layoutSubtreeIfNeeded()
 

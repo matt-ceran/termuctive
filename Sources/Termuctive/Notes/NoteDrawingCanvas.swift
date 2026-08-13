@@ -133,17 +133,33 @@ final class NoteDrawingController: ObservableObject {
 
 struct NoteDrawingCanvasView: NSViewRepresentable {
     @ObservedObject var controller: NoteDrawingController
+    let onFocus: () -> Void
+    let requestsFocus: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> NoteDrawingCanvasNSView {
         let view = NoteDrawingCanvasNSView(frame: .zero)
         view.controller = controller
+        view.focusHandler = onFocus
+        view.colorScheme = colorScheme
+        view.appearance = NoteEditorPalette.appearance(for: colorScheme)
+        view.setLogicalFocus(requestsFocus)
         return view
     }
 
     func updateNSView(_ view: NoteDrawingCanvasNSView, context: Context) {
-        view.controller = controller
-        view.needsDisplay = true
-        view.window?.invalidateCursorRects(for: view)
+        if view.controller !== controller {
+            view.controller = controller
+        }
+        view.focusHandler = onFocus
+        view.setLogicalFocus(requestsFocus)
+        if view.colorScheme != colorScheme {
+            view.colorScheme = colorScheme
+            view.appearance = NoteEditorPalette.appearance(for: colorScheme)
+        }
+        if view.renderedDrawing != controller.drawing {
+            view.needsDisplay = true
+        }
     }
 }
 
@@ -156,6 +172,17 @@ final class NoteDrawingCanvasNSView: NSView {
     }
 
     private var currentPoints: [NoteDrawingPoint] = []
+    var focusHandler: (() -> Void)?
+    var renderedDrawing: NoteDrawing?
+    var colorScheme: ColorScheme = .light {
+        didSet {
+            guard oldValue != colorScheme else {
+                return
+            }
+            needsDisplay = true
+        }
+    }
+    private var hasLogicalFocus = false
 
     override var isFlipped: Bool {
         true
@@ -163,6 +190,19 @@ final class NoteDrawingCanvasNSView: NSView {
 
     override var acceptsFirstResponder: Bool {
         true
+    }
+
+    func setLogicalFocus(_ isFocused: Bool) {
+        guard hasLogicalFocus != isFocused else {
+            return
+        }
+        hasLogicalFocus = isFocused
+        requestFirstResponderIfNeeded()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        requestFirstResponderIfNeeded()
     }
 
     override init(frame frameRect: NSRect) {
@@ -181,7 +221,7 @@ final class NoteDrawingCanvasNSView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        NSColor.white.setFill()
+        NoteEditorPalette.backgroundColor(for: colorScheme).setFill()
         bounds.fill()
         if controller?.drawing.showsGrid == true {
             drawGrid()
@@ -202,9 +242,11 @@ final class NoteDrawingCanvasNSView: NSView {
                 )
             )
         }
+        renderedDrawing = controller?.drawing
     }
 
     override func mouseDown(with event: NSEvent) {
+        focusHandler?()
         window?.makeFirstResponder(self)
         guard let controller else {
             return
@@ -268,6 +310,16 @@ final class NoteDrawingCanvasNSView: NSView {
         addCursorRect(bounds, cursor: .crosshair)
     }
 
+    private func requestFirstResponderIfNeeded() {
+        guard hasLogicalFocus,
+            let window,
+            window.firstResponder !== self
+        else {
+            return
+        }
+        window.makeFirstResponder(self)
+    }
+
     private func normalizedPoint(at point: NSPoint, event: NSEvent) -> NoteDrawingPoint {
         let width = max(bounds.width, 1)
         let height = max(bounds.height, 1)
@@ -290,7 +342,10 @@ final class NoteDrawingCanvasNSView: NSView {
         guard let first = stroke.points.first else {
             return
         }
-        let color = stroke.color.nsColor.withAlphaComponent(
+        let color = NoteEditorPalette.displayColor(
+            for: stroke.color,
+            colorScheme: colorScheme
+        ).withAlphaComponent(
             stroke.style == .marker
                 ? CGFloat(stroke.color.alpha * 0.24) : CGFloat(stroke.color.alpha)
         )
@@ -327,7 +382,10 @@ final class NoteDrawingCanvasNSView: NSView {
 
     private func drawGrid() {
         let spacing: CGFloat = 24
-        let gridColor = NSColor(calibratedWhite: 0.86, alpha: 0.55)
+        let gridColor = NSColor(
+            calibratedWhite: colorScheme == .dark ? 0.42 : 0.70,
+            alpha: colorScheme == .dark ? 0.40 : 0.32
+        )
         gridColor.setStroke()
         let path = NSBezierPath()
         path.lineWidth = 0.5

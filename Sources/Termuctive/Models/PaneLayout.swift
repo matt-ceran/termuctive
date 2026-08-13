@@ -10,19 +10,50 @@ enum PaneInsertionPlacement {
     case after
 }
 
+enum PaneContent: Codable, Equatable {
+    case terminal
+    case note(UUID)
+}
+
 struct TerminalPane: Codable, Equatable, Identifiable {
     let id: UUID
     var title: String
     var workingDirectory: String
+    var content: PaneContent
 
     init(
         id: UUID = UUID(),
         title: String = "Terminal",
-        workingDirectory: String
+        workingDirectory: String,
+        content: PaneContent = .terminal
     ) {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
+        self.content = content
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case workingDirectory
+        case content
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        workingDirectory = try container.decode(String.self, forKey: .workingDirectory)
+        content = try container.decodeIfPresent(PaneContent.self, forKey: .content) ?? .terminal
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(workingDirectory, forKey: .workingDirectory)
+        try container.encode(content, forKey: .content)
     }
 }
 
@@ -103,6 +134,21 @@ indirect enum PaneNode: Codable, Equatable, Identifiable {
             pane.id == id ? pane : nil
         case .split(let split):
             split.first.terminal(withID: id) ?? split.second.terminal(withID: id)
+        }
+    }
+
+    func pane(showingNoteWithID noteID: UUID) -> TerminalPane? {
+        switch self {
+        case .terminal(let pane):
+            guard case .note(let displayedNoteID) = pane.content,
+                displayedNoteID == noteID
+            else {
+                return nil
+            }
+            return pane
+        case .split(let split):
+            return split.first.pane(showingNoteWithID: noteID)
+                ?? split.second.pane(showingNoteWithID: noteID)
         }
     }
 
@@ -205,6 +251,40 @@ indirect enum PaneNode: Codable, Equatable, Identifiable {
                 title: title,
                 workingDirectory: workingDirectory
             )
+            return .split(split)
+        }
+    }
+
+    func settingContent(forPaneID id: UUID, to content: PaneContent) -> PaneNode {
+        switch self {
+        case .terminal(var pane):
+            guard pane.id == id else {
+                return self
+            }
+            pane.content = content
+            return .terminal(pane)
+
+        case .split(var split):
+            split.first = split.first.settingContent(forPaneID: id, to: content)
+            split.second = split.second.settingContent(forPaneID: id, to: content)
+            return .split(split)
+        }
+    }
+
+    func clearingNoteReferences(in noteIDs: Set<UUID>) -> PaneNode {
+        switch self {
+        case .terminal(var pane):
+            guard case .note(let noteID) = pane.content,
+                noteIDs.contains(noteID)
+            else {
+                return self
+            }
+            pane.content = .terminal
+            return .terminal(pane)
+
+        case .split(var split):
+            split.first = split.first.clearingNoteReferences(in: noteIDs)
+            split.second = split.second.clearingNoteReferences(in: noteIDs)
             return .split(split)
         }
     }

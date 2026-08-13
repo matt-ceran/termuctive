@@ -279,6 +279,23 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         }
     }
 
+    mutating func clearPaneNoteReferences(in noteIDs: Set<UUID>) {
+        switch self {
+        case .space(var space):
+            space.layout = space.layout.clearingNoteReferences(in: noteIDs)
+            self = .space(space)
+
+        case .note:
+            return
+
+        case .folder(var folder):
+            for index in folder.children.indices {
+                folder.children[index].clearPaneNoteReferences(in: noteIDs)
+            }
+            self = .folder(folder)
+        }
+    }
+
     mutating func renameItem(withID id: UUID, to name: String) -> Bool {
         switch self {
         case .space(var space):
@@ -495,6 +512,18 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         items.lazy.compactMap { $0.terminal(withID: id) }.first
     }
 
+    func paneLocation(showingNoteWithID noteID: UUID) -> (
+        space: TerminalSpace,
+        pane: TerminalPane
+    )? {
+        for space in terminalSpaces {
+            if let pane = space.layout.pane(showingNoteWithID: noteID) {
+                return (space, pane)
+            }
+        }
+        return nil
+    }
+
     func item(withID id: UUID) -> WorkspaceItem? {
         items.lazy.compactMap { $0.item(withID: id) }.first
     }
@@ -554,6 +583,12 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         return false
     }
 
+    mutating func clearPaneNoteReferences(in noteIDs: Set<UUID>) {
+        for index in items.indices {
+            items[index].clearPaneNoteReferences(in: noteIDs)
+        }
+    }
+
     mutating func renameItem(withID id: UUID, to name: String) -> Bool {
         for index in items.indices {
             if items[index].renameItem(withID: id, to: name) {
@@ -603,7 +638,7 @@ extension WorkspaceItem {
 }
 
 struct WorkspaceDocument: Codable, Equatable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int
     var projects: [TerminalProject]
@@ -703,6 +738,10 @@ struct WorkspaceDocument: Codable, Equatable {
         projects.lazy.compactMap { $0.terminal(withID: id) }.first
     }
 
+    func note(withID id: UUID) -> ProjectNote? {
+        projects.lazy.compactMap { $0.note(withID: id) }.first
+    }
+
     func project(containingTerminalWithID id: UUID) -> TerminalProject? {
         projects.first { $0.terminalIDs.contains(id) }
     }
@@ -722,5 +761,14 @@ struct WorkspaceDocument: Codable, Equatable {
             }
         }
         return false
+    }
+
+    mutating func clearPaneNoteReferences(in noteIDs: Set<UUID>) {
+        guard !noteIDs.isEmpty else {
+            return
+        }
+        for index in projects.indices {
+            projects[index].clearPaneNoteReferences(in: noteIDs)
+        }
     }
 }

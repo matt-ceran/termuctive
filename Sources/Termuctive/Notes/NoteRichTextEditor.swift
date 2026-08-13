@@ -1,6 +1,62 @@
 import AppKit
 import SwiftUI
 
+enum NoteEditorPalette {
+    static func appearance(for colorScheme: ColorScheme) -> NSAppearance {
+        NSAppearance(
+            named: colorScheme == .dark ? .darkAqua : .aqua
+        ) ?? NSAppearance(named: .aqua)!
+    }
+
+    static func backgroundColor(for colorScheme: ColorScheme) -> NSColor {
+        colorScheme == .dark
+            ? NSColor(calibratedWhite: 0.105, alpha: 1)
+            : NSColor.white
+    }
+
+    static func textColor(for colorScheme: ColorScheme) -> NSColor {
+        colorScheme == .dark
+            ? NSColor(calibratedWhite: 0.94, alpha: 1)
+            : NSColor(calibratedWhite: 0.08, alpha: 1)
+    }
+
+    static func displayColor(
+        for color: NoteRGBAColor,
+        colorScheme: ColorScheme
+    ) -> NSColor {
+        guard colorScheme == .dark,
+            isAutomaticDarkNeutral(color)
+        else {
+            return color.nsColor
+        }
+        return textColor(for: colorScheme)
+    }
+
+    static func shouldUseAutomaticTextColor(_ color: NSColor) -> Bool {
+        guard let rgb = color.usingColorSpace(.deviceRGB) else {
+            return false
+        }
+        return isAutomaticDarkNeutral(
+            NoteRGBAColor(
+                red: Double(rgb.redComponent),
+                green: Double(rgb.greenComponent),
+                blue: Double(rgb.blueComponent),
+                alpha: Double(rgb.alphaComponent)
+            )
+        )
+    }
+
+    private static func isAutomaticDarkNeutral(_ color: NoteRGBAColor) -> Bool {
+        let channels = [color.red, color.green, color.blue]
+        guard let minimum = channels.min(),
+            let maximum = channels.max()
+        else {
+            return false
+        }
+        return maximum <= 0.16 && maximum - minimum <= 0.04
+    }
+}
+
 enum NoteTextStyle: String, CaseIterable, Identifiable {
     case title
     case heading
@@ -660,7 +716,10 @@ final class NoteRichTextController: ObservableObject {
 struct NoteRichTextEditorView: NSViewRepresentable {
     let rtfData: Data
     @ObservedObject var controller: NoteRichTextController
+    let onFocus: () -> Void
+    let requestsFocus: Bool
     let onChange: (Data) -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -690,12 +749,11 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             width: 0,
             height: CGFloat.greatestFiniteMagnitude
         )
-        textView.appearance = NSAppearance(named: .aqua)
-        textView.backgroundColor = .white
-        textView.insertionPointColor = .black
+        textView.focusHandler = onFocus
         textView.delegate = context.coordinator
         textView.textStorage?.setAttributedString(
             NoteRichTextArchive.attributedString(from: rtfData))
+        textView.textStorage?.delegate = context.coordinator
         if rtfData.isEmpty {
             textView.typingAttributes = NoteRichTextArchive.defaultBodyAttributes
         }
@@ -707,7 +765,6 @@ struct NoteRichTextEditorView: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .white
         scrollView.documentView = textView
 
         context.coordinator.textView = textView
@@ -715,17 +772,30 @@ struct NoteRichTextEditorView: NSViewRepresentable {
         controller.attach(to: textView) { [weak coordinator = context.coordinator] in
             coordinator?.publishCurrentContent()
         }
+        context.coordinator.applyPalette(
+            colorScheme: colorScheme,
+            to: textView,
+            in: scrollView
+        )
+        textView.setLogicalFocus(requestsFocus)
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
-        guard let textView = scrollView.documentView as? NSTextView else {
+        guard let textView = scrollView.documentView as? NoteTextView else {
             return
         }
         controller.attach(to: textView) { [weak coordinator = context.coordinator] in
             coordinator?.publishCurrentContent()
         }
+        textView.focusHandler = onFocus
+        textView.setLogicalFocus(requestsFocus)
+        context.coordinator.applyPalette(
+            colorScheme: colorScheme,
+            to: textView,
+            in: scrollView
+        )
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
@@ -733,14 +803,18 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             return
         }
         coordinator.parent.controller.detach(from: textView)
+        if textView.textStorage?.delegate === coordinator {
+            textView.textStorage?.delegate = nil
+        }
         textView.delegate = nil
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    final class Coordinator: NSObject, @preconcurrency NSTextStorageDelegate, NSTextViewDelegate {
         var parent: NoteRichTextEditorView
         weak var textView: NSTextView?
         var lastKnownData = Data()
+        private var appliedColorScheme: ColorScheme?
 
         init(parent: NoteRichTextEditorView) {
             self.parent = parent
@@ -748,6 +822,25 @@ struct NoteRichTextEditorView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             publishCurrentContent()
+        }
+
+        func textStorage(
+            _ textStorage: NSTextStorage,
+            didProcessEditing editedMask: NSTextStorageEditActions,
+            range editedRange: NSRange,
+            changeInLength delta: Int
+        ) {
+            guard !editedMask.intersection([.editedAttributes, .editedCharacters]).isEmpty,
+                let textView,
+                textView.textStorage === textStorage
+            else {
+                return
+            }
+            applyTextPalette(
+                colorScheme: parent.colorScheme,
+                to: textView,
+                requestedRange: editedRange
+            )
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -764,11 +857,116 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             lastKnownData = data
             parent.onChange(data)
         }
+
+        func applyPalette(
+            colorScheme: ColorScheme,
+            to textView: NSTextView,
+            in scrollView: NSScrollView
+        ) {
+            guard appliedColorScheme != colorScheme else {
+                return
+            }
+            appliedColorScheme = colorScheme
+            let appearance = NoteEditorPalette.appearance(for: colorScheme)
+            let backgroundColor = NoteEditorPalette.backgroundColor(for: colorScheme)
+            let textColor = NoteEditorPalette.textColor(for: colorScheme)
+            textView.appearance = appearance
+            textView.backgroundColor = backgroundColor
+            textView.insertionPointColor = textColor
+            scrollView.appearance = appearance
+            scrollView.backgroundColor = backgroundColor
+
+            applyTextPalette(
+                colorScheme: colorScheme,
+                to: textView,
+                requestedRange: NSRange(location: 0, length: textView.textStorage?.length ?? 0)
+            )
+        }
+
+        private func applyTextPalette(
+            colorScheme: ColorScheme,
+            to textView: NSTextView,
+            requestedRange: NSRange
+        ) {
+            guard let textStorage = textView.textStorage,
+                let layoutManager = textView.layoutManager,
+                textStorage.length > 0
+            else {
+                textView.needsDisplay = true
+                return
+            }
+            let range = NSIntersectionRange(
+                requestedRange,
+                NSRange(location: 0, length: textStorage.length)
+            )
+            guard range.length > 0 else {
+                textView.needsDisplay = true
+                return
+            }
+            layoutManager.removeTemporaryAttribute(
+                .foregroundColor,
+                forCharacterRange: range
+            )
+            guard colorScheme == .dark else {
+                textView.needsDisplay = true
+                return
+            }
+            let textColor = NoteEditorPalette.textColor(for: colorScheme)
+            textStorage.enumerateAttribute(
+                .foregroundColor,
+                in: range
+            ) { value, range, _ in
+                guard
+                    value == nil
+                        || (value as? NSColor).map(NoteEditorPalette.shouldUseAutomaticTextColor)
+                            == true
+                else {
+                    return
+                }
+                layoutManager.addTemporaryAttribute(
+                    .foregroundColor,
+                    value: textColor,
+                    forCharacterRange: range
+                )
+            }
+            textView.needsDisplay = true
+        }
     }
 }
 
 @MainActor
 private final class NoteTextView: NSTextView {
+    var focusHandler: (() -> Void)?
+    private var hasLogicalFocus = false
+
+    func setLogicalFocus(_ isFocused: Bool) {
+        guard hasLogicalFocus != isFocused else {
+            return
+        }
+        hasLogicalFocus = isFocused
+        requestFirstResponderIfNeeded()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        requestFirstResponderIfNeeded()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        focusHandler?()
+        super.mouseDown(with: event)
+    }
+
+    private func requestFirstResponderIfNeeded() {
+        guard hasLogicalFocus,
+            let window,
+            window.firstResponder !== self
+        else {
+            return
+        }
+        window.makeFirstResponder(self)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty else {
@@ -777,7 +975,7 @@ private final class NoteTextView: NSTextView {
         let placeholder = "Start writing, or choose a title style from the toolbar."
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 14),
-            .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1),
+            .foregroundColor: NSColor.placeholderTextColor,
         ]
         placeholder.draw(
             at: NSPoint(x: textContainerInset.width + 2, y: textContainerInset.height),

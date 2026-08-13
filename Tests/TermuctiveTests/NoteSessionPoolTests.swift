@@ -91,18 +91,86 @@ final class NoteSessionPoolTests: XCTestCase {
         XCTAssertEqual(saved.workspaceMode, .split)
         XCTAssertFalse(session.isDirty)
     }
+
+    func testFailedSaveRetriesWithoutAnotherEdit() async throws {
+        let persistence = RecordingNotePersistence()
+        let note = ProjectNote(name: "Retry")
+        let session = NoteDocumentSession(noteID: note.id, persistence: persistence)
+        persistence.remainingSaveFailures[note.id] = 1
+        session.updateRichText(Data("keep this".utf8))
+
+        XCTAssertThrowsError(try session.saveNow())
+        XCTAssertTrue(session.isDirty)
+
+        let deadline = Date().addingTimeInterval(2)
+        while session.isDirty, Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertFalse(session.isDirty)
+        XCTAssertEqual(persistence.savedDocuments.last?.richTextRTF, Data("keep this".utf8))
+    }
+
+    func testSaveAllAttemptsEveryDirtyNoteAfterAFailure() throws {
+        let persistence = RecordingNotePersistence()
+        let firstNote = ProjectNote(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            name: "First"
+        )
+        let secondNote = ProjectNote(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            name: "Second"
+        )
+        let pool = NoteSessionPool(persistence: persistence)
+        let firstSession = pool.session(for: firstNote)
+        let secondSession = pool.session(for: secondNote)
+        firstSession.updateRichText(Data("first".utf8))
+        secondSession.updateRichText(Data("second".utf8))
+        persistence.remainingSaveFailures[firstNote.id] = 1
+
+        XCTAssertThrowsError(try pool.saveAll())
+
+        XCTAssertTrue(firstSession.isDirty)
+        XCTAssertFalse(secondSession.isDirty)
+        XCTAssertTrue(pool.hasUnsavedChanges)
+        XCTAssertEqual(persistence.saveAttempts, [firstNote.id, secondNote.id])
+        XCTAssertEqual(persistence.savedDocuments.map(\.noteID), [secondNote.id])
+    }
+
+    func testDiscardTerminationPreventsLateViewFlush() async throws {
+        let persistence = RecordingNotePersistence()
+        let note = ProjectNote(name: "Discard")
+        let pool = NoteSessionPool(persistence: persistence)
+        let retainedSession = pool.session(for: note)
+        retainedSession.updateRichText(Data("discard me".utf8))
+
+        pool.terminateAll()
+        try retainedSession.saveNow()
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+
+        XCTAssertTrue(retainedSession.isStopped)
+        XCTAssertTrue(retainedSession.isDirty)
+        XCTAssertTrue(persistence.savedDocuments.isEmpty)
+    }
 }
 
 private final class RecordingNotePersistence: NotePersisting {
     var loadedDocuments: [UUID: NoteDocument] = [:]
     var savedDocuments: [NoteDocument] = []
     var archivedNoteIDs: [UUID] = []
+    var remainingSaveFailures: [UUID: Int] = [:]
+    var saveAttempts: [UUID] = []
 
     func load(noteID: UUID) throws -> NoteDocument? {
         loadedDocuments[noteID]
     }
 
     func save(_ document: NoteDocument) throws {
+        saveAttempts.append(document.noteID)
+        if let failures = remainingSaveFailures[document.noteID], failures > 0 {
+            remainingSaveFailures[document.noteID] = failures - 1
+            throw CocoaError(.fileWriteUnknown)
+        }
         savedDocuments.append(document)
         loadedDocuments[document.noteID] = document
     }

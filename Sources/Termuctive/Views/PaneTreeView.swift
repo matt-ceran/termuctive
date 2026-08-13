@@ -6,6 +6,7 @@ struct PaneTreeView: NSViewRepresentable {
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
     @ObservedObject var editors: EditorSessionPool
+    @ObservedObject var notes: NoteSessionPool
 
     func makeNSView(context: Context) -> PaneTreeContainerView {
         let view = PaneTreeContainerView(frame: .zero)
@@ -13,7 +14,8 @@ struct PaneTreeView: NSViewRepresentable {
             node: node,
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         return view
     }
@@ -23,7 +25,8 @@ struct PaneTreeView: NSViewRepresentable {
             node: node,
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
     }
 }
@@ -32,6 +35,7 @@ private enum PaneLeafPresentation: Equatable {
     case terminal
     case pdf(URL)
     case editor
+    case note(UUID)
 }
 
 @MainActor
@@ -46,7 +50,8 @@ final class PaneTreeContainerView: NSView {
         node: PaneNode,
         store: WorkspaceStore,
         sessions: TerminalSessionPool,
-        editors: EditorSessionPool
+        editors: EditorSessionPool,
+        notes: NoteSessionPool
     ) {
         if let rootController,
             rootController.matchesStructure(of: node)
@@ -55,7 +60,8 @@ final class PaneTreeContainerView: NSView {
                 node: node,
                 store: store,
                 sessions: sessions,
-                editors: editors
+                editors: editors,
+                notes: notes
             )
             return
         }
@@ -65,7 +71,8 @@ final class PaneTreeContainerView: NSView {
             node: node,
             store: store,
             sessions: sessions,
-            editors: editors
+            editors: editors,
+            notes: notes
         )
         rootController = controller
         controller.view.frame = bounds
@@ -111,12 +118,13 @@ private final class PaneTreeNodeController {
         node: PaneNode,
         store: WorkspaceStore,
         sessions: TerminalSessionPool,
-        editors: EditorSessionPool
+        editors: EditorSessionPool,
+        notes: NoteSessionPool
     ) {
         switch node {
         case .terminal(let pane):
             let presentation = Self.presentation(
-                forPaneID: pane.id,
+                for: pane,
                 sessions: sessions,
                 editors: editors
             )
@@ -126,7 +134,8 @@ private final class PaneTreeNodeController {
                     presentation: presentation,
                     store: store,
                     sessions: sessions,
-                    editors: editors
+                    editors: editors,
+                    notes: notes
                 )
             )
             host.sizingOptions = []
@@ -141,13 +150,15 @@ private final class PaneTreeNodeController {
                 node: split.first,
                 store: store,
                 sessions: sessions,
-                editors: editors
+                editors: editors,
+                notes: notes
             )
             let second = PaneTreeNodeController(
                 node: split.second,
                 store: store,
                 sessions: sessions,
-                editors: editors
+                editors: editors,
+                notes: notes
             )
             let splitView = SmoothSplitView(axis: split.axis)
             splitView.addArrangedSubview(first.view)
@@ -190,7 +201,8 @@ private final class PaneTreeNodeController {
         node: PaneNode,
         store: WorkspaceStore,
         sessions: TerminalSessionPool,
-        editors: EditorSessionPool
+        editors: EditorSessionPool,
+        notes: NoteSessionPool
     ) {
         switch (content, node) {
         case (
@@ -198,7 +210,7 @@ private final class PaneTreeNodeController {
             .terminal(let pane)
         ):
             let presentation = Self.presentation(
-                forPaneID: pane.id,
+                for: pane,
                 sessions: sessions,
                 editors: editors
             )
@@ -210,7 +222,8 @@ private final class PaneTreeNodeController {
                 presentation: presentation,
                 store: store,
                 sessions: sessions,
-                editors: editors
+                editors: editors,
+                notes: notes
             )
             content = .terminal(
                 pane: pane,
@@ -231,13 +244,15 @@ private final class PaneTreeNodeController {
                 node: split.first,
                 store: store,
                 sessions: sessions,
-                editors: editors
+                editors: editors,
+                notes: notes
             )
             second.update(
                 node: split.second,
                 store: store,
                 sessions: sessions,
-                editors: editors
+                editors: editors,
+                notes: notes
             )
             splitView.setTheme(sessions.terminalTheme)
             splitView.setRatio(split.ratio)
@@ -248,15 +263,18 @@ private final class PaneTreeNodeController {
     }
 
     private static func presentation(
-        forPaneID paneID: UUID,
+        for pane: TerminalPane,
         sessions: TerminalSessionPool,
         editors: EditorSessionPool
     ) -> PaneLeafPresentation {
-        if let previewURL = sessions.previewURL(for: paneID) {
+        if let previewURL = sessions.previewURL(for: pane.id) {
             return .pdf(previewURL)
         }
-        if editors.isEditorPresented(inPaneID: paneID) {
+        if editors.isEditorPresented(inPaneID: pane.id) {
             return .editor
+        }
+        if case .note(let noteID) = pane.content {
+            return .note(noteID)
         }
         return .terminal
     }
@@ -266,7 +284,8 @@ private final class PaneTreeNodeController {
         presentation: PaneLeafPresentation,
         store: WorkspaceStore,
         sessions: TerminalSessionPool,
-        editors: EditorSessionPool
+        editors: EditorSessionPool,
+        notes: NoteSessionPool
     ) -> AnyView {
         if presentation == .editor,
             let editorSession = editors.session(forPaneID: pane.id)
@@ -282,6 +301,21 @@ private final class PaneTreeNodeController {
                 .id(pane.id)
             )
         }
+        if case .note(let noteID) = presentation,
+            let note = store.document.note(withID: noteID)
+        {
+            return AnyView(
+                NotePaneContainerView(
+                    pane: pane,
+                    noteID: note.id,
+                    store: store,
+                    terminalSessions: sessions,
+                    editorSessions: editors,
+                    noteSession: notes.session(for: note)
+                )
+                .id(pane.id)
+            )
+        }
         return AnyView(
             TerminalPaneView(
                 pane: pane,
@@ -291,6 +325,88 @@ private final class PaneTreeNodeController {
             )
             .id(pane.id)
         )
+    }
+}
+
+private struct NotePaneContainerView: View {
+    let pane: TerminalPane
+    let noteID: UUID
+    @ObservedObject var store: WorkspaceStore
+    @ObservedObject var terminalSessions: TerminalSessionPool
+    @ObservedObject var editorSessions: EditorSessionPool
+    @ObservedObject var noteSession: NoteDocumentSession
+
+    var body: some View {
+        Group {
+            if let note = store.document.note(withID: noteID) {
+                notePane(note)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(noteName) note pane")
+    }
+
+    private func notePane(_ note: ProjectNote) -> some View {
+        VStack(spacing: 0) {
+            notePaneHeader(note)
+                .frame(height: 28)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .contentShape(Rectangle())
+                .onTapGesture(perform: focusPane)
+
+            ProjectNoteView(
+                note: note,
+                session: noteSession,
+                onFocus: focusPane,
+                isPaneFocused: store.focusedPaneID == pane.id
+            )
+        }
+    }
+
+    private func notePaneHeader(_ note: ProjectNote) -> some View {
+        GeometryReader { geometry in
+            HStack(spacing: geometry.size.width >= 120 ? 8 : 4) {
+                if geometry.size.width >= 120 {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 11, weight: .medium))
+                    Text(note.name)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                } else {
+                    Spacer(minLength: 0)
+                }
+
+                Button {
+                    store.showTerminal(inPaneWithID: pane.id)
+                    terminalSessions.focus(paneID: pane.id)
+                } label: {
+                    Image(systemName: "terminal")
+                }
+                .buttonStyle(.plain)
+                .help("Return to Terminal")
+                .accessibilityLabel("Return note pane to terminal")
+
+                Button {
+                    editorSessions.requestClosePane(withID: pane.id)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .help("Close Pane")
+                .accessibilityLabel("Close note pane")
+            }
+            .font(.system(size: 11))
+            .padding(.horizontal, geometry.size.width >= 120 ? 9 : 4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var noteName: String {
+        store.document.note(withID: noteID)?.name ?? "Note"
+    }
+
+    private func focusPane() {
+        store.focusPane(withID: pane.id)
     }
 }
 

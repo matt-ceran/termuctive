@@ -39,6 +39,7 @@ struct TermuctiveApp: App {
             .preferredColorScheme(appearance.appTheme.colorScheme)
             .onAppear {
                 applicationDelegate.editorSessions = editors
+                applicationDelegate.noteSessions = notes
             }
             .onChange(of: appearance.terminalTheme) { _, theme in
                 sessions.setTerminalTheme(theme)
@@ -98,7 +99,47 @@ struct TermuctiveApp: App {
                     toggleFocusedPaneEditor()
                 }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(store.focusedPaneID == nil)
+                .disabled(!canToggleFocusedPaneEditor)
+
+                Divider()
+
+                Button("New Note Pane on Right") {
+                    store.addNotePane(axis: .horizontal)
+                }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+                .disabled(!store.canAddPane)
+
+                Button("New Note Pane Below") {
+                    store.addNotePane(axis: .vertical)
+                }
+                .keyboardShortcut("n", modifiers: [.command, .option, .shift])
+                .disabled(!store.canAddPane)
+
+                if let project = store.selectedProject,
+                    !project.notes.isEmpty
+                {
+                    Menu("Open Existing Note in Pane") {
+                        ForEach(project.notes) { note in
+                            Menu(note.name) {
+                                Button("Open on Right") {
+                                    store.openNoteInNewPane(
+                                        noteID: note.id,
+                                        inProjectWithID: project.id,
+                                        axis: .horizontal
+                                    )
+                                }
+                                Button("Open Below") {
+                                    store.openNoteInNewPane(
+                                        noteID: note.id,
+                                        inProjectWithID: project.id,
+                                        axis: .vertical
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    .disabled(!store.canAddPane)
+                }
 
                 Divider()
 
@@ -231,15 +272,21 @@ struct TermuctiveApp: App {
     }
 
     private var canSaveFocusedDocument: Bool {
-        if let note = store.selectedNote {
+        switch focusedDocumentSaveTarget {
+        case .editor(let paneID):
+            return editors.session(forPaneID: paneID)?.selectedBuffer?.canSave == true
+        case .note(let noteID):
+            guard let note = store.document.note(withID: noteID) else {
+                return false
+            }
             return notes.session(for: note).canSave
-        }
-        guard let focusedPaneID = store.focusedPaneID,
-            let buffer = editors.session(forPaneID: focusedPaneID)?.selectedBuffer
-        else {
+        case .none:
             return false
         }
-        return buffer.canSave
+    }
+
+    private var canToggleFocusedPaneEditor: Bool {
+        isFocusedPaneEditorPresented || store.canPresentEditorInFocusedPane
     }
 
     private func toggleFocusedPaneEditor() {
@@ -250,24 +297,37 @@ struct TermuctiveApp: App {
             editors.dismissEditor(inPaneID: focusedPaneID)
             sessions.focus(paneID: focusedPaneID)
         } else {
+            guard store.canPresentEditorInFocusedPane else {
+                return
+            }
             sessions.dismissPDFPreview(inPaneID: focusedPaneID)
             editors.presentEditor(inPaneID: focusedPaneID)
         }
     }
 
     private func saveFocusedDocument() {
-        if let note = store.selectedNote {
-            notes.save(noteID: note.id)
-            return
+        switch focusedDocumentSaveTarget {
+        case .editor(let paneID):
+            guard let session = editors.session(forPaneID: paneID) else {
+                return
+            }
+            Task {
+                await session.saveSelectedBuffer()
+            }
+        case .note(let noteID):
+            notes.save(noteID: noteID)
+        case .none:
+            break
         }
-        guard let focusedPaneID = store.focusedPaneID,
-            let session = editors.session(forPaneID: focusedPaneID)
-        else {
-            return
-        }
-        Task {
-            await session.saveSelectedBuffer()
-        }
+    }
+
+    private var focusedDocumentSaveTarget: FocusedDocumentSaveTarget {
+        FocusedDocumentSaveTarget.resolve(
+            focusedPaneID: store.focusedPaneID,
+            focusedPaneNoteID: store.focusedPaneNote?.id,
+            selectedNoteID: store.selectedNote?.id,
+            isFocusedPaneEditorPresented: isFocusedPaneEditorPresented
+        )
     }
 
     private func setSidebarVisible(_ isVisible: Bool) {
@@ -280,5 +340,31 @@ struct TermuctiveApp: App {
         withAnimation(SidebarMotion.panel) {
             store.isSidebarVisible = isVisible
         }
+    }
+}
+
+enum FocusedDocumentSaveTarget: Equatable {
+    case editor(UUID)
+    case note(UUID)
+    case none
+
+    static func resolve(
+        focusedPaneID: UUID?,
+        focusedPaneNoteID: UUID?,
+        selectedNoteID: UUID?,
+        isFocusedPaneEditorPresented: Bool
+    ) -> FocusedDocumentSaveTarget {
+        if isFocusedPaneEditorPresented,
+            let focusedPaneID
+        {
+            return .editor(focusedPaneID)
+        }
+        if let focusedPaneNoteID {
+            return .note(focusedPaneNoteID)
+        }
+        if let selectedNoteID {
+            return .note(selectedNoteID)
+        }
+        return .none
     }
 }

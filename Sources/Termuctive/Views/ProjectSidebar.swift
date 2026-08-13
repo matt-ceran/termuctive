@@ -258,6 +258,7 @@ struct ProjectSidebar: View {
         }
         .contextMenu {
             creationActions(for: entry)
+            paneActions(for: entry)
             if entry.canContainItems {
                 Divider()
             }
@@ -268,6 +269,29 @@ struct ProjectSidebar: View {
             Button("\(entry.removeLabel)...", role: .destructive) {
                 pendingRemoval = entry
             }
+        }
+    }
+
+    @ViewBuilder
+    private func paneActions(for entry: SidebarEntry) -> some View {
+        if case .note(let noteID, let projectID, _) = entry {
+            Divider()
+            Button("Open in Pane on Right") {
+                store.openNoteInNewPane(
+                    noteID: noteID,
+                    inProjectWithID: projectID,
+                    axis: .horizontal
+                )
+            }
+            .disabled(!store.canAddPane(inProjectWithID: projectID))
+            Button("Open in Pane Below") {
+                store.openNoteInNewPane(
+                    noteID: noteID,
+                    inProjectWithID: projectID,
+                    axis: .vertical
+                )
+            }
+            .disabled(!store.canAddPane(inProjectWithID: projectID))
         }
     }
 

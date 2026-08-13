@@ -40,6 +40,34 @@ final class WorkspaceStore: ObservableObject {
         document.selectedItem
     }
 
+    var focusedPane: TerminalPane? {
+        guard let focusedPaneID else {
+            return nil
+        }
+        return selectedSpace?.layout.terminal(withID: focusedPaneID)
+    }
+
+    var focusedPaneNote: ProjectNote? {
+        guard let focusedPane,
+            case .note(let noteID) = focusedPane.content
+        else {
+            return nil
+        }
+        return document.note(withID: noteID)
+    }
+
+    var canAddPane: Bool {
+        selectedProject.map { canAddPane(inProjectWithID: $0.id) } ?? false
+    }
+
+    var canPresentEditorInFocusedPane: Bool {
+        focusedPane?.content == .terminal
+    }
+
+    func canAddPane(inProjectWithID projectID: UUID) -> Bool {
+        document.projects.first { $0.id == projectID }?.preferredSpace != nil
+    }
+
     var canCloseFocusedPane: Bool {
         guard let focusedPaneID else {
             return false
@@ -346,6 +374,120 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
+    @discardableResult
+    func addNotePane(axis: PaneAxis) -> UUID? {
+        guard let projectIndex = selectedProjectIndex,
+            let target = paneInsertionTarget(inProjectAt: projectIndex)
+        else {
+            return nil
+        }
+
+        var project = document.projects[projectIndex]
+        let parentID = preferredNoteFolderID(
+            in: project,
+            fallbackSpaceID: target.space.id
+        )
+        let note = ProjectNote(
+            name: uniqueName(
+                base: "Note",
+                existing: project.childNames(inFolderWithID: parentID) ?? []
+            )
+        )
+        let pane = TerminalPane(
+            title: defaultShellName,
+            workingDirectory: target.sourcePane.workingDirectory,
+            content: .note(note.id)
+        )
+        guard
+            let layout = target.space.layout.splittingTerminal(
+                withID: target.sourcePane.id,
+                axis: axis,
+                newPane: pane
+            ),
+            project.append(
+                .note(note),
+                toFolderWithID: parentID
+            ),
+            project.updateSpace(
+                withID: target.space.id,
+                update: { $0.layout = layout }
+            )
+        else {
+            return nil
+        }
+        document.projects[projectIndex] = project
+
+        activateSpaceAfterPaneInsertion(
+            projectIndex: projectIndex,
+            spaceID: target.space.id,
+            focusedPaneID: pane.id,
+            expandedFolderID: parentID
+        )
+        save()
+        return pane.id
+    }
+
+    @discardableResult
+    func openNoteInNewPane(
+        noteID: UUID,
+        inProjectWithID projectID: UUID,
+        axis: PaneAxis
+    ) -> UUID? {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
+            document.projects[projectIndex].note(withID: noteID) != nil
+        else {
+            return nil
+        }
+
+        let targetProject = document.projects[projectIndex]
+        let expandedFolderID =
+            targetProject
+            .ancestorFolderIDs(forItemWithID: noteID)
+            .last
+        if let existing = targetProject.paneLocation(showingNoteWithID: noteID) {
+            activateSpaceAfterPaneInsertion(
+                projectIndex: projectIndex,
+                spaceID: existing.space.id,
+                focusedPaneID: existing.pane.id,
+                expandedFolderID: expandedFolderID
+            )
+            save()
+            return existing.pane.id
+        }
+
+        guard let target = paneInsertionTarget(inProjectAt: projectIndex) else {
+            return nil
+        }
+
+        let pane = TerminalPane(
+            title: defaultShellName,
+            workingDirectory: target.sourcePane.workingDirectory,
+            content: .note(noteID)
+        )
+        guard
+            let layout = target.space.layout.splittingTerminal(
+                withID: target.sourcePane.id,
+                axis: axis,
+                newPane: pane
+            ),
+            document.projects[projectIndex].updateSpace(
+                withID: target.space.id,
+                update: { $0.layout = layout }
+            )
+        else {
+            return nil
+        }
+
+        activateSpaceAfterPaneInsertion(
+            projectIndex: projectIndex,
+            spaceID: target.space.id,
+            focusedPaneID: pane.id,
+            expandedFolderID: expandedFolderID
+        )
+        save()
+        return pane.id
+    }
+
     func addSpace(toFolderWithID parentID: UUID?, inProjectWithID projectID: UUID) {
         guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }) else {
             return
@@ -429,6 +571,7 @@ final class WorkspaceStore: ObservableObject {
         let removedNoteIDs = document.projects[projectIndex].noteIDs
         let wasSelected = document.selectedProjectID == id
         document.projects.remove(at: projectIndex)
+        document.clearPaneNoteReferences(in: removedNoteIDs)
         expandedProjectIDs.formIntersection(document.projects.map(\.id))
         expandedFolderIDs.formIntersection(document.folderIDs)
 
@@ -457,6 +600,7 @@ final class WorkspaceStore: ObservableObject {
             return []
         }
         let removedNoteIDs = removedItem.noteIDs
+        document.clearPaneNoteReferences(in: removedNoteIDs)
 
         normalizeLastSelectedSpace(forProjectAt: projectIndex)
         normalizeLastSelectedItem(forProjectAt: projectIndex)
@@ -517,32 +661,53 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
+    func showTerminal(inPaneWithID paneID: UUID) {
+        guard let space = selectedSpace,
+            space.layout.terminalIDs.contains(paneID)
+        else {
+            return
+        }
+        updateSelectedSpace { space in
+            space.layout = space.layout.settingContent(
+                forPaneID: paneID,
+                to: .terminal
+            )
+        }
+        focusedPaneID = paneID
+        save()
+    }
+
     func preparePDFPane(
         fromPaneID sourcePaneID: UUID,
         placement: PDFPanePlacement
     ) -> UUID? {
         guard let selectedSpace,
             selectedSpace.layout.terminalIDs.contains(sourcePaneID),
-            let sourcePane = selectedSpace.layout.terminal(withID: sourcePaneID)
+            let sourcePane = selectedSpace.layout.terminal(withID: sourcePaneID),
+            sourcePane.content == .terminal
         else {
             return nil
         }
 
         let orderedPaneIDs = selectedSpace.layout.orderedTerminalIDs
-        if orderedPaneIDs.count > 1 {
+        let reusablePaneIDs = orderedPaneIDs.filter { paneID in
+            paneID != sourcePaneID
+                && selectedSpace.layout.terminal(withID: paneID)?.content == .terminal
+        }
+        if !reusablePaneIDs.isEmpty {
             zoomedPaneID = nil
             switch placement {
             case .left:
-                return orderedPaneIDs.first
+                return reusablePaneIDs.first
             case .right:
-                return orderedPaneIDs.last
+                return reusablePaneIDs.last
             case .automatic:
                 guard let sourceIndex = orderedPaneIDs.firstIndex(of: sourcePaneID) else {
-                    return orderedPaneIDs.last
+                    return reusablePaneIDs.last
                 }
                 return sourceIndex < orderedPaneIDs.count / 2
-                    ? orderedPaneIDs.last
-                    : orderedPaneIDs.first
+                    ? reusablePaneIDs.last
+                    : reusablePaneIDs.first
             }
         }
 
@@ -716,6 +881,76 @@ final class WorkspaceStore: ObservableObject {
             return nil
         }
         return selectedFolderID
+    }
+
+    private func preferredNoteFolderID(
+        in project: TerminalProject,
+        fallbackSpaceID: UUID
+    ) -> UUID? {
+        if let folderID = validSelectedFolderID(in: project) {
+            return folderID
+        }
+        if let selectedItemID = document.selectedItemID,
+            project.item(withID: selectedItemID) != nil
+        {
+            return project.ancestorFolderIDs(forItemWithID: selectedItemID).last
+        }
+        return project.ancestorFolderIDs(forItemWithID: fallbackSpaceID).last
+    }
+
+    private func paneInsertionTarget(
+        inProjectAt projectIndex: Int
+    ) -> (space: TerminalSpace, sourcePane: TerminalPane)? {
+        let project = document.projects[projectIndex]
+        let space: TerminalSpace
+        if document.selectedProjectID == project.id,
+            let selectedSpace,
+            project.space(withID: selectedSpace.id) != nil
+        {
+            space = selectedSpace
+        } else if let preferredSpace = project.preferredSpace {
+            space = preferredSpace
+        } else {
+            return nil
+        }
+
+        let sourcePaneID: UUID
+        if document.selectedSpaceID == space.id,
+            let focusedPaneID,
+            space.layout.terminalIDs.contains(focusedPaneID)
+        {
+            sourcePaneID = focusedPaneID
+        } else {
+            sourcePaneID = space.layout.firstTerminalID
+        }
+        guard let sourcePane = space.layout.terminal(withID: sourcePaneID) else {
+            return nil
+        }
+        return (space, sourcePane)
+    }
+
+    private func activateSpaceAfterPaneInsertion(
+        projectIndex: Int,
+        spaceID: UUID,
+        focusedPaneID: UUID,
+        expandedFolderID: UUID?
+    ) {
+        let projectID = document.projects[projectIndex].id
+        document.projects[projectIndex].lastSelectedItemID = spaceID
+        document.projects[projectIndex].lastSelectedSpaceID = spaceID
+        document.selectedProjectID = projectID
+        document.selectedItemID = spaceID
+        document.selectedSpaceID = spaceID
+        expandedProjectIDs.insert(projectID)
+        expandedFolderIDs.formUnion(
+            document.projects[projectIndex].ancestorFolderIDs(forSpaceWithID: spaceID)
+        )
+        if let expandedFolderID {
+            expandedFolderIDs.insert(expandedFolderID)
+        }
+        selectedFolderID = nil
+        self.focusedPaneID = focusedPaneID
+        zoomedPaneID = nil
     }
 
     private func activateProject(at index: Int, preferredItemID: UUID? = nil) {

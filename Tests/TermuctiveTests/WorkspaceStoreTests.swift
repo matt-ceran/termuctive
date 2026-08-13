@@ -5,6 +5,34 @@ import XCTest
 
 @MainActor
 final class WorkspaceStoreTests: XCTestCase {
+    func testVisibleEditorTakesSavePriorityOverNoteBackingThePane() {
+        let paneID = UUID()
+        let noteID = UUID()
+
+        let target = FocusedDocumentSaveTarget.resolve(
+            focusedPaneID: paneID,
+            focusedPaneNoteID: noteID,
+            selectedNoteID: nil,
+            isFocusedPaneEditorPresented: true
+        )
+
+        XCTAssertEqual(target, .editor(paneID))
+    }
+
+    func testFocusedPaneNoteTakesSavePriorityOverSidebarNote() {
+        let paneNoteID = UUID()
+        let sidebarNoteID = UUID()
+
+        let target = FocusedDocumentSaveTarget.resolve(
+            focusedPaneID: UUID(),
+            focusedPaneNoteID: paneNoteID,
+            selectedNoteID: sidebarNoteID,
+            isFocusedPaneEditorPresented: false
+        )
+
+        XCTAssertEqual(target, .note(paneNoteID))
+    }
+
     func testAddingProjectCreatesAndPersistsInitialTerminalSpace() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
@@ -159,6 +187,120 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNil(store.focusedPaneID)
         XCTAssertEqual(store.document.terminalIDs, terminalIDs)
         XCTAssertTrue(store.expandedFolderIDs.contains(folderID))
+    }
+
+    func testAddingNotePaneCreatesSidebarNoteAndKeepsTerminalSpaceSelected() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let originalPaneID = try XCTUnwrap(store.focusedPaneID)
+        let spaceID = try XCTUnwrap(store.selectedSpace?.id)
+        persistence.savedDocuments.removeAll()
+
+        let notePaneID = try XCTUnwrap(store.addNotePane(axis: .horizontal))
+
+        let project = try XCTUnwrap(store.selectedProject)
+        let note = try XCTUnwrap(project.notes.first)
+        let notePane = try XCTUnwrap(
+            store.selectedSpace?.layout.terminal(withID: notePaneID)
+        )
+        XCTAssertEqual(project.notes.count, 1)
+        XCTAssertEqual(notePane.content, .note(note.id))
+        XCTAssertEqual(
+            store.selectedSpace?.layout.orderedTerminalIDs,
+            [originalPaneID, notePaneID]
+        )
+        XCTAssertEqual(store.document.selectedItemID, spaceID)
+        XCTAssertEqual(store.document.selectedSpaceID, spaceID)
+        XCTAssertNil(store.selectedNote)
+        XCTAssertEqual(store.focusedPaneID, notePaneID)
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
+    }
+
+    func testExistingSidebarNoteCanOpenInPaneWithoutDuplication() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        store.addNote()
+        let noteID = try XCTUnwrap(store.selectedNote?.id)
+        persistence.savedDocuments.removeAll()
+
+        let paneID = try XCTUnwrap(
+            store.openNoteInNewPane(
+                noteID: noteID,
+                inProjectWithID: projectID,
+                axis: .vertical
+            )
+        )
+
+        XCTAssertEqual(store.selectedProject?.notes.map(\.id), [noteID])
+        XCTAssertEqual(
+            store.selectedSpace?.layout.terminal(withID: paneID)?.content,
+            .note(noteID)
+        )
+        XCTAssertEqual(store.selectedSpace?.layout.terminalCount, 2)
+        XCTAssertEqual(store.focusedPaneID, paneID)
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
+    }
+
+    func testOpeningAnAlreadyVisibleNoteFocusesItsExistingPane() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        let firstPaneID = try XCTUnwrap(store.addNotePane(axis: .horizontal))
+        let noteID = try XCTUnwrap(store.focusedPaneNote?.id)
+        store.focusPreviousPane()
+        persistence.savedDocuments.removeAll()
+
+        let reopenedPaneID = try XCTUnwrap(
+            store.openNoteInNewPane(
+                noteID: noteID,
+                inProjectWithID: projectID,
+                axis: .vertical
+            )
+        )
+
+        XCTAssertEqual(reopenedPaneID, firstPaneID)
+        XCTAssertEqual(store.focusedPaneID, firstPaneID)
+        XCTAssertEqual(store.selectedSpace?.layout.terminalCount, 2)
+        XCTAssertEqual(store.selectedProject?.notes.map(\.id), [noteID])
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
+    }
+
+    func testPaneCapabilityUsesTheTargetProjectInsteadOfSelection() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/with-space"))
+        let projectWithSpaceID = try XCTUnwrap(store.selectedProject?.id)
+        store.addFolder()
+        let emptyFolderID = try XCTUnwrap(store.selectedProject?.id)
+
+        XCTAssertFalse(store.canAddPane)
+        XCTAssertTrue(store.canAddPane(inProjectWithID: projectWithSpaceID))
+        XCTAssertFalse(store.canAddPane(inProjectWithID: emptyFolderID))
+    }
+
+    func testRemovingSidebarNoteReturnsItsPaneToTerminalContent() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        let notePaneID = try XCTUnwrap(store.addNotePane(axis: .horizontal))
+        let noteID = try XCTUnwrap(store.focusedPaneNote?.id)
+        persistence.savedDocuments.removeAll()
+
+        let removedNoteIDs = store.removeItem(withID: noteID, inProject: projectID)
+
+        XCTAssertEqual(removedNoteIDs, [noteID])
+        XCTAssertTrue(store.selectedProject?.notes.isEmpty == true)
+        XCTAssertEqual(
+            store.selectedSpace?.layout.terminal(withID: notePaneID)?.content,
+            .terminal
+        )
+        XCTAssertEqual(store.focusedPaneID, notePaneID)
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
     }
 
     func testSwitchingProjectsRestoresNoteAndTerminalSelectionsIndependently() throws {
@@ -329,6 +471,35 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(
             store.selectedSpace?.layout.orderedTerminalIDs,
             [pdfPaneID, commandPaneID]
+        )
+        XCTAssertEqual(store.focusedPaneID, commandPaneID)
+    }
+
+    func testPreparingPDFDoesNotReplaceAnExistingNotePane() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let commandPaneID = try XCTUnwrap(store.focusedPaneID)
+        let notePaneID = try XCTUnwrap(store.addNotePane(axis: .horizontal))
+        let noteID = try XCTUnwrap(store.focusedPaneNote?.id)
+        store.focusPane(withID: commandPaneID)
+
+        let pdfPaneID = try XCTUnwrap(
+            store.preparePDFPane(
+                fromPaneID: commandPaneID,
+                placement: .right
+            )
+        )
+
+        XCTAssertNotEqual(pdfPaneID, notePaneID)
+        XCTAssertEqual(store.selectedSpace?.layout.terminalCount, 3)
+        XCTAssertEqual(
+            store.selectedSpace?.layout.terminal(withID: notePaneID)?.content,
+            .note(noteID)
+        )
+        XCTAssertEqual(
+            store.selectedSpace?.layout.terminal(withID: pdfPaneID)?.content,
+            .terminal
         )
         XCTAssertEqual(store.focusedPaneID, commandPaneID)
     }

@@ -168,13 +168,53 @@ struct WorkspaceView: View {
                 )
             }
             .buttonStyle(SquareIconButtonStyle())
-            .disabled(store.focusedPaneID == nil)
+            .disabled(!canToggleFocusedPaneEditor)
             .help(isFocusedPaneEditorPresented ? "Return to Terminal" : "Open IDE")
             .accessibilityLabel(
                 isFocusedPaneEditorPresented
                     ? "Return focused pane to terminal"
                     : "Open IDE in focused pane"
             )
+
+            Menu {
+                Button("New Note Pane on Right") {
+                    store.addNotePane(axis: .horizontal)
+                }
+                Button("New Note Pane Below") {
+                    store.addNotePane(axis: .vertical)
+                }
+                if let project = store.selectedProject,
+                    !project.notes.isEmpty
+                {
+                    Divider()
+                    ForEach(project.notes) { note in
+                        Menu(note.name) {
+                            Button("Open on Right") {
+                                store.openNoteInNewPane(
+                                    noteID: note.id,
+                                    inProjectWithID: project.id,
+                                    axis: .horizontal
+                                )
+                            }
+                            Button("Open Below") {
+                                store.openNoteInNewPane(
+                                    noteID: note.id,
+                                    inProjectWithID: project.id,
+                                    axis: .vertical
+                                )
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "note.text.badge.plus")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 30, height: 30)
+            .disabled(!store.canAddPane)
+            .help("Add Note Pane")
+            .accessibilityLabel("Add note pane")
 
             Button {
                 store.splitFocusedPane(axis: .horizontal)
@@ -242,14 +282,16 @@ struct WorkspaceView: View {
                     node: .terminal(pane),
                     store: store,
                     sessions: sessions,
-                    editors: editors
+                    editors: editors,
+                    notes: notes
                 )
             } else {
                 PaneTreeView(
                     node: space.layout,
                     store: store,
                     sessions: sessions,
-                    editors: editors
+                    editors: editors,
+                    notes: notes
                 )
             }
         } else {
@@ -299,6 +341,10 @@ struct WorkspaceView: View {
         return editors.isEditorPresented(inPaneID: focusedPaneID)
     }
 
+    private var canToggleFocusedPaneEditor: Bool {
+        isFocusedPaneEditorPresented || store.canPresentEditorInFocusedPane
+    }
+
     private var pendingPaneCloseTitle: String {
         guard let pendingClosePaneID = editors.pendingClosePaneID,
             let pane = store.selectedSpace?.layout.terminal(withID: pendingClosePaneID)
@@ -316,6 +362,9 @@ struct WorkspaceView: View {
             editors.dismissEditor(inPaneID: focusedPaneID)
             sessions.focus(paneID: focusedPaneID)
         } else {
+            guard store.canPresentEditorInFocusedPane else {
+                return
+            }
             sessions.dismissPDFPreview(inPaneID: focusedPaneID)
             editors.presentEditor(inPaneID: focusedPaneID)
         }
