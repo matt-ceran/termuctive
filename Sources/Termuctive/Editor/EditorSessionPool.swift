@@ -19,6 +19,7 @@ final class EditorPaneSession: ObservableObject, Identifiable {
 
     private var watcher: ProjectFileWatcher?
     private var eventRefreshTask: Task<Void, Never>?
+    private var bufferRefreshTask: Task<Void, Never>?
     private var treeRefreshGeneration = 0
 
     init(paneID: UUID, rootURL: URL) {
@@ -56,6 +57,7 @@ final class EditorPaneSession: ObservableObject, Identifiable {
         do {
             let buffer = try await EditorDocumentBuffer.open(url: standardizedURL)
             buffers.append(buffer)
+            startBufferRefreshPollingIfNeeded()
             selectedBufferID = buffer.id
             errorMessage = nil
             if collapseNavigator {
@@ -164,6 +166,8 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     func stop() {
         eventRefreshTask?.cancel()
         eventRefreshTask = nil
+        bufferRefreshTask?.cancel()
+        bufferRefreshTask = nil
         watcher?.stop()
         watcher = nil
     }
@@ -174,6 +178,10 @@ final class EditorPaneSession: ObservableObject, Identifiable {
         }
         let wasSelected = selectedBufferID == id
         buffers.remove(at: index)
+        if buffers.isEmpty {
+            bufferRefreshTask?.cancel()
+            bufferRefreshTask = nil
+        }
         guard wasSelected else {
             return
         }
@@ -206,6 +214,23 @@ final class EditorPaneSession: ObservableObject, Identifiable {
                 return
             }
             refreshFileTree()
+        }
+    }
+
+    private func startBufferRefreshPollingIfNeeded() {
+        guard bufferRefreshTask == nil else {
+            return
+        }
+        bufferRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, !Task.isCancelled else {
+                    return
+                }
+                for buffer in buffers {
+                    await buffer.refreshFromDisk()
+                }
+            }
         }
     }
 

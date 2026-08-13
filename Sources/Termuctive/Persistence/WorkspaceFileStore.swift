@@ -27,8 +27,13 @@ struct WorkspaceFileStore: WorkspacePersisting {
         }
 
         let data = try Data(contentsOf: fileURL)
-        let document = try JSONDecoder().decode(WorkspaceDocument.self, from: data)
-        guard document.schemaVersion == WorkspaceDocument.currentSchemaVersion else {
+        var document = try JSONDecoder().decode(WorkspaceDocument.self, from: data)
+        switch document.schemaVersion {
+        case 1:
+            document.schemaVersion = WorkspaceDocument.currentSchemaVersion
+        case WorkspaceDocument.currentSchemaVersion:
+            break
+        default:
             throw WorkspaceFileStoreError.unsupportedSchema(document.schemaVersion)
         }
         return document

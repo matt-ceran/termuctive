@@ -32,6 +32,14 @@ final class WorkspaceStore: ObservableObject {
         document.selectedSpace
     }
 
+    var selectedNote: ProjectNote? {
+        document.selectedNote
+    }
+
+    var selectedItem: WorkspaceItem? {
+        document.selectedItem
+    }
+
     var canCloseFocusedPane: Bool {
         guard let focusedPaneID else {
             return false
@@ -83,11 +91,13 @@ final class WorkspaceStore: ObservableObject {
             ),
             rootDirectory: path,
             items: [.space(space)],
+            lastSelectedItemID: space.id,
             lastSelectedSpaceID: space.id
         )
 
         document.projects.append(project)
         document.selectedProjectID = project.id
+        document.selectedItemID = space.id
         document.selectedSpaceID = space.id
         expandedProjectIDs.insert(project.id)
         selectedFolderID = nil
@@ -115,7 +125,9 @@ final class WorkspaceStore: ObservableObject {
         }
 
         document.projects[projectIndex].lastSelectedSpaceID = id
+        document.projects[projectIndex].lastSelectedItemID = id
         document.selectedProjectID = projectID
+        document.selectedItemID = id
         document.selectedSpaceID = id
         expandedProjectIDs.insert(projectID)
         expandedFolderIDs.formUnion(
@@ -123,6 +135,28 @@ final class WorkspaceStore: ObservableObject {
         )
         selectedFolderID = nil
         focusedPaneID = space.layout.firstTerminalID
+        zoomedPaneID = nil
+        save()
+    }
+
+    func selectNote(withID id: UUID, inProject projectID: UUID) {
+        guard
+            let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
+            document.projects[projectIndex].note(withID: id) != nil
+        else {
+            return
+        }
+
+        document.projects[projectIndex].lastSelectedItemID = id
+        document.selectedProjectID = projectID
+        document.selectedItemID = id
+        document.selectedSpaceID = nil
+        expandedProjectIDs.insert(projectID)
+        expandedFolderIDs.formUnion(
+            document.projects[projectIndex].ancestorFolderIDs(forItemWithID: id)
+        )
+        selectedFolderID = nil
+        focusedPaneID = nil
         zoomedPaneID = nil
         save()
     }
@@ -265,6 +299,53 @@ final class WorkspaceStore: ObservableObject {
         )
     }
 
+    func addNote() {
+        guard let project = selectedProject else {
+            return
+        }
+
+        addNote(
+            toFolderWithID: validSelectedFolderID(in: project),
+            inProjectWithID: project.id
+        )
+    }
+
+    func addNote(toFolderWithID parentID: UUID?, inProjectWithID projectID: UUID) {
+        guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }) else {
+            return
+        }
+        let project = document.projects[projectIndex]
+        guard parentID.map({ project.containsFolder(withID: $0) }) ?? true else {
+            return
+        }
+
+        let existingNames = project.childNames(inFolderWithID: parentID) ?? []
+        let note = ProjectNote(
+            name: uniqueName(base: "Note", existing: existingNames)
+        )
+        guard
+            document.projects[projectIndex].append(
+                .note(note),
+                toFolderWithID: parentID
+            )
+        else {
+            return
+        }
+
+        document.projects[projectIndex].lastSelectedItemID = note.id
+        document.selectedProjectID = projectID
+        document.selectedItemID = note.id
+        document.selectedSpaceID = nil
+        expandedProjectIDs.insert(projectID)
+        if let parentID {
+            expandedFolderIDs.insert(parentID)
+        }
+        selectedFolderID = nil
+        focusedPaneID = nil
+        zoomedPaneID = nil
+        save()
+    }
+
     func addSpace(toFolderWithID parentID: UUID?, inProjectWithID projectID: UUID) {
         guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }) else {
             return
@@ -293,7 +374,9 @@ final class WorkspaceStore: ObservableObject {
         }
 
         document.projects[projectIndex].lastSelectedSpaceID = space.id
+        document.projects[projectIndex].lastSelectedItemID = space.id
         document.selectedProjectID = projectID
+        document.selectedItemID = space.id
         document.selectedSpaceID = space.id
         expandedProjectIDs.insert(projectID)
         if let parentID {
@@ -338,10 +421,12 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
-    func removeProject(withID id: UUID) {
+    @discardableResult
+    func removeProject(withID id: UUID) -> Set<UUID> {
         guard let projectIndex = document.projects.firstIndex(where: { $0.id == id }) else {
-            return
+            return []
         }
+        let removedNoteIDs = document.projects[projectIndex].noteIDs
         let wasSelected = document.selectedProjectID == id
         document.projects.remove(at: projectIndex)
         expandedProjectIDs.formIntersection(document.projects.map(\.id))
@@ -351,25 +436,30 @@ final class WorkspaceStore: ObservableObject {
             selectedFolderID = nil
             guard !document.projects.isEmpty else {
                 document.selectedProjectID = nil
+                document.selectedItemID = nil
                 document.selectedSpaceID = nil
                 focusedPaneID = nil
                 zoomedPaneID = nil
                 save()
-                return
+                return removedNoteIDs
             }
             activateProject(at: min(projectIndex, document.projects.count - 1))
         }
         save()
+        return removedNoteIDs
     }
 
-    func removeItem(withID id: UUID, inProject projectID: UUID) {
+    @discardableResult
+    func removeItem(withID id: UUID, inProject projectID: UUID) -> Set<UUID> {
         guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
-            document.projects[projectIndex].removeItem(withID: id) != nil
+            let removedItem = document.projects[projectIndex].removeItem(withID: id)
         else {
-            return
+            return []
         }
+        let removedNoteIDs = removedItem.noteIDs
 
         normalizeLastSelectedSpace(forProjectAt: projectIndex)
+        normalizeLastSelectedItem(forProjectAt: projectIndex)
         expandedFolderIDs.formIntersection(document.folderIDs)
         if let selectedFolderID,
             !document.projects.contains(where: { $0.containsFolder(withID: selectedFolderID) })
@@ -378,13 +468,14 @@ final class WorkspaceStore: ObservableObject {
         }
 
         if document.selectedProjectID == projectID {
-            restoreActiveSpace(
+            restoreActiveItem(
                 inProjectAt: projectIndex,
-                preferredSpaceID: document.selectedSpaceID
+                preferredItemID: document.selectedItemID
             )
         }
         normalizeZoom()
         save()
+        return removedNoteIDs
     }
 
     func focusPane(withID id: UUID) {
@@ -505,6 +596,10 @@ final class WorkspaceStore: ObservableObject {
         document.projects.first { $0.id == projectID }?.terminalIDs ?? []
     }
 
+    func noteIDs(inProjectWithID projectID: UUID) -> Set<UUID> {
+        document.projects.first { $0.id == projectID }?.noteIDs ?? []
+    }
+
     func terminalIDs(
         inItemWithID itemID: UUID,
         inProjectWithID projectID: UUID
@@ -512,6 +607,15 @@ final class WorkspaceStore: ObservableObject {
         document.projects.first { $0.id == projectID }?
             .item(withID: itemID)?
             .terminalIDs ?? []
+    }
+
+    func noteIDs(
+        inItemWithID itemID: UUID,
+        inProjectWithID projectID: UUID
+    ) -> Set<UUID> {
+        document.projects.first { $0.id == projectID }?
+            .item(withID: itemID)?
+            .noteIDs ?? []
     }
 
     func closeFocusedPane() {
@@ -614,36 +718,44 @@ final class WorkspaceStore: ObservableObject {
         return selectedFolderID
     }
 
-    private func activateProject(at index: Int, preferredSpaceID: UUID? = nil) {
+    private func activateProject(at index: Int, preferredItemID: UUID? = nil) {
         zoomedPaneID = nil
         document.selectedProjectID = document.projects[index].id
         expandedProjectIDs.insert(document.projects[index].id)
-        restoreActiveSpace(
+        restoreActiveItem(
             inProjectAt: index,
-            preferredSpaceID: preferredSpaceID
-                ?? document.projects[index].lastSelectedSpaceID
+            preferredItemID: preferredItemID
+                ?? document.projects[index].lastSelectedItemID
         )
     }
 
-    private func restoreActiveSpace(inProjectAt index: Int, preferredSpaceID: UUID?) {
+    private func restoreActiveItem(inProjectAt index: Int, preferredItemID: UUID?) {
         let project = document.projects[index]
-        let space =
-            preferredSpaceID.flatMap { project.space(withID: $0) }
-            ?? project.preferredSpace
-        document.projects[index].lastSelectedSpaceID = space?.id
-        document.selectedSpaceID = space?.id
-        if let space {
+        let item =
+            preferredItemID.flatMap { project.item(withID: $0)?.selectableItem }
+            ?? project.preferredItem
+        document.projects[index].lastSelectedItemID = item?.id
+        document.selectedItemID = item?.id
+        if let item {
             expandedFolderIDs.formUnion(
-                project.ancestorFolderIDs(forSpaceWithID: space.id)
+                project.ancestorFolderIDs(forItemWithID: item.id)
             )
         }
 
+        guard case .space(let space) = item else {
+            document.selectedSpaceID = nil
+            focusedPaneID = nil
+            return
+        }
+
+        document.projects[index].lastSelectedSpaceID = space.id
+        document.selectedSpaceID = space.id
         if let focusedPaneID,
-            space?.layout.terminalIDs.contains(focusedPaneID) == true
+            space.layout.terminalIDs.contains(focusedPaneID)
         {
             return
         }
-        focusedPaneID = space?.layout.firstTerminalID
+        focusedPaneID = space.layout.firstTerminalID
     }
 
     private func normalizeLastSelectedSpace(forProjectAt index: Int) {
@@ -652,6 +764,16 @@ final class WorkspaceStore: ObservableObject {
             project.space(withID: lastSelectedSpaceID) != nil
         else {
             document.projects[index].lastSelectedSpaceID = project.firstSpace?.id
+            return
+        }
+    }
+
+    private func normalizeLastSelectedItem(forProjectAt index: Int) {
+        let project = document.projects[index]
+        guard let lastSelectedItemID = project.lastSelectedItemID,
+            project.item(withID: lastSelectedItemID)?.selectableItem != nil
+        else {
+            document.projects[index].lastSelectedItemID = project.preferredItem?.id
             return
         }
     }
@@ -734,10 +856,12 @@ final class WorkspaceStore: ObservableObject {
     private func normalizeSelection() {
         for index in document.projects.indices {
             normalizeLastSelectedSpace(forProjectAt: index)
+            normalizeLastSelectedItem(forProjectAt: index)
         }
 
         guard !document.projects.isEmpty else {
             document.selectedProjectID = nil
+            document.selectedItemID = nil
             document.selectedSpaceID = nil
             focusedPaneID = nil
             return
@@ -749,7 +873,7 @@ final class WorkspaceStore: ObservableObject {
             } ?? 0
         activateProject(
             at: projectIndex,
-            preferredSpaceID: document.selectedSpaceID
+            preferredItemID: document.selectedItemID ?? document.selectedSpaceID
         )
     }
 

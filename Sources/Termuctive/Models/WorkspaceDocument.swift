@@ -26,12 +26,15 @@ struct WorkspaceFolder: Codable, Equatable, Identifiable {
 
 indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
     case folder(WorkspaceFolder)
+    case note(ProjectNote)
     case space(TerminalSpace)
 
     var id: UUID {
         switch self {
         case .folder(let folder):
             folder.id
+        case .note(let note):
+            note.id
         case .space(let space):
             space.id
         }
@@ -41,6 +44,8 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         switch self {
         case .folder(let folder):
             folder.name
+        case .note(let note):
+            note.name
         case .space(let space):
             space.name
         }
@@ -50,8 +55,19 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         switch self {
         case .space(let space):
             space
+        case .note:
+            nil
         case .folder(let folder):
             folder.children.lazy.compactMap(\.firstSpace).first
+        }
+    }
+
+    var firstSelectableItem: WorkspaceItem? {
+        switch self {
+        case .space, .note:
+            self
+        case .folder(let folder):
+            folder.children.lazy.compactMap(\.firstSelectableItem).first
         }
     }
 
@@ -59,6 +75,8 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         switch self {
         case .space(let space):
             return space.layout.terminalIDs
+        case .note:
+            return []
         case .folder(let folder):
             return folder.children.reduce(into: Set<UUID>()) { ids, child in
                 ids.formUnion(child.terminalIDs)
@@ -70,14 +88,31 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         switch self {
         case .space(let space):
             [space]
+        case .note:
+            []
         case .folder(let folder):
             folder.children.flatMap(\.terminalSpaces)
         }
     }
 
-    var folderIDs: Set<UUID> {
+    var notes: [ProjectNote] {
         switch self {
         case .space:
+            []
+        case .note(let note):
+            [note]
+        case .folder(let folder):
+            folder.children.flatMap(\.notes)
+        }
+    }
+
+    var noteIDs: Set<UUID> {
+        Set(notes.map(\.id))
+    }
+
+    var folderIDs: Set<UUID> {
+        switch self {
+        case .space, .note:
             return []
         case .folder(let folder):
             return folder.children.reduce(into: Set([folder.id])) { ids, child in
@@ -90,8 +125,21 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         switch self {
         case .space(let space):
             space.id == id ? space : nil
+        case .note:
+            nil
         case .folder(let folder):
             folder.children.lazy.compactMap { $0.space(withID: id) }.first
+        }
+    }
+
+    func note(withID id: UUID) -> ProjectNote? {
+        switch self {
+        case .space:
+            nil
+        case .note(let note):
+            note.id == id ? note : nil
+        case .folder(let folder):
+            folder.children.lazy.compactMap { $0.note(withID: id) }.first
         }
     }
 
@@ -99,6 +147,8 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         switch self {
         case .space(let space):
             return space.layout.terminal(withID: id)
+        case .note:
+            return nil
         case .folder(let folder):
             return folder.children.lazy.compactMap { $0.terminal(withID: id) }.first
         }
@@ -114,13 +164,13 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         return folder.children.lazy.compactMap { $0.item(withID: id) }.first
     }
 
-    func ancestorFolderIDs(forSpaceWithID id: UUID) -> [UUID]? {
+    func ancestorFolderIDs(forItemWithID id: UUID) -> [UUID]? {
         switch self {
-        case .space(let space):
-            return space.id == id ? [] : nil
+        case .space, .note:
+            return self.id == id ? [] : nil
         case .folder(let folder):
             for child in folder.children {
-                if let ancestors = child.ancestorFolderIDs(forSpaceWithID: id) {
+                if let ancestors = child.ancestorFolderIDs(forItemWithID: id) {
                     return [folder.id] + ancestors
                 }
             }
@@ -128,9 +178,13 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         }
     }
 
+    func ancestorFolderIDs(forSpaceWithID id: UUID) -> [UUID]? {
+        ancestorFolderIDs(forItemWithID: id)
+    }
+
     func containsFolder(withID id: UUID) -> Bool {
         switch self {
-        case .space:
+        case .space, .note:
             return false
         case .folder(let folder):
             return folder.id == id
@@ -140,7 +194,7 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
 
     func childNames(inFolderWithID id: UUID) -> [String]? {
         switch self {
-        case .space:
+        case .space, .note:
             return nil
         case .folder(let folder):
             if folder.id == id {
@@ -152,7 +206,7 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
 
     func siblingNames(forItemWithID id: UUID) -> [String]? {
         switch self {
-        case .space:
+        case .space, .note:
             return nil
         case .folder(let folder):
             if folder.children.contains(where: { $0.id == id }) {
@@ -174,6 +228,9 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
             update(&space)
             self = .space(space)
             return true
+
+        case .note:
+            return false
 
         case .folder(var folder):
             for index in folder.children.indices {
@@ -204,6 +261,9 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
             self = .space(space)
             return true
 
+        case .note:
+            return false
+
         case .folder(var folder):
             for index in folder.children.indices {
                 if folder.children[index].updateTerminal(
@@ -229,6 +289,16 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
             }
             space.name = name
             self = .space(space)
+            return true
+
+        case .note(var note):
+            guard note.id == id,
+                note.name != name
+            else {
+                return false
+            }
+            note.name = name
+            self = .note(note)
             return true
 
         case .folder(var folder):
@@ -272,7 +342,7 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
 
     mutating func append(_ item: WorkspaceItem, toFolderWithID folderID: UUID) -> Bool {
         switch self {
-        case .space:
+        case .space, .note:
             return false
         case .folder(var folder):
             if folder.id == folderID {
@@ -303,6 +373,7 @@ struct TerminalProject: Codable, Equatable, Identifiable {
     var name: String
     var rootDirectory: String
     var items: [WorkspaceItem]
+    var lastSelectedItemID: UUID?
     var lastSelectedSpaceID: UUID?
 
     init(
@@ -311,6 +382,7 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         name: String,
         rootDirectory: String,
         items: [WorkspaceItem] = [],
+        lastSelectedItemID: UUID? = nil,
         lastSelectedSpaceID: UUID? = nil
     ) {
         self.id = id
@@ -318,6 +390,7 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         self.name = name
         self.rootDirectory = rootDirectory
         self.items = items
+        self.lastSelectedItemID = lastSelectedItemID ?? lastSelectedSpaceID
         self.lastSelectedSpaceID = lastSelectedSpaceID
     }
 
@@ -327,6 +400,7 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         case name
         case rootDirectory
         case items
+        case lastSelectedItemID
         case lastSelectedSpaceID
     }
 
@@ -338,6 +412,9 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         rootDirectory = try container.decode(String.self, forKey: .rootDirectory)
         items = try container.decode([WorkspaceItem].self, forKey: .items)
         lastSelectedSpaceID = try container.decodeIfPresent(UUID.self, forKey: .lastSelectedSpaceID)
+        lastSelectedItemID =
+            try container.decodeIfPresent(UUID.self, forKey: .lastSelectedItemID)
+            ?? lastSelectedSpaceID
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -347,11 +424,16 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         try container.encode(name, forKey: .name)
         try container.encode(rootDirectory, forKey: .rootDirectory)
         try container.encode(items, forKey: .items)
+        try container.encodeIfPresent(lastSelectedItemID, forKey: .lastSelectedItemID)
         try container.encodeIfPresent(lastSelectedSpaceID, forKey: .lastSelectedSpaceID)
     }
 
     var firstSpace: TerminalSpace? {
         items.lazy.compactMap(\.firstSpace).first
+    }
+
+    var firstSelectableItem: WorkspaceItem? {
+        items.lazy.compactMap(\.firstSelectableItem).first
     }
 
     var terminalIDs: Set<UUID> {
@@ -362,6 +444,14 @@ struct TerminalProject: Codable, Equatable, Identifiable {
 
     var terminalSpaces: [TerminalSpace] {
         items.flatMap(\.terminalSpaces)
+    }
+
+    var notes: [ProjectNote] {
+        items.flatMap(\.notes)
+    }
+
+    var noteIDs: Set<UUID> {
+        Set(notes.map(\.id))
     }
 
     var folderIDs: Set<UUID> {
@@ -379,8 +469,26 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         return firstSpace
     }
 
+    var preferredItem: WorkspaceItem? {
+        if let lastSelectedItemID,
+            let item = item(withID: lastSelectedItemID)?.selectableItem
+        {
+            return item
+        }
+        if let lastSelectedSpaceID,
+            let item = item(withID: lastSelectedSpaceID)?.selectableItem
+        {
+            return item
+        }
+        return firstSelectableItem
+    }
+
     func space(withID id: UUID) -> TerminalSpace? {
         items.lazy.compactMap { $0.space(withID: id) }.first
+    }
+
+    func note(withID id: UUID) -> ProjectNote? {
+        items.lazy.compactMap { $0.note(withID: id) }.first
     }
 
     func terminal(withID id: UUID) -> TerminalPane? {
@@ -392,7 +500,11 @@ struct TerminalProject: Codable, Equatable, Identifiable {
     }
 
     func ancestorFolderIDs(forSpaceWithID id: UUID) -> [UUID] {
-        items.lazy.compactMap { $0.ancestorFolderIDs(forSpaceWithID: id) }.first ?? []
+        ancestorFolderIDs(forItemWithID: id)
+    }
+
+    func ancestorFolderIDs(forItemWithID id: UUID) -> [UUID] {
+        items.lazy.compactMap { $0.ancestorFolderIDs(forItemWithID: id) }.first ?? []
     }
 
     func containsFolder(withID id: UUID) -> Bool {
@@ -479,24 +591,66 @@ struct TerminalProject: Codable, Equatable, Identifiable {
     }
 }
 
+extension WorkspaceItem {
+    var selectableItem: WorkspaceItem? {
+        switch self {
+        case .space, .note:
+            self
+        case .folder:
+            nil
+        }
+    }
+}
+
 struct WorkspaceDocument: Codable, Equatable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     var schemaVersion: Int
     var projects: [TerminalProject]
     var selectedProjectID: UUID?
+    var selectedItemID: UUID?
     var selectedSpaceID: UUID?
 
     init(
         schemaVersion: Int = currentSchemaVersion,
         projects: [TerminalProject] = [],
         selectedProjectID: UUID? = nil,
+        selectedItemID: UUID? = nil,
         selectedSpaceID: UUID? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.projects = projects
         self.selectedProjectID = selectedProjectID
+        self.selectedItemID = selectedItemID ?? selectedSpaceID
         self.selectedSpaceID = selectedSpaceID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case projects
+        case selectedProjectID
+        case selectedItemID
+        case selectedSpaceID
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        projects = try container.decode([TerminalProject].self, forKey: .projects)
+        selectedProjectID = try container.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
+        selectedSpaceID = try container.decodeIfPresent(UUID.self, forKey: .selectedSpaceID)
+        selectedItemID =
+            try container.decodeIfPresent(UUID.self, forKey: .selectedItemID)
+            ?? selectedSpaceID
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(projects, forKey: .projects)
+        try container.encodeIfPresent(selectedProjectID, forKey: .selectedProjectID)
+        try container.encodeIfPresent(selectedItemID, forKey: .selectedItemID)
+        try container.encodeIfPresent(selectedSpaceID, forKey: .selectedSpaceID)
     }
 
     var selectedProject: TerminalProject? {
@@ -512,6 +666,12 @@ struct WorkspaceDocument: Codable, Equatable {
         }
     }
 
+    var noteIDs: Set<UUID> {
+        projects.reduce(into: Set<UUID>()) { ids, project in
+            ids.formUnion(project.noteIDs)
+        }
+    }
+
     var folderIDs: Set<UUID> {
         projects.reduce(into: Set<UUID>()) { ids, project in
             ids.formUnion(project.folderIDs)
@@ -523,6 +683,20 @@ struct WorkspaceDocument: Codable, Equatable {
             return nil
         }
         return selectedProject?.space(withID: selectedSpaceID)
+    }
+
+    var selectedItem: WorkspaceItem? {
+        guard let selectedItemID else {
+            return nil
+        }
+        return selectedProject?.item(withID: selectedItemID)?.selectableItem
+    }
+
+    var selectedNote: ProjectNote? {
+        guard let selectedItemID else {
+            return nil
+        }
+        return selectedProject?.note(withID: selectedItemID)
     }
 
     func terminal(withID id: UUID) -> TerminalPane? {

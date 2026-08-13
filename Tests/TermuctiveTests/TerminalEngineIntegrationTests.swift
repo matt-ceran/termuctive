@@ -197,15 +197,15 @@ final class TerminalEngineIntegrationTests: XCTestCase {
     }
 
     func testCodexStyleStreamingDoesNotDelayEscapeInput() async throws {
-        let persistence = TerminalTestPersistence()
-        let store = WorkspaceStore(persistence: persistence)
-        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
-        let layout = try XCTUnwrap(store.selectedSpace?.layout)
-        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
-        let sessions = TerminalSessionPool(store: store)
-        let terminal = sessions.terminalView(for: pane)
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 900, height: 600)
+        )
+        let processDelegate = TerminalTestDelegate(testCase: self)
+        terminal.processDelegate = processDelegate
         defer {
-            sessions.terminateAll()
+            if terminal.process.running {
+                terminal.terminate()
+            }
         }
 
         let window = NSWindow(
@@ -218,13 +218,17 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         window.contentView = container
         terminal.frame = container.bounds
         container.addSubview(terminal)
-        sessions.focus(paneID: pane.id)
-
-        terminal.send(
-            txt: "printf 'TERMUCTIVE_ESCAPE_%s\\n' READY; "
-                + "saved_tty=$(stty -g); stty raw -echo; "
-                + "escape_byte=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' '); "
-                + "stty \"$saved_tty\"; printf '\\nTERMUCTIVE_ESCAPE_BYTE_%s\\n' \"$escape_byte\"\n"
+        window.makeFirstResponder(terminal)
+        terminal.startProcess(
+            executable: "/bin/sh",
+            args: [
+                "-c",
+                "saved_tty=$(stty -g); stty raw -echo; "
+                    + "printf 'TERMUCTIVE_ESCAPE_READY\\n'; "
+                    + "escape_byte=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' '); "
+                    + "stty \"$saved_tty\"; "
+                    + "printf '\\nTERMUCTIVE_ESCAPE_BYTE_%s\\n' \"$escape_byte\"",
+            ]
         )
         _ = try await terminalOutput(
             from: terminal,
@@ -263,6 +267,7 @@ final class TerminalEngineIntegrationTests: XCTestCase {
             containing: ["TERMUCTIVE_ESCAPE_BYTE_1b"],
             timeout: 5
         )
+        await fulfillment(of: [processDelegate.terminated], timeout: 5)
         let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
 
         XCTAssertTrue(output.contains("TERMUCTIVE_ESCAPE_BYTE_1b"))
@@ -337,15 +342,15 @@ final class TerminalEngineIntegrationTests: XCTestCase {
     }
 
     func testMouseClickReportingStillReachesTerminalApplication() async throws {
-        let persistence = TerminalTestPersistence()
-        let store = WorkspaceStore(persistence: persistence)
-        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
-        let layout = try XCTUnwrap(store.selectedSpace?.layout)
-        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
-        let sessions = TerminalSessionPool(store: store)
-        let terminal = sessions.terminalView(for: pane)
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 900, height: 600)
+        )
+        let processDelegate = TerminalTestDelegate(testCase: self)
+        terminal.processDelegate = processDelegate
         defer {
-            sessions.terminateAll()
+            if terminal.process.running {
+                terminal.terminate()
+            }
         }
 
         let window = NSWindow(
@@ -358,13 +363,17 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         window.contentView = container
         terminal.frame = container.bounds
         container.addSubview(terminal)
-
-        terminal.send(
-            txt: "saved_tty=$(stty -g); stty raw -echo; "
-                + "printf '\\033[?1000hTERMUCTIVE_MOUSE_%s\\n' READY; "
-                + "mouse_byte=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' '); "
-                + "stty \"$saved_tty\"; "
-                + "printf '\\033[?1000l\\nTERMUCTIVE_MOUSE_BYTE_%s\\n' \"$mouse_byte\"\n"
+        window.makeFirstResponder(terminal)
+        terminal.startProcess(
+            executable: "/bin/sh",
+            args: [
+                "-c",
+                "saved_tty=$(stty -g); stty raw -echo; "
+                    + "printf '\\033[?1000hTERMUCTIVE_MOUSE_READY\\n'; "
+                    + "mouse_byte=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' '); "
+                    + "stty \"$saved_tty\"; "
+                    + "printf '\\033[?1000l\\nTERMUCTIVE_MOUSE_BYTE_%s\\n' \"$mouse_byte\"",
+            ]
         )
         _ = try await terminalOutput(
             from: terminal,
@@ -389,6 +398,7 @@ final class TerminalEngineIntegrationTests: XCTestCase {
             containing: ["TERMUCTIVE_MOUSE_BYTE_1b"],
             timeout: 2
         )
+        await fulfillment(of: [processDelegate.terminated], timeout: 5)
 
         XCTAssertTrue(output.contains("TERMUCTIVE_MOUSE_BYTE_1b"))
     }

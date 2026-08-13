@@ -90,4 +90,29 @@ final class WorkspaceDocumentTests: XCTestCase {
         XCTAssertTrue(project.folderIDs.contains(rootFolder.id))
         XCTAssertTrue(project.terminalIDs.isEmpty)
     }
+
+    func testNestedNoteParticipatesInLookupRenameAndRemovalWithoutOwningTerminals() throws {
+        let note = ProjectNote(name: "Concepts")
+        let nestedFolder = WorkspaceFolder(
+            name: "Research",
+            children: [.note(note)]
+        )
+        var project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.folder(nestedFolder)],
+            lastSelectedItemID: note.id
+        )
+
+        XCTAssertEqual(project.note(withID: note.id), note)
+        XCTAssertEqual(project.noteIDs, [note.id])
+        XCTAssertTrue(project.terminalIDs.isEmpty)
+        XCTAssertEqual(project.ancestorFolderIDs(forItemWithID: note.id), [nestedFolder.id])
+        XCTAssertTrue(project.renameItem(withID: note.id, to: "Architecture"))
+        XCTAssertEqual(project.note(withID: note.id)?.name, "Architecture")
+
+        let removed = try XCTUnwrap(project.removeItem(withID: note.id))
+        XCTAssertEqual(removed.noteIDs, [note.id])
+        XCTAssertTrue(project.noteIDs.isEmpty)
+    }
 }

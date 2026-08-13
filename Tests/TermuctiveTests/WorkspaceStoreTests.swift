@@ -139,6 +139,69 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.document.selectedSpaceID, space.id)
     }
 
+    func testNoteCanBeAddedInsideSelectedFolderWithoutRemovingLiveTerminalIdentity() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        let terminalIDs = store.document.terminalIDs
+        store.addFolder(toFolderWithID: nil, inProjectWithID: projectID)
+        let folderID = try XCTUnwrap(store.selectedFolderID)
+
+        store.addNote()
+
+        let project = try XCTUnwrap(store.selectedProject)
+        let note = try XCTUnwrap(project.notes.first)
+        XCTAssertEqual(project.ancestorFolderIDs(forItemWithID: note.id), [folderID])
+        XCTAssertEqual(store.selectedNote, note)
+        XCTAssertEqual(store.document.selectedItemID, note.id)
+        XCTAssertNil(store.document.selectedSpaceID)
+        XCTAssertNil(store.focusedPaneID)
+        XCTAssertEqual(store.document.terminalIDs, terminalIDs)
+        XCTAssertTrue(store.expandedFolderIDs.contains(folderID))
+    }
+
+    func testSwitchingProjectsRestoresNoteAndTerminalSelectionsIndependently() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/notes"))
+        let notesProjectID = try XCTUnwrap(store.selectedProject?.id)
+        let retainedTerminalIDs = store.document.terminalIDs
+        store.addNote()
+        let noteID = try XCTUnwrap(store.selectedNote?.id)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/terminal"))
+        let terminalProjectID = try XCTUnwrap(store.selectedProject?.id)
+        let terminalSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+
+        store.selectProject(withID: notesProjectID)
+        XCTAssertEqual(store.selectedNote?.id, noteID)
+        XCTAssertNil(store.focusedPaneID)
+        XCTAssertTrue(store.document.terminalIDs.isSuperset(of: retainedTerminalIDs))
+
+        store.selectProject(withID: terminalProjectID)
+        XCTAssertEqual(store.selectedSpace?.id, terminalSpaceID)
+        XCTAssertNotNil(store.focusedPaneID)
+    }
+
+    func testRemovingSelectedNoteReturnsItsIdentifierAndRestoresTerminalSpace() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        let spaceID = try XCTUnwrap(store.selectedSpace?.id)
+        let paneID = try XCTUnwrap(store.focusedPaneID)
+        store.addNote()
+        let noteID = try XCTUnwrap(store.selectedNote?.id)
+
+        let removedNoteIDs = store.removeItem(withID: noteID, inProject: projectID)
+
+        XCTAssertEqual(removedNoteIDs, [noteID])
+        XCTAssertEqual(store.selectedSpace?.id, spaceID)
+        XCTAssertEqual(store.focusedPaneID, paneID)
+        XCTAssertNil(store.selectedNote)
+        XCTAssertEqual(persistence.savedDocuments.last, store.document)
+    }
+
     func testSpaceCanBeAddedToExplicitFolderInAnotherProject() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)

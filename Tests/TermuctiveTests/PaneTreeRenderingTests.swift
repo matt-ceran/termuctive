@@ -190,7 +190,10 @@ final class PaneTreeRenderingTests: XCTestCase {
         let rightPane = try XCTUnwrap(
             store.selectedSpace?.layout.terminal(withID: rightPaneID)
         )
-        let sessions = TerminalSessionPool(store: store)
+        let sessions = TerminalSessionPool(
+            store: store,
+            shellConfiguration: try isolatedShellConfiguration(in: directory)
+        )
         let editors = EditorSessionPool(store: store)
         defer {
             editors.terminateAll()
@@ -444,6 +447,26 @@ final class PaneTreeRenderingTests: XCTestCase {
         let document = PDFDocument()
         document.insert(try XCTUnwrap(PDFPage(image: image)), at: 0)
         XCTAssertTrue(document.write(to: url))
+    }
+
+    private func isolatedShellConfiguration(in directory: URL) throws
+        -> TerminalShellConfiguration
+    {
+        let zDotDirectory = directory.appendingPathComponent(
+            ".termuctive-test-zdot",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: zDotDirectory,
+            withIntermediateDirectories: true
+        )
+        var environment = ProcessInfo.processInfo.environment
+        environment["ZDOTDIR"] = zDotDirectory.path
+        return TerminalShellConfiguration(
+            executable: "/bin/zsh",
+            execName: "zsh",
+            baseEnvironment: environment
+        )
     }
 
     private func firstSubview<T: NSView>(of type: T.Type, in view: NSView) -> T? {

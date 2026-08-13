@@ -5,6 +5,7 @@ struct WorkspaceView: View {
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var sessions: TerminalSessionPool
     @ObservedObject var editors: EditorSessionPool
+    @ObservedObject var notes: NoteSessionPool
     @ObservedObject var appearance: AppearanceSettings
 
     var body: some View {
@@ -13,6 +14,7 @@ struct WorkspaceView: View {
                 ProjectSidebar(
                     store: store,
                     editors: editors,
+                    notes: notes,
                     chooseProject: chooseProject,
                     hideSidebar: { setSidebarVisible(false) }
                 )
@@ -37,10 +39,14 @@ struct WorkspaceView: View {
         .onAppear {
             sessions.reconcile(validPaneIDs: store.document.terminalIDs)
             editors.reconcile(validPaneIDs: store.document.terminalIDs)
+            notes.reconcile(validNoteIDs: store.document.noteIDs)
         }
         .onChange(of: store.document.terminalIDs) { _, paneIDs in
             sessions.reconcile(validPaneIDs: paneIDs)
             editors.reconcile(validPaneIDs: paneIDs)
+        }
+        .onChange(of: store.document.noteIDs) { _, noteIDs in
+            notes.reconcile(validNoteIDs: noteIDs)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
@@ -48,23 +54,26 @@ struct WorkspaceView: View {
             _ in
             sessions.terminateAll()
             editors.terminateAll()
+            notes.terminateAll()
         }
         .alert(
             "Termuctive",
             isPresented: Binding(
-                get: { store.errorMessage != nil },
+                get: { store.errorMessage != nil || notes.errorMessage != nil },
                 set: { presented in
                     if !presented {
                         store.dismissError()
+                        notes.dismissError()
                     }
                 }
             )
         ) {
             Button("OK") {
                 store.dismissError()
+                notes.dismissError()
             }
         } message: {
-            Text(store.errorMessage ?? "")
+            Text(store.errorMessage ?? notes.errorMessage ?? "")
         }
         .confirmationDialog(
             pendingPaneCloseTitle,
@@ -113,6 +122,13 @@ struct WorkspaceView: View {
                     Text("/")
                         .foregroundStyle(.tertiary)
                     Text(space.name)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else if let note = store.selectedNote {
+                    Text("/")
+                        .foregroundStyle(.tertiary)
+                    Text(note.name)
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -212,7 +228,13 @@ struct WorkspaceView: View {
 
     @ViewBuilder
     private var workspaceContent: some View {
-        if let space = store.selectedSpace {
+        if let note = store.selectedNote {
+            ProjectNoteView(
+                note: note,
+                session: notes.session(for: note)
+            )
+            .id(note.id)
+        } else if let space = store.selectedSpace {
             if let zoomedPaneID = store.zoomedPaneID,
                 let pane = space.layout.terminal(withID: zoomedPaneID)
             {

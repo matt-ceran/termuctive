@@ -17,13 +17,19 @@ final class TerminalSessionPool: ObservableObject {
     @Published private var pdfSearchPaneIDs: Set<UUID> = []
 
     private let store: WorkspaceStore
+    private let shellConfiguration: TerminalShellConfiguration
     private var sessions: [UUID: TerminalSession] = [:]
     private var recentPDFURLs: [UUID: [URL]] = [:]
     private var layoutTransitionGeneration = 0
 
-    init(store: WorkspaceStore, terminalTheme: TerminalTheme = .light) {
+    init(
+        store: WorkspaceStore,
+        terminalTheme: TerminalTheme = .light,
+        shellConfiguration: TerminalShellConfiguration = .live
+    ) {
         self.store = store
         self.terminalTheme = terminalTheme
+        self.shellConfiguration = shellConfiguration
     }
 
     func terminalView(for pane: TerminalPane) -> TermuctiveTerminalView {
@@ -35,6 +41,7 @@ final class TerminalSessionPool: ObservableObject {
             pane: pane,
             fontSize: fontSize,
             theme: terminalTheme,
+            shellConfiguration: shellConfiguration,
             onFocus: { [weak self] paneID in
                 Task { @MainActor in
                     self?.focus(paneID: paneID)
@@ -619,12 +626,49 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     }
 }
 
+struct TerminalShellConfiguration {
+    let executable: String
+    let execName: String
+    let environment: [String]
+
+    init(
+        executable: String,
+        execName: String,
+        baseEnvironment: [String: String]
+    ) {
+        self.executable = executable
+        self.execName = execName
+        var resolvedEnvironment = baseEnvironment
+        resolvedEnvironment["TERM"] = "xterm-256color"
+        resolvedEnvironment["COLORTERM"] = "truecolor"
+        resolvedEnvironment["TERM_PROGRAM"] = "Termuctive"
+        resolvedEnvironment["TERM_PROGRAM_VERSION"] =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "development"
+        environment = resolvedEnvironment.map { "\($0.key)=\($0.value)" }.sorted()
+    }
+
+    static var live: TerminalShellConfiguration {
+        let configured = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let executable =
+            FileManager.default.isExecutableFile(atPath: configured)
+            ? configured
+            : "/bin/zsh"
+        return TerminalShellConfiguration(
+            executable: executable,
+            execName: "-\(URL(fileURLWithPath: executable).lastPathComponent)",
+            baseEnvironment: ProcessInfo.processInfo.environment
+        )
+    }
+}
+
 private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate {
     let paneID: UUID
     let view: TermuctiveTerminalView
     private(set) var startedAt = Date()
 
     private var pane: TerminalPane
+    private let shellConfiguration: TerminalShellConfiguration
     private var outputPDFTracker = TerminalOutputPDFTracker()
     private let onTitleChange: (UUID, String) -> Void
     private let onDirectoryChange: (UUID, String) -> Void
@@ -636,6 +680,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         pane: TerminalPane,
         fontSize: CGFloat,
         theme: TerminalTheme,
+        shellConfiguration: TerminalShellConfiguration,
         onFocus: @escaping (UUID) -> Void,
         onTitleChange: @escaping (UUID, String) -> Void,
         onDirectoryChange: @escaping (UUID, String) -> Void,
@@ -645,6 +690,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     ) {
         paneID = pane.id
         self.pane = pane
+        self.shellConfiguration = shellConfiguration
         self.onTitleChange = onTitleChange
         self.onDirectoryChange = onDirectoryChange
         self.onLocalCommand = onLocalCommand
@@ -744,16 +790,15 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
         startedAt = Date()
         outputPDFTracker = TerminalOutputPDFTracker()
-        let shell = Self.shellPath
         let currentDirectory = Self.validDirectory(pane.workingDirectory)
         if currentDirectory != pane.workingDirectory {
             self.pane.workingDirectory = currentDirectory
             onDirectoryChange(paneID, currentDirectory)
         }
         view.startProcess(
-            executable: shell,
-            environment: Self.environment,
-            execName: "-\(URL(fileURLWithPath: shell).lastPathComponent)",
+            executable: shellConfiguration.executable,
+            environment: shellConfiguration.environment,
+            execName: shellConfiguration.execName,
             currentDirectory: currentDirectory
         )
         return view.process.running
@@ -767,25 +812,6 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         for url in urls {
             onPDFPathDetected(paneID, url)
         }
-    }
-
-    private static var shellPath: String {
-        let configured = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        guard FileManager.default.isExecutableFile(atPath: configured) else {
-            return "/bin/zsh"
-        }
-        return configured
-    }
-
-    private static var environment: [String] {
-        var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = "xterm-256color"
-        environment["COLORTERM"] = "truecolor"
-        environment["TERM_PROGRAM"] = "Termuctive"
-        environment["TERM_PROGRAM_VERSION"] =
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "development"
-        return environment.map { "\($0.key)=\($0.value)" }.sorted()
     }
 
     private static func validDirectory(_ path: String) -> String {

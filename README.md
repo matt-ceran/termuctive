@@ -33,7 +33,7 @@ The source installer builds for the current Mac architecture, applies a local ad
 It does not require an Apple Developer account.
 Quit Termuctive before running the installer again.
 
-Each installation stores its workspace data locally at `~/Library/Application Support/Termuctive/workspace.json`.
+Each installation stores its workspace structure locally at `~/Library/Application Support/Termuctive/workspace.json` and note documents under `~/Library/Application Support/Termuctive/Notes/`.
 Cloning the repository does not copy another person's projects, terminal history, credentials, or command-line tool accounts.
 
 ## IDE panes
@@ -44,6 +44,16 @@ The editor includes a searchable file navigator, tabs, syntax coloring, line num
 Files changed by a terminal, an LLM CLI, or another editor reload automatically when the Termuctive buffer is clean.
 If the same file changes on disk while it has unsaved Termuctive edits, the editor asks which version to keep instead of overwriting either version silently.
 Use Command-S to save and the terminal button to return to the existing live terminal.
+
+## Project notes
+
+Use the workspace plus menu, a project or folder context menu, or Workspace > New Note to create a note inside the selected project container.
+Notes appear beside terminal spaces in the project sidebar and retain their own text, drawing, and layout state.
+The rich-text editor supports paragraph styles, font family, font size, text color, emphasis, alignment, lists, and undo or redo.
+Use Text, Split, and Draw modes to write, sketch, or work on both surfaces together.
+The drawing canvas includes pen, marker, eraser, stroke width, ink color, an optional grid, and independent drawing history.
+Notes autosave after edits settle, and Command-S saves the selected note immediately.
+Removing a note archives its saved document under the local `Notes/Recently Deleted/` directory.
 
 ## PDF panes
 

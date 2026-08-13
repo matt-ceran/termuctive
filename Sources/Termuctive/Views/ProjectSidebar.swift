@@ -3,6 +3,7 @@ import SwiftUI
 struct ProjectSidebar: View {
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var editors: EditorSessionPool
+    @ObservedObject var notes: NoteSessionPool
     let chooseProject: () -> Void
     let hideSidebar: () -> Void
 
@@ -26,6 +27,10 @@ struct ProjectSidebar: View {
                     .disabled(store.selectedProject == nil)
                     Button("New Terminal Space") {
                         store.addSpace()
+                    }
+                    .disabled(store.selectedProject == nil)
+                    Button("New Note") {
+                        store.addNote()
                     }
                     .disabled(store.selectedProject == nil)
                 } label: {
@@ -114,6 +119,7 @@ struct ProjectSidebar: View {
                 title: project.name,
                 depth: 0,
                 selected: store.document.selectedProjectID == project.id
+                    && store.document.selectedItemID == nil
                     && store.selectedFolderID == nil
             ) {
                 if store.document.selectedProjectID == project.id {
@@ -141,6 +147,21 @@ struct ProjectSidebar: View {
         depth: Int
     ) -> AnyView {
         switch item {
+        case .note(let note):
+            return AnyView(
+                sidebarRow(
+                    entry: .note(id: note.id, projectID: projectID, name: note.name),
+                    disclosureIcon: nil,
+                    secondaryIcon: "note.text",
+                    title: note.name,
+                    depth: depth,
+                    selected: store.document.selectedItemID == note.id
+                        && store.selectedFolderID == nil
+                ) {
+                    store.selectNote(withID: note.id, inProject: projectID)
+                }
+            )
+
         case .space(let space):
             return AnyView(
                 sidebarRow(
@@ -149,7 +170,7 @@ struct ProjectSidebar: View {
                     secondaryIcon: "rectangle",
                     title: space.name,
                     depth: depth,
-                    selected: store.document.selectedSpaceID == space.id
+                    selected: store.document.selectedItemID == space.id
                         && store.selectedFolderID == nil
                 ) {
                     store.selectSpace(withID: space.id, inProject: projectID)
@@ -257,6 +278,9 @@ struct ProjectSidebar: View {
             Button("New Terminal Space") {
                 store.addSpace(toFolderWithID: nil, inProjectWithID: projectID)
             }
+            Button("New Note") {
+                store.addNote(toFolderWithID: nil, inProjectWithID: projectID)
+            }
             Button("New Folder Here") {
                 store.addFolder(toFolderWithID: nil, inProjectWithID: projectID)
             }
@@ -268,6 +292,12 @@ struct ProjectSidebar: View {
                     inProjectWithID: projectID
                 )
             }
+            Button("New Note") {
+                store.addNote(
+                    toFolderWithID: folderID,
+                    inProjectWithID: projectID
+                )
+            }
             Button("New Folder Here") {
                 store.addFolder(
                     toFolderWithID: folderID,
@@ -275,7 +305,7 @@ struct ProjectSidebar: View {
                 )
             }
 
-        case .space:
+        case .note, .space:
             EmptyView()
         }
     }
@@ -330,6 +360,7 @@ struct ProjectSidebar: View {
         case .project(let id, _, _):
             store.renameProject(withID: id, to: name)
         case .folder(let id, let projectID, _),
+            .note(let id, let projectID, _),
             .space(let id, let projectID, _):
             store.renameItem(withID: id, inProject: projectID, to: name)
         }
@@ -366,13 +397,16 @@ struct ProjectSidebar: View {
     }
 
     private func performRemoval(_ entry: SidebarEntry) {
+        let removedNoteIDs: Set<UUID>
         switch entry {
         case .project(let id, _, _):
-            store.removeProject(withID: id)
+            removedNoteIDs = store.removeProject(withID: id)
         case .folder(let id, let projectID, _),
+            .note(let id, let projectID, _),
             .space(let id, let projectID, _):
-            store.removeItem(withID: id, inProject: projectID)
+            removedNoteIDs = store.removeItem(withID: id, inProject: projectID)
         }
+        notes.archive(noteIDs: removedNoteIDs)
     }
 
     private var pendingRemovalHasUnsavedChanges: Bool {
@@ -400,6 +434,7 @@ struct ProjectSidebar: View {
         case .project(let projectID, _, _):
             return store.terminalIDs(inProjectWithID: projectID)
         case .folder(let itemID, let projectID, _),
+            .note(let itemID, let projectID, _),
             .space(let itemID, let projectID, _):
             return store.terminalIDs(
                 inItemWithID: itemID,
@@ -412,12 +447,14 @@ struct ProjectSidebar: View {
 private enum SidebarEntry: Equatable {
     case project(id: UUID, name: String, kind: WorkspaceSectionKind)
     case folder(id: UUID, projectID: UUID, name: String)
+    case note(id: UUID, projectID: UUID, name: String)
     case space(id: UUID, projectID: UUID, name: String)
 
     var id: UUID {
         switch self {
         case .project(let id, _, _),
             .folder(let id, _, _),
+            .note(let id, _, _),
             .space(let id, _, _):
             id
         }
@@ -427,6 +464,7 @@ private enum SidebarEntry: Equatable {
         switch self {
         case .project(_, let name, _),
             .folder(_, _, let name),
+            .note(_, _, let name),
             .space(_, _, let name):
             name
         }
@@ -438,6 +476,8 @@ private enum SidebarEntry: Equatable {
             kind == .folder ? "Remove Folder" : "Remove Project"
         case .folder:
             "Remove Folder"
+        case .note:
+            "Remove Note"
         case .space:
             "Remove Terminal Space"
         }
@@ -447,7 +487,7 @@ private enum SidebarEntry: Equatable {
         switch self {
         case .project, .folder:
             true
-        case .space:
+        case .note, .space:
             false
         }
     }
@@ -460,12 +500,14 @@ private enum SidebarEntry: Equatable {
         switch self {
         case .project(_, _, let kind):
             if kind == .folder {
-                "Everything inside this folder will be removed and its running terminals will stop."
+                "Everything inside this folder will be removed. Its running terminals will stop, and saved notes will move to Recently Deleted."
             } else {
-                "Its saved terminal spaces will be removed and their running terminals will stop."
+                "Its terminal spaces and notes will be removed. Running terminals will stop, and saved notes will move to Recently Deleted."
             }
         case .folder:
-            "Everything inside this folder will be removed and its running terminals will stop."
+            "Everything inside this folder will be removed. Its running terminals will stop, and saved notes will move to Recently Deleted."
+        case .note:
+            "Its saved text and drawing will be moved to Termuctive's Recently Deleted notes folder."
         case .space:
             "Its running terminals will stop."
         }

@@ -8,6 +8,7 @@ struct TermuctiveApp: App {
     @StateObject private var store: WorkspaceStore
     @StateObject private var sessions: TerminalSessionPool
     @StateObject private var editors: EditorSessionPool
+    @StateObject private var notes: NoteSessionPool
     @StateObject private var appearance: AppearanceSettings
 
     @MainActor
@@ -22,6 +23,7 @@ struct TermuctiveApp: App {
             )
         )
         _editors = StateObject(wrappedValue: EditorSessionPool(store: store))
+        _notes = StateObject(wrappedValue: NoteSessionPool())
         _appearance = StateObject(wrappedValue: appearance)
     }
 
@@ -31,6 +33,7 @@ struct TermuctiveApp: App {
                 store: store,
                 sessions: sessions,
                 editors: editors,
+                notes: notes,
                 appearance: appearance
             )
             .preferredColorScheme(appearance.appTheme.colorScheme)
@@ -55,6 +58,14 @@ struct TermuctiveApp: App {
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .control])
                 .disabled(!store.canCycleProjects)
+
+                Divider()
+
+                Button("New Note") {
+                    store.addNote()
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(store.selectedProject == nil)
 
                 Divider()
 
@@ -173,10 +184,10 @@ struct TermuctiveApp: App {
 
             CommandGroup(replacing: .saveItem) {
                 Button("Save") {
-                    saveFocusedEditorFile()
+                    saveFocusedDocument()
                 }
                 .keyboardShortcut("s", modifiers: [.command])
-                .disabled(!canSaveFocusedEditorFile)
+                .disabled(!canSaveFocusedDocument)
             }
 
             CommandMenu("Appearance") {
@@ -219,7 +230,10 @@ struct TermuctiveApp: App {
         return editors.isEditorPresented(inPaneID: focusedPaneID)
     }
 
-    private var canSaveFocusedEditorFile: Bool {
+    private var canSaveFocusedDocument: Bool {
+        if let note = store.selectedNote {
+            return notes.session(for: note).canSave
+        }
         guard let focusedPaneID = store.focusedPaneID,
             let buffer = editors.session(forPaneID: focusedPaneID)?.selectedBuffer
         else {
@@ -241,7 +255,11 @@ struct TermuctiveApp: App {
         }
     }
 
-    private func saveFocusedEditorFile() {
+    private func saveFocusedDocument() {
+        if let note = store.selectedNote {
+            notes.save(noteID: note.id)
+            return
+        }
         guard let focusedPaneID = store.focusedPaneID,
             let session = editors.session(forPaneID: focusedPaneID)
         else {
