@@ -10,21 +10,25 @@ struct TermuctiveApp: App {
     @StateObject private var editors: EditorSessionPool
     @StateObject private var notes: NoteSessionPool
     @StateObject private var appearance: AppearanceSettings
+    @StateObject private var agentActivity: AgentActivityRegistry
 
     @MainActor
     init() {
         let store = WorkspaceStore()
         let appearance = AppearanceSettings()
+        let agentActivity = AgentActivityRegistry()
         _store = StateObject(wrappedValue: store)
         _sessions = StateObject(
             wrappedValue: TerminalSessionPool(
                 store: store,
-                terminalTheme: appearance.terminalTheme
+                terminalTheme: appearance.terminalTheme,
+                agentActivityRegistry: agentActivity
             )
         )
         _editors = StateObject(wrappedValue: EditorSessionPool(store: store))
         _notes = StateObject(wrappedValue: NoteSessionPool())
         _appearance = StateObject(wrappedValue: appearance)
+        _agentActivity = StateObject(wrappedValue: agentActivity)
     }
 
     var body: some Scene {
@@ -34,7 +38,8 @@ struct TermuctiveApp: App {
                 sessions: sessions,
                 editors: editors,
                 notes: notes,
-                appearance: appearance
+                appearance: appearance,
+                agentActivity: agentActivity
             )
             .preferredColorScheme(appearance.appTheme.colorScheme)
             .onAppear {

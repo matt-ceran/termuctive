@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		071EA7304E17353E4EB23BBF /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 0AD4E51F30ECDFDC52C0703A /* main.c */; };
+		07A053EBAB97934575D8ADA2 /* TerminalAgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81D1C7B9D692A8C6CC67E621 /* TerminalAgentActivity.swift */; };
 		07B2F323B929A148128D94CB /* PDFPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4720A7AE0AACC8B4CA21F73D /* PDFPaneView.swift */; };
 		0EDAB564560B62D68C1A77FC /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */; };
 		12D3E55E6022C1E6195A8901 /* EditorPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B195DC1835EF17E3FE412DD /* EditorPaneView.swift */; };
@@ -21,7 +23,10 @@
 		2B1BD699F66EE2910D871C19 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */; };
 		2CFCD8602C26E670DB86BBDC /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 9C0A6106B64EBFA9AD5852B9 /* SwiftTerm */; };
 		302A072D04C87EEA57B49B00 /* EditorFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */; };
+		35ECC5A499B3F066B1659687 /* AgentProcessShim.c in Sources */ = {isa = PBXBuildFile; fileRef = 438B301D69E1411F683C46EB /* AgentProcessShim.c */; };
 		3B0D7447219B91713523C96E /* ProjectNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD7C74070A6E0151094CE6FA /* ProjectNote.swift */; };
+		4BDDB2D79E58973A36063AD2 /* TerminalAgentActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70432B30AD7F3376A89EC8B /* TerminalAgentActivityTests.swift */; };
+		4CE61662CADA79BBEC33A3C4 /* TerminalAgentActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCBCBC0526D862D530F8AEDE /* TerminalAgentActivityMonitor.swift */; };
 		4E14C04A360FFAC7566B8A48 /* EditorDocumentBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D0500E417D40684B01F061 /* EditorDocumentBuffer.swift */; };
 		4F042792EDC288E707443E7D /* PDFDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */; };
 		4FA2A817A915D6D914CCE3C4 /* LearningPDF.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F22CF52B8769F1072F775FF /* LearningPDF.swift */; };
@@ -35,10 +40,12 @@
 		70B35C0392C0A9E12418F603 /* TerminalSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */; };
 		756546AEC0833D5366B1FEFE /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268474801E729AD15FCB6E04 /* ApplicationLifecycle.swift */; };
 		7B4B4C22F2ABFEAAF52AE48E /* TerminalHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */; };
+		7E48E74028469562F7000185 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 0AD4E51F30ECDFDC52C0703A /* main.c */; };
 		7FCC7165ADE500F646F4A760 /* SidebarDisclosureSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480CE99E8A7C5B82ED091513 /* SidebarDisclosureSection.swift */; };
 		87D4EAD283ABE12233E1272D /* EditorDocumentBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F54BD83B8719BDEC95D07B /* EditorDocumentBufferTests.swift */; };
 		8CEC8718F273FE81C7860197 /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 358682BFA64AD0D54823FF99 /* CodeEditorView.swift */; };
 		8D565FB0A8CADB805744D23F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F784C4BBAE43A7B6C7F23B1 /* Assets.xcassets */; };
+		914E943352FAAC4B438A59BD /* AgentActivityIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55131B04AF4130FD98E81FB4 /* AgentActivityIndicator.swift */; };
 		9777AADC8A779CFFCFDA3E54 /* NoteRichTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DE01D8F964F7BC73D3C106 /* NoteRichTextEditor.swift */; };
 		9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */; };
 		A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */; };
@@ -62,6 +69,7 @@
 		F8565107E46D0225EEDFDFB4 /* NoteSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = F376E8D01414C1D731BF126C /* NoteSessionPool.swift */; };
 		F8F2AC2D67F2E56310D028F3 /* NoteDrawingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87462424D9EC045A563EE104 /* NoteDrawingTests.swift */; };
 		FE4CC8AE39B1C12D85162A87 /* ProjectNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9939468A2BF3818F1590520 /* ProjectNoteView.swift */; };
+		FF9638ED37ECEC3C3BBE4C19 /* AgentActivityRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF57F174EAFFD22084CF61FF /* AgentActivityRegistry.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,11 +80,28 @@
 			remoteGlobalIDString = D5191C9E3A59CD6A3E9D4493;
 			remoteInfo = Termuctive;
 		};
+		B2A1CED93813E55D44B223E5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8D3A7AFC1305754589E653AA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E73E2C7ED7A52CA3E55B88D9;
+			remoteInfo = TermuctiveWrapperFixture;
+		};
+		E5F6384A1452C5E165EF68EB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8D3A7AFC1305754589E653AA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E7D57CF3148E67ABD55995DB;
+			remoteInfo = TermuctiveAgentFixture;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		016258586280540D1A00B3EC /* NoteFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteFileStore.swift; sourceTree = "<group>"; };
+		01B70399CB944AACDB48A963 /* TermuctiveAgentFixture */ = {isa = PBXFileReference; includeInIndex = 0; path = TermuctiveAgentFixture; sourceTree = BUILT_PRODUCTS_DIR; };
 		0223CBE6ED7BE1C14BF798D6 /* NoteRichTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRichTextTests.swift; sourceTree = "<group>"; };
+		0A79DDB24299CC213E7359B8 /* Termuctive-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Termuctive-Bridging-Header.h"; sourceTree = "<group>"; };
+		0AD4E51F30ECDFDC52C0703A /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
 		1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDocument.swift; sourceTree = "<group>"; };
 		11DE01D8F964F7BC73D3C106 /* NoteRichTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRichTextEditor.swift; sourceTree = "<group>"; };
 		1B484F673E364FAC9B7D899B /* NoteFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteFileStoreTests.swift; sourceTree = "<group>"; };
@@ -91,10 +116,12 @@
 		35EA800971A4F8606824C500 /* PDFPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPreview.swift; sourceTree = "<group>"; };
 		37931F7BA5CC587684918890 /* NoteDrawingCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDrawingCanvas.swift; sourceTree = "<group>"; };
 		37C9D5660099146CB8487D7D /* RecentPDFLocatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentPDFLocatorTests.swift; sourceTree = "<group>"; };
+		438B301D69E1411F683C46EB /* AgentProcessShim.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = AgentProcessShim.c; sourceTree = "<group>"; };
 		4720A7AE0AACC8B4CA21F73D /* PDFPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPaneView.swift; sourceTree = "<group>"; };
 		480CE99E8A7C5B82ED091513 /* SidebarDisclosureSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarDisclosureSection.swift; sourceTree = "<group>"; };
 		4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterfaceComponents.swift; sourceTree = "<group>"; };
 		48F54BD83B8719BDEC95D07B /* EditorDocumentBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDocumentBufferTests.swift; sourceTree = "<group>"; };
+		55131B04AF4130FD98E81FB4 /* AgentActivityIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityIndicator.swift; sourceTree = "<group>"; };
 		55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
 		613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFDiscovery.swift; sourceTree = "<group>"; };
 		6328DE9953E850606960A464 /* TerminalLocalCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalLocalCommandTests.swift; sourceTree = "<group>"; };
@@ -102,14 +129,17 @@
 		6E09168D4C22B0C86EB85EA2 /* Termuctive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Termuctive.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7420D65C7E04E4E5D0041305 /* LICENSE */ = {isa = PBXFileReference; path = LICENSE; sourceTree = "<group>"; };
 		7FC53FF9D028BF4F6C51916A /* NoteSessionPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteSessionPoolTests.swift; sourceTree = "<group>"; };
+		81D1C7B9D692A8C6CC67E621 /* TerminalAgentActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentActivity.swift; sourceTree = "<group>"; };
 		87462424D9EC045A563EE104 /* NoteDrawingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDrawingTests.swift; sourceTree = "<group>"; };
 		8831E1AFCA62E16522DAFF8E /* EditorFileSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystemTests.swift; sourceTree = "<group>"; };
 		8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystem.swift; sourceTree = "<group>"; };
 		8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayoutTests.swift; sourceTree = "<group>"; };
 		9B195DC1835EF17E3FE412DD /* EditorPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPaneView.swift; sourceTree = "<group>"; };
 		9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSidebar.swift; sourceTree = "<group>"; };
+		9D301BCDD1ADB43606109EA0 /* TermuctiveWrapperFixture */ = {isa = PBXFileReference; includeInIndex = 0; path = TermuctiveWrapperFixture; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSessionPool.swift; sourceTree = "<group>"; };
 		A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStoreTests.swift; sourceTree = "<group>"; };
+		A70432B30AD7F3376A89EC8B /* TerminalAgentActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentActivityTests.swift; sourceTree = "<group>"; };
 		AB0FD1B1292DD9F1333C3EF4 /* ProjectNotesIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNotesIntegrationTests.swift; sourceTree = "<group>"; };
 		AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHostView.swift; sourceTree = "<group>"; };
 		B6E1A21021BE972DC78E104D /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
@@ -119,6 +149,7 @@
 		D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStore.swift; sourceTree = "<group>"; };
 		DB732E6729E4ED88756FCF76 /* PaneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayout.swift; sourceTree = "<group>"; };
 		DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "termuctive-learning-pdf"; path = "Resources/termuctive-learning-pdf"; sourceTree = SOURCE_ROOT; };
+		DCBCBC0526D862D530F8AEDE /* TerminalAgentActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentActivityMonitor.swift; sourceTree = "<group>"; };
 		DD7C74070A6E0151094CE6FA /* ProjectNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNote.swift; sourceTree = "<group>"; };
 		DDA25954BE817B9B05BBCF51 /* EditorSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionPool.swift; sourceTree = "<group>"; };
 		E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEngineIntegrationTests.swift; sourceTree = "<group>"; };
@@ -128,8 +159,10 @@
 		EEA8DBD841EDCDC86C484C4D /* AppearanceSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsTests.swift; sourceTree = "<group>"; };
 		F376E8D01414C1D731BF126C /* NoteSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteSessionPool.swift; sourceTree = "<group>"; };
 		F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TermuctiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F692EEE25A652CDE51CAA6B8 /* AgentProcessShim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentProcessShim.h; sourceTree = "<group>"; };
 		F9939468A2BF3818F1590520 /* ProjectNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNoteView.swift; sourceTree = "<group>"; };
 		FB240EEF85F9D81D1AEB1094 /* NoteDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDocument.swift; sourceTree = "<group>"; };
+		FF57F174EAFFD22084CF61FF /* AgentActivityRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityRegistry.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -162,6 +195,14 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		088BE29A1B98B35825467AD5 /* AgentFixture */ = {
+			isa = PBXGroup;
+			children = (
+				0AD4E51F30ECDFDC52C0703A /* main.c */,
+			);
+			path = AgentFixture;
+			sourceTree = "<group>";
+		};
 		1CE61870739AAB4D5A08DC6D /* TermuctiveTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -178,6 +219,7 @@
 				AB0FD1B1292DD9F1333C3EF4 /* ProjectNotesIntegrationTests.swift */,
 				37C9D5660099146CB8487D7D /* RecentPDFLocatorTests.swift */,
 				235FCBD56ABAE515873A9965 /* SmoothSplitViewTests.swift */,
+				A70432B30AD7F3376A89EC8B /* TerminalAgentActivityTests.swift */,
 				E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */,
 				6328DE9953E850606960A464 /* TerminalLocalCommandTests.swift */,
 				35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */,
@@ -190,6 +232,7 @@
 		2CD727C985ACF4BE3C344A9D /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				088BE29A1B98B35825467AD5 /* AgentFixture */,
 				1CE61870739AAB4D5A08DC6D /* TermuctiveTests */,
 			);
 			path = Tests;
@@ -222,6 +265,7 @@
 		44542A5A519C481EFD92EA54 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				55131B04AF4130FD98E81FB4 /* AgentActivityIndicator.swift */,
 				C2AC0D63CFFAFA3D2810C3DD /* AppearanceSettingsView.swift */,
 				358682BFA64AD0D54823FF99 /* CodeEditorView.swift */,
 				9B195DC1835EF17E3FE412DD /* EditorPaneView.swift */,
@@ -258,7 +302,9 @@
 			isa = PBXGroup;
 			children = (
 				6E09168D4C22B0C86EB85EA2 /* Termuctive.app */,
+				01B70399CB944AACDB48A963 /* TermuctiveAgentFixture */,
 				F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */,
+				9D301BCDD1ADB43606109EA0 /* TermuctiveWrapperFixture */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -288,6 +334,7 @@
 				1F22CF52B8769F1072F775FF /* LearningPDF.swift */,
 				613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */,
 				35EA800971A4F8606824C500 /* PDFPreview.swift */,
+				0A79DDB24299CC213E7359B8 /* Termuctive-Bridging-Header.h */,
 				E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */,
 				55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */,
 				74B40BC5273C7FA80A5E3083 /* Editor */,
@@ -303,6 +350,11 @@
 		EBCF439F5CCBACDE55BCFFAC /* Terminal */ = {
 			isa = PBXGroup;
 			children = (
+				FF57F174EAFFD22084CF61FF /* AgentActivityRegistry.swift */,
+				438B301D69E1411F683C46EB /* AgentProcessShim.c */,
+				F692EEE25A652CDE51CAA6B8 /* AgentProcessShim.h */,
+				81D1C7B9D692A8C6CC67E621 /* TerminalAgentActivity.swift */,
+				DCBCBC0526D862D530F8AEDE /* TerminalAgentActivityMonitor.swift */,
 				AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */,
 				A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */,
 			);
@@ -332,6 +384,40 @@
 			productReference = 6E09168D4C22B0C86EB85EA2 /* Termuctive.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E73E2C7ED7A52CA3E55B88D9 /* TermuctiveWrapperFixture */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A97725BBA195D0CF3E44BF6 /* Build configuration list for PBXNativeTarget "TermuctiveWrapperFixture" */;
+			buildPhases = (
+				4224052A4F9F695205CEECC6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TermuctiveWrapperFixture;
+			packageProductDependencies = (
+			);
+			productName = TermuctiveWrapperFixture;
+			productReference = 9D301BCDD1ADB43606109EA0 /* TermuctiveWrapperFixture */;
+			productType = "com.apple.product-type.tool";
+		};
+		E7D57CF3148E67ABD55995DB /* TermuctiveAgentFixture */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7762800812B41ABE17A6D1AD /* Build configuration list for PBXNativeTarget "TermuctiveAgentFixture" */;
+			buildPhases = (
+				6BE9B3ECB12117D3E67486C7 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TermuctiveAgentFixture;
+			packageProductDependencies = (
+			);
+			productName = TermuctiveAgentFixture;
+			productReference = 01B70399CB944AACDB48A963 /* TermuctiveAgentFixture */;
+			productType = "com.apple.product-type.tool";
+		};
 		E9F6BFF730AFAD24C600097A /* TermuctiveTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 938FC508FE26EBF0EC621262 /* Build configuration list for PBXNativeTarget "TermuctiveTests" */;
@@ -343,6 +429,8 @@
 			);
 			dependencies = (
 				9D05CE0D243665EF91E8C9FC /* PBXTargetDependency */,
+				13D42D2478F923BE4DF940BF /* PBXTargetDependency */,
+				D9D3C73403F7A563642E9167 /* PBXTargetDependency */,
 			);
 			name = TermuctiveTests;
 			packageProductDependencies = (
@@ -381,7 +469,9 @@
 			projectRoot = "";
 			targets = (
 				D5191C9E3A59CD6A3E9D4493 /* Termuctive */,
+				E7D57CF3148E67ABD55995DB /* TermuctiveAgentFixture */,
 				E9F6BFF730AFAD24C600097A /* TermuctiveTests */,
+				E73E2C7ED7A52CA3E55B88D9 /* TermuctiveWrapperFixture */,
 			);
 		};
 /* End PBXProject section */
@@ -405,6 +495,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				914E943352FAAC4B438A59BD /* AgentActivityIndicator.swift in Sources */,
+				FF9638ED37ECEC3C3BBE4C19 /* AgentActivityRegistry.swift in Sources */,
+				35ECC5A499B3F066B1659687 /* AgentProcessShim.c in Sources */,
 				6D3FB4E87F76EA91639B7154 /* AppearanceSettings.swift in Sources */,
 				1BBA8945F77B0783C4B3C55D /* AppearanceSettingsView.swift in Sources */,
 				756546AEC0833D5366B1FEFE /* ApplicationLifecycle.swift in Sources */,
@@ -429,6 +522,8 @@
 				FE4CC8AE39B1C12D85162A87 /* ProjectNoteView.swift in Sources */,
 				A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */,
 				7FCC7165ADE500F646F4A760 /* SidebarDisclosureSection.swift in Sources */,
+				07A053EBAB97934575D8ADA2 /* TerminalAgentActivity.swift in Sources */,
+				4CE61662CADA79BBEC33A3C4 /* TerminalAgentActivityMonitor.swift in Sources */,
 				7B4B4C22F2ABFEAAF52AE48E /* TerminalHostView.swift in Sources */,
 				70B35C0392C0A9E12418F603 /* TerminalSessionPool.swift in Sources */,
 				1B001D4A34F6BB63CF00B0A7 /* TermuctiveApp.swift in Sources */,
@@ -436,6 +531,14 @@
 				BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */,
 				9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */,
 				0EDAB564560B62D68C1A77FC /* WorkspaceView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4224052A4F9F695205CEECC6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E48E74028469562F7000185 /* main.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -456,6 +559,7 @@
 				CDC8DFA65A80E6E1E7175D13 /* ProjectNotesIntegrationTests.swift in Sources */,
 				CF4FB8AF14F80D21DE3B295C /* RecentPDFLocatorTests.swift in Sources */,
 				25186387237B615DBEFC34E4 /* SmoothSplitViewTests.swift in Sources */,
+				4BDDB2D79E58973A36063AD2 /* TerminalAgentActivityTests.swift in Sources */,
 				CBAFD73B55569F2EE40CB659 /* TerminalEngineIntegrationTests.swift in Sources */,
 				55537C6EED8FAC9A59D679B8 /* TerminalLocalCommandTests.swift in Sources */,
 				ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */,
@@ -464,13 +568,31 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6BE9B3ECB12117D3E67486C7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				071EA7304E17353E4EB23BBF /* main.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		13D42D2478F923BE4DF940BF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E7D57CF3148E67ABD55995DB /* TermuctiveAgentFixture */;
+			targetProxy = E5F6384A1452C5E165EF68EB /* PBXContainerItemProxy */;
+		};
 		9D05CE0D243665EF91E8C9FC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = D5191C9E3A59CD6A3E9D4493 /* Termuctive */;
 			targetProxy = 85E6D45599BCBC22E799E0BD /* PBXContainerItemProxy */;
+		};
+		D9D3C73403F7A563642E9167 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E73E2C7ED7A52CA3E55B88D9 /* TermuctiveWrapperFixture */;
+			targetProxy = B2A1CED93813E55D44B223E5 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -557,6 +679,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/Termuctive/Termuctive-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 5.0;
@@ -617,11 +740,44 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/Termuctive/Termuctive-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
+		};
+		387C856669637727B95404F6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.TermuctiveWrapperFixture;
+				PRODUCT_NAME = node;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		519E7010A9F7F6CA1C58245A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.TermuctiveWrapperFixture;
+				PRODUCT_NAME = node;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
 		};
 		755975A1DDA028C90892C2ED /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -638,6 +794,38 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.termuctive.tests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Termuctive.app/Contents/MacOS/Termuctive";
+			};
+			name = Release;
+		};
+		A65167D10B7B404B971E33D4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.TermuctiveAgentFixture;
+				PRODUCT_NAME = codex;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		C3BB8D215BE9315A5A9496FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattceran.TermuctiveAgentFixture;
+				PRODUCT_NAME = codex;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
 			};
 			name = Release;
 		};
@@ -692,11 +880,29 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		5A97725BBA195D0CF3E44BF6 /* Build configuration list for PBXNativeTarget "TermuctiveWrapperFixture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				519E7010A9F7F6CA1C58245A /* Debug */,
+				387C856669637727B95404F6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		6262A5876B4D14AFBFB18069 /* Build configuration list for PBXNativeTarget "Termuctive" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E2BC7A2FF8F1C2FEE4D6DF03 /* Debug */,
 				041D3ABCCF0F7EA126FF7B27 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7762800812B41ABE17A6D1AD /* Build configuration list for PBXNativeTarget "TermuctiveAgentFixture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A65167D10B7B404B971E33D4 /* Debug */,
+				C3BB8D215BE9315A5A9496FA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

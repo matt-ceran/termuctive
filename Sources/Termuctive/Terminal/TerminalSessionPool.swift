@@ -16,8 +16,13 @@ final class TerminalSessionPool: ObservableObject {
     @Published private var pdfPreviewURLs: [UUID: URL] = [:]
     @Published private var pdfSearchPaneIDs: Set<UUID> = []
 
+    let agentActivityRegistry: AgentActivityRegistry
+
     private let store: WorkspaceStore
     private let shellConfiguration: TerminalShellConfiguration
+    private let agentProcessInspector: any AgentProcessInspecting
+    private let agentActivityMonitor: TerminalAgentActivityMonitor
+    private var agentActivityCommandTail: Task<Void, Never>?
     private var sessions: [UUID: TerminalSession] = [:]
     private var recentPDFURLs: [UUID: [URL]] = [:]
     private var layoutTransitionGeneration = 0
@@ -25,11 +30,25 @@ final class TerminalSessionPool: ObservableObject {
     init(
         store: WorkspaceStore,
         terminalTheme: TerminalTheme = .light,
-        shellConfiguration: TerminalShellConfiguration = .live
+        shellConfiguration: TerminalShellConfiguration = .live,
+        agentActivityRegistry: AgentActivityRegistry? = nil,
+        agentProcessInspector: any AgentProcessInspecting = MacAgentProcessInspector()
     ) {
+        let activityRegistry = agentActivityRegistry ?? AgentActivityRegistry()
         self.store = store
         self.terminalTheme = terminalTheme
         self.shellConfiguration = shellConfiguration
+        self.agentProcessInspector = agentProcessInspector
+        self.agentActivityRegistry = activityRegistry
+        agentActivityMonitor = TerminalAgentActivityMonitor(
+            inspector: agentProcessInspector
+        ) { [weak activityRegistry] paneID, sessionID, activity in
+            activityRegistry?.setActivity(
+                activity,
+                paneID: paneID,
+                sessionID: sessionID
+            )
+        }
     }
 
     func terminalView(for pane: TerminalPane) -> TermuctiveTerminalView {
@@ -68,6 +87,33 @@ final class TerminalSessionPool: ObservableObject {
             onPDFPathDetected: { [weak self] paneID, url in
                 Task { @MainActor in
                     self?.rememberPDF(url, forPaneID: paneID)
+                }
+            },
+            captureAgentShellIdentity: { [agentProcessInspector] shellPID in
+                agentProcessInspector.shellIdentity(shellPID: shellPID)
+            },
+            onAgentActivityStarted: {
+                [weak self] paneID, shellPID, shellIdentity, sessionID in
+                Task { @MainActor in
+                    self?.startAgentActivity(
+                        paneID: paneID,
+                        shellPID: shellPID,
+                        shellIdentity: shellIdentity,
+                        sessionID: sessionID
+                    )
+                }
+            },
+            onAgentActivityHint: { [weak self] paneID, sessionID in
+                Task { @MainActor in
+                    self?.requestAgentActivityPoll(
+                        paneID: paneID,
+                        sessionID: sessionID
+                    )
+                }
+            },
+            onAgentActivityStopped: { [weak self] paneID, sessionID in
+                Task { @MainActor in
+                    self?.stopAgentActivity(paneID: paneID, sessionID: sessionID)
                 }
             },
             onTermination: { [weak self] paneID, exitCode in
@@ -242,6 +288,10 @@ final class TerminalSessionPool: ObservableObject {
         pdfPreviewURLs.removeAll()
         pdfSearchPaneIDs.removeAll()
         recentPDFURLs.removeAll()
+        agentActivityRegistry.clearAllSessions()
+        enqueueAgentActivityCommand { monitor in
+            await monitor.stopAll()
+        }
     }
 
     private func perform(_ command: TerminalLocalCommand, fromPaneID paneID: UUID) {
@@ -307,6 +357,62 @@ final class TerminalSessionPool: ObservableObject {
         titles[paneID] = title
     }
 
+    private func startAgentActivity(
+        paneID: UUID,
+        shellPID: Int32,
+        shellIdentity: AgentShellIdentity,
+        sessionID: UUID
+    ) {
+        guard sessions[paneID]?.activitySessionID == sessionID else {
+            return
+        }
+        agentActivityRegistry.beginSession(paneID: paneID, sessionID: sessionID)
+        enqueueAgentActivityCommand { monitor in
+            await monitor.register(
+                paneID: paneID,
+                shellPID: shellPID,
+                shellIdentity: shellIdentity,
+                sessionID: sessionID
+            )
+        }
+    }
+
+    private func requestAgentActivityPoll(
+        paneID: UUID,
+        sessionID: UUID
+    ) {
+        guard sessions[paneID]?.activitySessionID == sessionID else {
+            return
+        }
+        enqueueAgentActivityCommand { monitor in
+            await monitor.requestImmediatePoll(
+                paneID: paneID,
+                sessionID: sessionID
+            )
+        }
+    }
+
+    private func stopAgentActivity(paneID: UUID, sessionID: UUID) {
+        agentActivityRegistry.endSession(paneID: paneID, sessionID: sessionID)
+        enqueueAgentActivityCommand { monitor in
+            await monitor.unregister(
+                paneID: paneID,
+                sessionID: sessionID
+            )
+        }
+    }
+
+    private func enqueueAgentActivityCommand(
+        _ command: @escaping (TerminalAgentActivityMonitor) async -> Void
+    ) {
+        let previousCommand = agentActivityCommandTail
+        let monitor = agentActivityMonitor
+        agentActivityCommandTail = Task {
+            await previousCommand?.value
+            await command(monitor)
+        }
+    }
+
     private func markExited(paneID: UUID, exitCode: Int32?) {
         guard sessions[paneID] != nil else {
             return
@@ -340,6 +446,7 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     var focusHandler: (() -> Void)?
     var localCommandHandler: ((TerminalLocalCommand) -> Void)?
     var outputHandler: ((ArraySlice<UInt8>) -> Void)?
+    var activitySubmissionHandler: (() -> Void)?
 
     private var localCommandTracker = TerminalLocalCommandTracker()
     private var isForwardingTrackedText = false
@@ -475,6 +582,7 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
 
         switch TerminalControlInput(bytes: data) {
         case .submit(let enhanced):
+            activitySubmissionHandler?()
             if let command = localCommandTracker.commandForSubmission() {
                 suppressEnhancedSubmitRelease = enhanced
                 clearApplicationInput()
@@ -666,6 +774,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     let paneID: UUID
     let view: TermuctiveTerminalView
     private(set) var startedAt = Date()
+    private(set) var activitySessionID: UUID?
 
     private var pane: TerminalPane
     private let shellConfiguration: TerminalShellConfiguration
@@ -674,6 +783,16 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     private let onDirectoryChange: (UUID, String) -> Void
     private let onLocalCommand: (UUID, TerminalLocalCommand) -> Void
     private let onPDFPathDetected: (UUID, URL) -> Void
+    private let captureAgentShellIdentity: (Int32) -> AgentShellIdentity?
+    private let onAgentActivityStarted:
+        (
+            UUID,
+            Int32,
+            AgentShellIdentity,
+            UUID
+        ) -> Void
+    private let onAgentActivityHint: (UUID, UUID) -> Void
+    private let onAgentActivityStopped: (UUID, UUID) -> Void
     private let onTermination: (UUID, Int32?) -> Void
 
     init(
@@ -686,6 +805,16 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         onDirectoryChange: @escaping (UUID, String) -> Void,
         onLocalCommand: @escaping (UUID, TerminalLocalCommand) -> Void,
         onPDFPathDetected: @escaping (UUID, URL) -> Void,
+        captureAgentShellIdentity: @escaping (Int32) -> AgentShellIdentity?,
+        onAgentActivityStarted:
+            @escaping (
+                UUID,
+                Int32,
+                AgentShellIdentity,
+                UUID
+            ) -> Void,
+        onAgentActivityHint: @escaping (UUID, UUID) -> Void,
+        onAgentActivityStopped: @escaping (UUID, UUID) -> Void,
         onTermination: @escaping (UUID, Int32?) -> Void
     ) {
         paneID = pane.id
@@ -695,6 +824,10 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         self.onDirectoryChange = onDirectoryChange
         self.onLocalCommand = onLocalCommand
         self.onPDFPathDetected = onPDFPathDetected
+        self.captureAgentShellIdentity = captureAgentShellIdentity
+        self.onAgentActivityStarted = onAgentActivityStarted
+        self.onAgentActivityHint = onAgentActivityHint
+        self.onAgentActivityStopped = onAgentActivityStopped
         self.onTermination = onTermination
         view = TermuctiveTerminalView(frame: .zero)
         super.init()
@@ -710,7 +843,10 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
             self.onLocalCommand(self.paneID, command)
         }
         view.outputHandler = { [weak self] bytes in
-            self?.trackPDFs(in: bytes)
+            self?.trackOutput(bytes)
+        }
+        view.activitySubmissionHandler = { [weak self] in
+            self?.requestAgentActivityPoll()
         }
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.fontSmoothing = true
@@ -727,10 +863,15 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     func restart(pane: TerminalPane) -> Bool {
         self.pane = pane
+        guard !view.process.running else {
+            return true
+        }
+        endAgentActivitySession()
         return start(pane: pane)
     }
 
     func terminate() {
+        endAgentActivitySession()
         if view.process.running {
             view.terminate()
         }
@@ -780,6 +921,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     }
 
     func processTerminated(source: TerminalView, exitCode: Int32?) {
+        endAgentActivitySession()
         onTermination(paneID, exitCode)
     }
 
@@ -801,7 +943,36 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
             execName: shellConfiguration.execName,
             currentDirectory: currentDirectory
         )
-        return view.process.running
+        guard view.process.running else {
+            return false
+        }
+        let shellPID = view.process.shellPid
+        guard let shellIdentity = captureAgentShellIdentity(shellPID) else {
+            return true
+        }
+        let sessionID = UUID()
+        activitySessionID = sessionID
+        onAgentActivityStarted(paneID, shellPID, shellIdentity, sessionID)
+        return true
+    }
+
+    private func trackOutput(_ bytes: ArraySlice<UInt8>) {
+        trackPDFs(in: bytes)
+    }
+
+    private func requestAgentActivityPoll() {
+        guard let activitySessionID else {
+            return
+        }
+        onAgentActivityHint(paneID, activitySessionID)
+    }
+
+    private func endAgentActivitySession() {
+        guard let activitySessionID else {
+            return
+        }
+        self.activitySessionID = nil
+        onAgentActivityStopped(paneID, activitySessionID)
     }
 
     private func trackPDFs(in bytes: ArraySlice<UInt8>) {

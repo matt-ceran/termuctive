@@ -56,7 +56,8 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             sessions: sessions,
             editors: editors,
             notes: notes,
-            appearance: appearance
+            appearance: appearance,
+            agentActivity: sessions.agentActivityRegistry
         )
         .preferredColorScheme(.dark)
         let hostingView = NSHostingView(rootView: rootView)

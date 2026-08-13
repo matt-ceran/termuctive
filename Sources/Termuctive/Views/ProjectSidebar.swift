@@ -4,6 +4,8 @@ struct ProjectSidebar: View {
     @ObservedObject var store: WorkspaceStore
     @ObservedObject var editors: EditorSessionPool
     @ObservedObject var notes: NoteSessionPool
+    let agentActivity: AgentActivityRegistry
+    let activityIndicatorsVisible: Bool
     let chooseProject: () -> Void
     let hideSidebar: () -> Void
 
@@ -17,6 +19,9 @@ struct ProjectSidebar: View {
             HStack {
                 Text("Projects")
                     .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .layoutPriority(1)
                 Spacer()
                 Menu {
                     Button("Add Project...", action: chooseProject)
@@ -120,7 +125,12 @@ struct ProjectSidebar: View {
                 depth: 0,
                 selected: store.document.selectedProjectID == project.id
                     && store.document.selectedItemID == nil
-                    && store.selectedFolderID == nil
+                    && store.selectedFolderID == nil,
+                activity: SidebarRowActivity(
+                    scope: .project(project.id),
+                    isPresented: !isExpanded,
+                    isVisible: activityIndicatorsVisible
+                )
             ) {
                 if store.document.selectedProjectID == project.id {
                     withAnimation(SidebarMotion.disclosure) {
@@ -134,7 +144,12 @@ struct ProjectSidebar: View {
             SidebarDisclosureSection(isExpanded: isExpanded) {
                 VStack(spacing: 0) {
                     ForEach(project.items) { item in
-                        itemRow(item, projectID: project.id, depth: 1)
+                        itemRow(
+                            item,
+                            projectID: project.id,
+                            depth: 1,
+                            isVisible: activityIndicatorsVisible && isExpanded
+                        )
                     }
                 }
             }
@@ -144,7 +159,8 @@ struct ProjectSidebar: View {
     private func itemRow(
         _ item: WorkspaceItem,
         projectID: UUID,
-        depth: Int
+        depth: Int,
+        isVisible: Bool
     ) -> AnyView {
         switch item {
         case .note(let note):
@@ -171,7 +187,12 @@ struct ProjectSidebar: View {
                     title: space.name,
                     depth: depth,
                     selected: store.document.selectedItemID == space.id
-                        && store.selectedFolderID == nil
+                        && store.selectedFolderID == nil,
+                    activity: SidebarRowActivity(
+                        scope: .space(space.id),
+                        isPresented: true,
+                        isVisible: isVisible
+                    )
                 ) {
                     store.selectSpace(withID: space.id, inProject: projectID)
                 }
@@ -188,7 +209,12 @@ struct ProjectSidebar: View {
                         secondaryIcon: "folder",
                         title: folder.name,
                         depth: depth,
-                        selected: store.selectedFolderID == folder.id
+                        selected: store.selectedFolderID == folder.id,
+                        activity: SidebarRowActivity(
+                            scope: .folder(folder.id),
+                            isPresented: !isExpanded,
+                            isVisible: isVisible
+                        )
                     ) {
                         withAnimation(SidebarMotion.disclosure) {
                             store.selectFolder(withID: folder.id, inProject: projectID)
@@ -199,7 +225,12 @@ struct ProjectSidebar: View {
                     SidebarDisclosureSection(isExpanded: isExpanded) {
                         VStack(spacing: 0) {
                             ForEach(folder.children) { child in
-                                itemRow(child, projectID: projectID, depth: depth + 1)
+                                itemRow(
+                                    child,
+                                    projectID: projectID,
+                                    depth: depth + 1,
+                                    isVisible: isVisible && isExpanded
+                                )
                             }
                         }
                     }
@@ -217,43 +248,67 @@ struct ProjectSidebar: View {
         title: String,
         depth: Int,
         selected: Bool,
+        activity: SidebarRowActivity? = nil,
         action: @escaping () -> Void
     ) -> some View {
         let isRenaming = renamingEntry?.id == entry.id
 
         Group {
             if isRenaming {
-                sidebarRowContent(
-                    disclosureIcon: disclosureIcon,
-                    rotatesDisclosureIcon: rotatesDisclosureIcon,
-                    secondaryIcon: secondaryIcon,
-                    depth: depth,
-                    selected: selected
-                ) {
-                    TextField("Name", text: $renameDraft)
-                        .textFieldStyle(.plain)
-                        .focused($focusedRenameID, equals: entry.id)
-                        .onSubmit {
-                            commitRename()
-                        }
-                        .onExitCommand {
-                            cancelRename()
-                        }
-                }
-            } else {
-                Button(action: action) {
+                GeometryReader { geometry in
                     sidebarRowContent(
                         disclosureIcon: disclosureIcon,
                         rotatesDisclosureIcon: rotatesDisclosureIcon,
                         secondaryIcon: secondaryIcon,
                         depth: depth,
-                        selected: selected
+                        selected: selected,
+                        availableWidth: geometry.size.width,
+                        activity: activity
                     ) {
-                        Text(title)
-                            .lineLimit(1)
+                        TextField("Name", text: $renameDraft)
+                            .textFieldStyle(.plain)
+                            .focused($focusedRenameID, equals: entry.id)
+                            .onSubmit {
+                                commitRename()
+                            }
+                            .onExitCommand {
+                                cancelRename()
+                            }
                     }
                 }
-                .buttonStyle(.plain)
+                .frame(height: 28)
+            } else {
+                GeometryReader { geometry in
+                    let rowButton = Button(action: action) {
+                        sidebarRowContent(
+                            disclosureIcon: disclosureIcon,
+                            rotatesDisclosureIcon: rotatesDisclosureIcon,
+                            secondaryIcon: secondaryIcon,
+                            depth: depth,
+                            selected: selected,
+                            availableWidth: geometry.size.width,
+                            activity: activity
+                        ) {
+                            Text(title)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: geometry.size.width, alignment: .leading)
+
+                    if let activity {
+                        AgentActivityAccessibleRow(
+                            registry: agentActivity,
+                            scope: activity.scope,
+                            isPresented: activity.isPresented
+                        ) {
+                            rowButton
+                        }
+                    } else {
+                        rowButton
+                    }
+                }
+                .frame(height: 28)
             }
         }
         .contextMenu {
@@ -340,28 +395,55 @@ struct ProjectSidebar: View {
         secondaryIcon: String?,
         depth: Int,
         selected: Bool,
+        availableWidth: CGFloat,
+        activity: SidebarRowActivity?,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        HStack(spacing: 7) {
+        let compactMetrics = availableWidth <= 180
+        let iconWidth: CGFloat = compactMetrics ? 12 : 13
+        let spacing: CGFloat = compactMetrics ? 5 : 7
+        let leadingPadding = CGFloat(
+            (compactMetrics ? 8 : 10) + depth * (compactMetrics ? 10 : 14)
+        )
+        let trailingPadding: CGFloat = compactMetrics ? 6 : 8
+
+        return HStack(spacing: spacing) {
             if let disclosureIcon {
                 Image(systemName: disclosureIcon)
-                    .frame(width: 13)
+                    .frame(width: iconWidth)
                     .rotationEffect(.degrees(rotatesDisclosureIcon ? 90 : 0))
             } else {
                 Color.clear
-                    .frame(width: 13, height: 13)
+                    .frame(width: iconWidth, height: iconWidth)
             }
             if let secondaryIcon {
                 Image(systemName: secondaryIcon)
-                    .frame(width: 13)
+                    .frame(width: iconWidth)
             }
             content()
+                .layoutPriority(-1)
             Spacer(minLength: 0)
+            if let activity {
+                AgentActivityStatusSlot(
+                    registry: agentActivity,
+                    scope: activity.scope,
+                    isPresented: activity.isPresented,
+                    isVisible: activity.isVisible,
+                    selected: selected
+                )
+                .fixedSize()
+                .layoutPriority(1)
+            }
         }
         .font(.system(size: 12))
-        .padding(.leading, CGFloat(10 + depth * 14))
-        .padding(.trailing, 8)
-        .frame(height: 28)
+        .frame(
+            width: max(availableWidth - leadingPadding - trailingPadding, 0),
+            height: 28,
+            alignment: .leading
+        )
+        .padding(.leading, leadingPadding)
+        .padding(.trailing, trailingPadding)
+        .clipped()
         .contentShape(Rectangle())
         .background(selected ? Color.accentColor.opacity(0.18) : Color.clear)
     }
@@ -466,6 +548,12 @@ struct ProjectSidebar: View {
             )
         }
     }
+}
+
+private struct SidebarRowActivity {
+    let scope: AgentActivityScope
+    let isPresented: Bool
+    let isVisible: Bool
 }
 
 private enum SidebarEntry: Equatable {

@@ -7,6 +7,8 @@ struct WorkspaceView: View {
     @ObservedObject var editors: EditorSessionPool
     @ObservedObject var notes: NoteSessionPool
     @ObservedObject var appearance: AppearanceSettings
+    let agentActivity: AgentActivityRegistry
+    @State private var activityTopology = WorkspaceActivityTopology()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -15,6 +17,8 @@ struct WorkspaceView: View {
                     store: store,
                     editors: editors,
                     notes: notes,
+                    agentActivity: agentActivity,
+                    activityIndicatorsVisible: store.isSidebarVisible,
                     chooseProject: chooseProject,
                     hideSidebar: { setSidebarVisible(false) }
                 )
@@ -40,10 +44,12 @@ struct WorkspaceView: View {
             sessions.reconcile(validPaneIDs: store.document.terminalIDs)
             editors.reconcile(validPaneIDs: store.document.terminalIDs)
             notes.reconcile(validNoteIDs: store.document.noteIDs)
+            refreshActivityTopology()
         }
         .onChange(of: store.document.terminalIDs) { _, paneIDs in
             sessions.reconcile(validPaneIDs: paneIDs)
             editors.reconcile(validPaneIDs: paneIDs)
+            refreshActivityTopology()
         }
         .onChange(of: store.document.noteIDs) { _, noteIDs in
             notes.reconcile(validNoteIDs: noteIDs)
@@ -100,6 +106,15 @@ struct WorkspaceView: View {
         } message: {
             Text("One or more files in this editor have unsaved changes.")
         }
+    }
+
+    private func refreshActivityTopology() {
+        let topology = WorkspaceActivityTopology(document: store.document)
+        guard activityTopology != topology else {
+            return
+        }
+        activityTopology = topology
+        agentActivity.reconcile(topology: topology)
     }
 
     private var workspaceBar: some View {
