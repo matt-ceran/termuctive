@@ -420,10 +420,15 @@ struct ProjectSidebar: View {
         let compactMetrics = availableWidth <= 180
         let iconWidth: CGFloat = compactMetrics ? 12 : 13
         let spacing: CGFloat = compactMetrics ? 5 : 7
-        let leadingPadding = CGFloat(
+        let nominalLeadingPadding = CGFloat(
             (compactMetrics ? 8 : 10) + depth * (compactMetrics ? 10 : 14)
         )
         let trailingPadding: CGFloat = compactMetrics ? 6 : 8
+        let minimumContentWidth = iconWidth * 2 + spacing * 4 + 14
+        let leadingPadding = min(
+            nominalLeadingPadding,
+            max(availableWidth - trailingPadding - minimumContentWidth, 0)
+        )
 
         return HStack(spacing: spacing) {
             if let disclosureIcon {
@@ -454,13 +459,9 @@ struct ProjectSidebar: View {
             }
         }
         .font(.system(size: 12))
-        .frame(
-            width: max(availableWidth - leadingPadding - trailingPadding, 0),
-            height: 28,
-            alignment: .leading
-        )
         .padding(.leading, leadingPadding)
         .padding(.trailing, trailingPadding)
+        .frame(width: max(availableWidth, 0), height: 28, alignment: .leading)
         .clipped()
         .contentShape(Rectangle())
         .background(selected ? Color.accentColor.opacity(0.18) : Color.clear)

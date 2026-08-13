@@ -603,23 +603,22 @@ final class TerminalAgentActivityTests: XCTestCase {
                 hostingView.layoutSubtreeIfNeeded()
             }
 
-            let glyphViews = descendants(of: hostingView).filter {
-                String(describing: type(of: $0)).contains("AgentActivityGlyphView")
-            }
-            let activeGlyph = try XCTUnwrap(
-                glyphViews.first { view in
-                    view.layer?.sublayers?.first?.opacity ?? 0 > 0.5
+            var activeGlyphs: [NSView] = []
+            try await waitUntil("active sidebar glyphs to settle", timeout: 2) {
+                activeGlyphs = self.descendants(of: hostingView).filter { view in
+                    String(describing: type(of: view)).contains(
+                        "AgentActivityGlyphView"
+                    ) && view.layer?.sublayers?.first?.opacity ?? 0 > 0.5
                 }
-            )
-            let frame = activeGlyph.convert(activeGlyph.bounds, to: hostingView)
-            XCTAssertGreaterThanOrEqual(frame.minX, 0)
-            XCTAssertLessThanOrEqual(frame.maxX, width - 5.5)
-            XCTAssertEqual(frame.width, 14, accuracy: 0.5)
-            XCTAssertTrue(
-                activeGlyph.layer?.sublayers?.dropFirst().contains { layer in
-                    layer.animation(forKey: "termuctive-dot-tail") != nil
-                } == true
-            )
+                return !activeGlyphs.isEmpty
+                    && activeGlyphs.allSatisfy { $0.bounds.width > 0 }
+            }
+            for activeGlyph in activeGlyphs {
+                let frame = activeGlyph.convert(activeGlyph.bounds, to: hostingView)
+                XCTAssertGreaterThanOrEqual(frame.minX, 0)
+                XCTAssertLessThanOrEqual(frame.maxX, width - 5.5)
+                XCTAssertEqual(frame.width, 14, accuracy: 0.5)
+            }
 
             let attachment = XCTAttachment(image: try renderedImage(of: hostingView))
             attachment.name = "Agent activity \(Int(width))pt \(scheme) selected \(selected)"
@@ -647,6 +646,34 @@ final class TerminalAgentActivityTests: XCTestCase {
             registry.signal(for: .space(space.id)).summary.accessibilityValue,
             "Codex active"
         )
+
+        let animatedSidebar = AgentActivityStatusSlot(
+            registry: registry,
+            scope: .space(space.id),
+            isPresented: true,
+            isVisible: true,
+            selected: false,
+            reduceMotionOverride: false
+        )
+        .frame(width: 14, height: 14)
+        let animatedView = NSHostingView(rootView: animatedSidebar)
+        animatedView.frame = NSRect(x: 0, y: 0, width: 14, height: 14)
+        let animatedWindow = NSWindow(
+            contentRect: animatedView.bounds,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        animatedWindow.contentView = animatedView
+        animatedView.layoutSubtreeIfNeeded()
+        try await waitUntil("the compositor activity animation to start", timeout: 2) {
+            self.descendants(of: animatedView).contains { view in
+                String(describing: type(of: view)).contains("AgentActivityGlyphView")
+                    && view.layer?.sublayers?.contains { layer in
+                        layer.animation(forKey: "termuctive-dot-tail") != nil
+                    } == true
+            }
+        }
 
         let reducedMotionSidebar = AgentActivityStatusSlot(
             registry: registry,
