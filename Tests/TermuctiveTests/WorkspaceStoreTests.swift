@@ -1012,6 +1012,268 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.document.selectedSpaceID, firstSpace.id)
     }
 
+    func testTerminalTabsNormalizeStaleAndDuplicateReferencesOnLoad() {
+        let firstPane = TerminalPane(workingDirectory: "/project/first")
+        let secondPane = TerminalPane(workingDirectory: "/project/second")
+        let firstSpace = TerminalSpace(name: "First", layout: .terminal(firstPane))
+        let secondSpace = TerminalSpace(name: "Second", layout: .terminal(secondPane))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(firstSpace), .space(secondSpace)],
+            lastSelectedSpaceID: secondSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: secondSpace.id,
+            openTerminalSpaceIDs: [UUID(), secondSpace.id, secondSpace.id, firstSpace.id]
+        )
+
+        let store = WorkspaceStore(persistence: persistence)
+
+        XCTAssertEqual(store.document.openTerminalSpaceIDs, [secondSpace.id, firstSpace.id])
+        XCTAssertEqual(store.openTerminalSpaceTabs.map(\.id), [secondSpace.id, firstSpace.id])
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpace.id)
+        XCTAssertEqual(store.focusedPaneID, secondPane.id)
+        XCTAssertTrue(persistence.savedDocuments.isEmpty)
+    }
+
+    func testOpeningSelectingAndReorderingTerminalTabsSavesOnlyRealChanges() {
+        let firstSpace = TerminalSpace(
+            name: "First",
+            layout: .terminal(TerminalPane(workingDirectory: "/project/first"))
+        )
+        let secondSpace = TerminalSpace(
+            name: "Second",
+            layout: .terminal(TerminalPane(workingDirectory: "/project/second"))
+        )
+        let thirdSpace = TerminalSpace(
+            name: "Third",
+            layout: .terminal(TerminalPane(workingDirectory: "/project/third"))
+        )
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(firstSpace), .space(secondSpace), .space(thirdSpace)],
+            lastSelectedSpaceID: firstSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: firstSpace.id,
+            openTerminalSpaceIDs: [firstSpace.id]
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.selectTerminalSpaceTab(withID: secondSpace.id)
+
+        XCTAssertEqual(store.document.openTerminalSpaceIDs, [firstSpace.id, secondSpace.id])
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpace.id)
+        XCTAssertEqual(persistence.savedDocuments.count, 1)
+
+        store.selectSpace(withID: secondSpace.id, inProject: project.id)
+        store.placeTerminalSpaceTab(withID: thirdSpace.id, before: secondSpace.id)
+
+        XCTAssertEqual(
+            store.document.openTerminalSpaceIDs,
+            [firstSpace.id, thirdSpace.id, secondSpace.id]
+        )
+        XCTAssertEqual(store.document.selectedSpaceID, thirdSpace.id)
+        XCTAssertEqual(persistence.savedDocuments.count, 2)
+
+        store.reorderTerminalSpaceTab(withID: firstSpace.id, before: firstSpace.id)
+        store.reorderTerminalSpaceTab(withID: UUID(), before: firstSpace.id)
+        store.reorderTerminalSpaceTab(withID: secondSpace.id, before: UUID())
+
+        XCTAssertEqual(
+            store.document.openTerminalSpaceIDs,
+            [firstSpace.id, thirdSpace.id, secondSpace.id]
+        )
+        XCTAssertEqual(store.document.selectedSpaceID, thirdSpace.id)
+        XCTAssertEqual(persistence.savedDocuments.count, 2)
+
+        store.reorderTerminalSpaceTab(withID: secondSpace.id, before: firstSpace.id)
+
+        XCTAssertEqual(
+            store.document.openTerminalSpaceIDs,
+            [secondSpace.id, firstSpace.id, thirdSpace.id]
+        )
+        XCTAssertEqual(store.document.selectedSpaceID, thirdSpace.id)
+        XCTAssertEqual(persistence.savedDocuments.count, 3)
+        XCTAssertEqual(persistence.savedDocuments.last, store.document)
+    }
+
+    func testClosingInactiveActiveAndLastTerminalTabsIsNondestructive() {
+        let firstPane = TerminalPane(workingDirectory: "/project/first")
+        let secondPane = TerminalPane(workingDirectory: "/project/second")
+        let thirdPane = TerminalPane(workingDirectory: "/project/third")
+        let firstSpace = TerminalSpace(name: "First", layout: .terminal(firstPane))
+        let secondSpace = TerminalSpace(name: "Second", layout: .terminal(secondPane))
+        let thirdSpace = TerminalSpace(name: "Third", layout: .terminal(thirdPane))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(firstSpace), .space(secondSpace), .space(thirdSpace)],
+            lastSelectedSpaceID: firstSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: firstSpace.id,
+            openTerminalSpaceIDs: [firstSpace.id, secondSpace.id, thirdSpace.id]
+        )
+        let store = WorkspaceStore(persistence: persistence)
+        let originalTerminalIDs = store.document.terminalIDs
+
+        store.closeTerminalSpaceTab(withID: thirdSpace.id)
+
+        XCTAssertEqual(store.document.openTerminalSpaceIDs, [firstSpace.id, secondSpace.id])
+        XCTAssertEqual(store.document.selectedSpaceID, firstSpace.id)
+        XCTAssertEqual(store.document.terminalIDs, originalTerminalIDs)
+        XCTAssertEqual(persistence.savedDocuments.count, 1)
+
+        store.closeTerminalSpaceTab(withID: thirdSpace.id)
+
+        XCTAssertEqual(persistence.savedDocuments.count, 1)
+
+        store.closeTerminalSpaceTab(withID: firstSpace.id)
+
+        XCTAssertEqual(store.document.openTerminalSpaceIDs, [secondSpace.id])
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpace.id)
+        XCTAssertEqual(store.focusedPaneID, secondPane.id)
+        XCTAssertEqual(store.document.terminalIDs, originalTerminalIDs)
+        XCTAssertEqual(persistence.savedDocuments.count, 2)
+
+        store.closeTerminalSpaceTab(withID: secondSpace.id)
+
+        XCTAssertTrue(store.document.openTerminalSpaceIDs.isEmpty)
+        XCTAssertNil(store.document.selectedSpaceID)
+        XCTAssertNil(store.document.selectedItemID)
+        XCTAssertEqual(store.document.selectedProjectID, project.id)
+        XCTAssertEqual(store.document.terminalIDs, originalTerminalIDs)
+        XCTAssertNotNil(store.document.space(withID: firstSpace.id))
+        XCTAssertNotNil(store.document.space(withID: secondSpace.id))
+        XCTAssertNotNil(store.document.space(withID: thirdSpace.id))
+        XCTAssertEqual(persistence.savedDocuments.count, 3)
+    }
+
+    func testTerminalTabsRestorePerSpaceFocusAndZoomAcrossCrossProjectAdd() throws {
+        let firstPane = TerminalPane(workingDirectory: "/one")
+        let secondPane = TerminalPane(workingDirectory: "/one/tests")
+        let firstSpace = TerminalSpace(
+            name: "First",
+            layout: .split(
+                PaneSplit(
+                    axis: .horizontal,
+                    first: .terminal(firstPane),
+                    second: .terminal(secondPane)
+                )
+            )
+        )
+        let firstProject = TerminalProject(
+            name: "One",
+            rootDirectory: "/one",
+            items: [.space(firstSpace)],
+            lastSelectedSpaceID: firstSpace.id
+        )
+        let otherPane = TerminalPane(workingDirectory: "/two")
+        let otherSpace = TerminalSpace(name: "Other", layout: .terminal(otherPane))
+        let otherProject = TerminalProject(
+            name: "Two",
+            rootDirectory: "/two",
+            items: [.space(otherSpace)],
+            lastSelectedSpaceID: otherSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [firstProject, otherProject],
+            selectedProjectID: firstProject.id,
+            selectedSpaceID: firstSpace.id,
+            openTerminalSpaceIDs: [firstSpace.id, otherSpace.id]
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.focusPane(withID: secondPane.id)
+        store.toggleFocusedPaneZoom()
+        store.selectTerminalSpaceTab(withID: otherSpace.id)
+
+        XCTAssertEqual(store.focusedPaneID, otherPane.id)
+        XCTAssertNil(store.zoomedPaneID)
+
+        store.selectTerminalSpaceTab(withID: firstSpace.id)
+
+        XCTAssertEqual(store.focusedPaneID, secondPane.id)
+        XCTAssertEqual(store.zoomedPaneID, secondPane.id)
+
+        store.addSpace(toFolderWithID: nil, inProjectWithID: otherProject.id)
+        let addedSpaceID = try XCTUnwrap(store.document.selectedSpaceID)
+        let addedPaneID = try XCTUnwrap(store.focusedPaneID)
+
+        XCTAssertNotEqual(addedSpaceID, firstSpace.id)
+        XCTAssertNotEqual(addedSpaceID, otherSpace.id)
+        XCTAssertTrue(store.document.openTerminalSpaceIDs.contains(addedSpaceID))
+        XCTAssertTrue(
+            try XCTUnwrap(store.document.space(withID: addedSpaceID))
+                .layout.terminalIDs.contains(addedPaneID)
+        )
+        XCTAssertNil(store.zoomedPaneID)
+
+        store.selectTerminalSpaceTab(withID: firstSpace.id)
+
+        XCTAssertEqual(store.focusedPaneID, secondPane.id)
+        XCTAssertEqual(store.zoomedPaneID, secondPane.id)
+    }
+
+    func testDeletingSelectedTerminalTabChoosesRightThenLeftSurvivor() {
+        let firstPane = TerminalPane(workingDirectory: "/one")
+        let firstSpace = TerminalSpace(name: "First", layout: .terminal(firstPane))
+        let firstProject = TerminalProject(
+            name: "One",
+            rootDirectory: "/one",
+            items: [.space(firstSpace)],
+            lastSelectedSpaceID: firstSpace.id
+        )
+        let middlePane = TerminalPane(workingDirectory: "/two/middle")
+        let lastPane = TerminalPane(workingDirectory: "/two/last")
+        let middleSpace = TerminalSpace(name: "Middle", layout: .terminal(middlePane))
+        let lastSpace = TerminalSpace(name: "Last", layout: .terminal(lastPane))
+        let secondProject = TerminalProject(
+            name: "Two",
+            rootDirectory: "/two",
+            items: [.space(middleSpace), .space(lastSpace)],
+            lastSelectedSpaceID: middleSpace.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [firstProject, secondProject],
+            selectedProjectID: secondProject.id,
+            selectedSpaceID: middleSpace.id,
+            openTerminalSpaceIDs: [firstSpace.id, middleSpace.id, lastSpace.id]
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.removeItem(withID: middleSpace.id, inProject: secondProject.id)
+
+        XCTAssertEqual(store.document.openTerminalSpaceIDs, [firstSpace.id, lastSpace.id])
+        XCTAssertEqual(store.document.selectedSpaceID, lastSpace.id)
+        XCTAssertEqual(store.focusedPaneID, lastPane.id)
+        XCTAssertFalse(store.document.terminalIDs.contains(middlePane.id))
+        XCTAssertEqual(persistence.savedDocuments.count, 1)
+
+        store.removeProject(withID: secondProject.id)
+
+        XCTAssertEqual(store.document.openTerminalSpaceIDs, [firstSpace.id])
+        XCTAssertEqual(store.document.selectedProjectID, firstProject.id)
+        XCTAssertEqual(store.document.selectedSpaceID, firstSpace.id)
+        XCTAssertEqual(store.focusedPaneID, firstPane.id)
+        XCTAssertFalse(store.document.terminalIDs.contains(lastPane.id))
+        XCTAssertEqual(persistence.savedDocuments.count, 2)
+    }
+
     func testBackgroundPersistenceDoesNotBlockAndCoalescesLatestRatio() async throws {
         let firstPane = TerminalPane(workingDirectory: "/project")
         let secondPane = TerminalPane(workingDirectory: "/project")

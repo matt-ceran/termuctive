@@ -1,5 +1,13 @@
 import Foundation
 
+struct TerminalSpaceTabDescriptor: Equatable, Identifiable {
+    let id: UUID
+    let projectID: UUID
+    let projectName: String
+    let spaceName: String
+    let path: String
+}
+
 @MainActor
 final class WorkspaceStore: ObservableObject {
     @Published private(set) var document: WorkspaceDocument
@@ -15,6 +23,8 @@ final class WorkspaceStore: ObservableObject {
     private var persistenceGeneration = 0
     private var persistenceTask: Task<Void, Never>?
     private var persistenceError: (any Error)?
+    private var lastFocusedPaneIDBySpaceID: [UUID: UUID] = [:]
+    private var lastZoomedPaneIDBySpaceID: [UUID: UUID] = [:]
 
     init(persistence: any WorkspacePersisting = WorkspaceFileStore.live) {
         self.persistence = persistence
@@ -41,6 +51,24 @@ final class WorkspaceStore: ObservableObject {
 
     var selectedItem: WorkspaceItem? {
         document.selectedItem
+    }
+
+    var openTerminalSpaceTabs: [TerminalSpaceTabDescriptor] {
+        document.openTerminalSpaceIDs.compactMap { spaceID in
+            guard let project = document.project(containingSpaceWithID: spaceID),
+                let space = project.space(withID: spaceID)
+            else {
+                return nil
+            }
+            let itemPath = project.namePath(forItemWithID: spaceID) ?? [space.name]
+            return TerminalSpaceTabDescriptor(
+                id: spaceID,
+                projectID: project.id,
+                projectName: project.name,
+                spaceName: space.name,
+                path: ([project.name] + itemPath).joined(separator: " / ")
+            )
+        }
     }
 
     var focusedPane: TerminalPane? {
@@ -108,6 +136,10 @@ final class WorkspaceStore: ObservableObject {
         (selectedProject?.terminalSpaces.count ?? 0) > 1
     }
 
+    var canCycleOpenTerminalSpaceTabs: Bool {
+        document.openTerminalSpaceIDs.count > 1
+    }
+
     var canCycleProjects: Bool {
         document.projects.count > 1
     }
@@ -148,10 +180,12 @@ final class WorkspaceStore: ObservableObject {
             lastSelectedSpaceID: space.id
         )
 
+        rememberCurrentPaneState()
         document.projects.append(project)
         document.selectedProjectID = project.id
         document.selectedItemID = space.id
         document.selectedSpaceID = space.id
+        ensureOpenTerminalSpace(withID: space.id)
         expandedProjectIDs.insert(project.id)
         selectedFolderID = nil
         focusedPaneID = pane.id
@@ -164,6 +198,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        rememberCurrentPaneState()
         activateProject(at: projectIndex)
         selectedFolderID = nil
         save()
@@ -172,24 +207,158 @@ final class WorkspaceStore: ObservableObject {
     func selectSpace(withID id: UUID, inProject projectID: UUID) {
         guard
             let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
-            let space = document.projects[projectIndex].space(withID: id)
+            document.projects[projectIndex].space(withID: id) != nil
         else {
             return
         }
 
-        document.projects[projectIndex].lastSelectedSpaceID = id
-        document.projects[projectIndex].lastSelectedItemID = id
-        document.selectedProjectID = projectID
-        document.selectedItemID = id
-        document.selectedSpaceID = id
-        expandedProjectIDs.insert(projectID)
-        expandedFolderIDs.formUnion(
-            document.projects[projectIndex].ancestorFolderIDs(forSpaceWithID: id)
+        let previousDocument = document
+        rememberCurrentPaneState()
+        activateSpace(inProjectAt: projectIndex, spaceID: id)
+        if document != previousDocument {
+            save()
+        }
+    }
+
+    func selectTerminalSpaceTab(withID id: UUID) {
+        guard
+            let projectIndex = document.projects.firstIndex(where: {
+                $0.space(withID: id) != nil
+            })
+        else {
+            return
+        }
+        let previousDocument = document
+        rememberCurrentPaneState()
+        activateSpace(inProjectAt: projectIndex, spaceID: id)
+        if document != previousDocument {
+            save()
+        }
+    }
+
+    func placeTerminalSpaceTab(withID id: UUID, before anchorID: UUID?) {
+        setTerminalSpaceTabPlacement(
+            withID: id,
+            before: anchorID,
+            selectAfterPlacement: true,
+            requireExistingTab: false
         )
-        selectedFolderID = nil
-        focusedPaneID = space.layout.firstTerminalID
-        zoomedPaneID = nil
+    }
+
+    func reorderTerminalSpaceTab(withID id: UUID, before anchorID: UUID?) {
+        setTerminalSpaceTabPlacement(
+            withID: id,
+            before: anchorID,
+            selectAfterPlacement: false,
+            requireExistingTab: true
+        )
+    }
+
+    private func setTerminalSpaceTabPlacement(
+        withID id: UUID,
+        before anchorID: UUID?,
+        selectAfterPlacement: Bool,
+        requireExistingTab: Bool
+    ) {
+        if anchorID == id {
+            if selectAfterPlacement {
+                selectTerminalSpaceTab(withID: id)
+            }
+            return
+        }
+        guard
+            let projectIndex = document.projects.firstIndex(where: {
+                $0.space(withID: id) != nil
+            }),
+            anchorID.map({ document.openTerminalSpaceIDs.contains($0) }) ?? true,
+            !requireExistingTab || document.openTerminalSpaceIDs.contains(id)
+        else {
+            return
+        }
+
+        let previousDocument = document
+        if selectAfterPlacement {
+            rememberCurrentPaneState()
+        }
+        placeOpenTerminalSpace(withID: id, before: anchorID)
+        if selectAfterPlacement {
+            activateSpace(
+                inProjectAt: projectIndex,
+                spaceID: id,
+                ensureTabIsOpen: false
+            )
+        }
+        if document != previousDocument {
+            save()
+        }
+    }
+
+    func moveTerminalSpaceTab(withID id: UUID, offset: Int) {
+        guard let index = document.openTerminalSpaceIDs.firstIndex(of: id),
+            document.openTerminalSpaceIDs.count > 1
+        else {
+            return
+        }
+        let targetIndex = min(
+            max(index + offset, 0),
+            document.openTerminalSpaceIDs.count - 1
+        )
+        guard targetIndex != index else {
+            return
+        }
+
+        let anchorID: UUID?
+        if targetIndex > index {
+            anchorID =
+                targetIndex + 1 < document.openTerminalSpaceIDs.count
+                ? document.openTerminalSpaceIDs[targetIndex + 1]
+                : nil
+        } else {
+            anchorID = document.openTerminalSpaceIDs[targetIndex]
+        }
+        reorderTerminalSpaceTab(withID: id, before: anchorID)
+    }
+
+    func closeTerminalSpaceTab(withID id: UUID) {
+        guard let removedIndex = document.openTerminalSpaceIDs.firstIndex(of: id) else {
+            return
+        }
+
+        rememberCurrentPaneState()
+        document.openTerminalSpaceIDs.remove(at: removedIndex)
+        if document.selectedSpaceID == id {
+            if !document.openTerminalSpaceIDs.isEmpty {
+                let fallbackIndex = min(
+                    removedIndex,
+                    document.openTerminalSpaceIDs.count - 1
+                )
+                let fallbackID = document.openTerminalSpaceIDs[fallbackIndex]
+                if let projectIndex = document.projects.firstIndex(where: {
+                    $0.space(withID: fallbackID) != nil
+                }) {
+                    activateSpace(
+                        inProjectAt: projectIndex,
+                        spaceID: fallbackID,
+                        ensureTabIsOpen: false
+                    )
+                }
+            } else {
+                document.selectedItemID = nil
+                document.selectedSpaceID = nil
+                selectedFolderID = nil
+                focusedPaneID = nil
+                zoomedPaneID = nil
+            }
+        }
         save()
+    }
+
+    func selectNextTerminalSpaceTab() {
+        selectAdjacentOpenTerminalSpaceTab(offset: 1)
+    }
+
+    func selectPreviousTerminalSpaceTab() {
+        selectAdjacentOpenTerminalSpaceTab(offset: -1)
     }
 
     func selectNote(withID id: UUID, inProject projectID: UUID) {
@@ -200,6 +369,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        rememberCurrentPaneState()
         document.projects[projectIndex].lastSelectedItemID = id
         document.selectedProjectID = projectID
         document.selectedItemID = id
@@ -282,6 +452,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
         zoomedPaneID = zoomedPaneID == focusedPaneID ? nil : focusedPaneID
+        rememberCurrentPaneState()
     }
 
     func addFolder() {
@@ -372,6 +543,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        rememberCurrentPaneState()
         let existingNames = project.childNames(inFolderWithID: parentID) ?? []
         let note = ProjectNote(
             name: uniqueName(base: "Note", existing: existingNames)
@@ -385,6 +557,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        rememberCurrentPaneState()
         document.projects[projectIndex].lastSelectedItemID = note.id
         document.selectedProjectID = projectID
         document.selectedItemID = note.id
@@ -522,6 +695,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        rememberCurrentPaneState()
         let existingNames = project.childNames(inFolderWithID: parentID) ?? []
         let pane = TerminalPane(
             title: defaultShellName,
@@ -545,6 +719,7 @@ final class WorkspaceStore: ObservableObject {
         document.selectedProjectID = projectID
         document.selectedItemID = space.id
         document.selectedSpaceID = space.id
+        ensureOpenTerminalSpace(withID: space.id)
         expandedProjectIDs.insert(projectID)
         if let parentID {
             expandedFolderIDs.insert(parentID)
@@ -552,6 +727,7 @@ final class WorkspaceStore: ObservableObject {
         selectedFolderID = nil
         focusedPaneID = pane.id
         zoomedPaneID = nil
+        rememberCurrentPaneState()
         save()
     }
 
@@ -593,10 +769,18 @@ final class WorkspaceStore: ObservableObject {
         guard let projectIndex = document.projects.firstIndex(where: { $0.id == id }) else {
             return []
         }
+        let previousTabOrder = document.openTerminalSpaceIDs
+        let selectedTabIndex = document.selectedSpaceID.flatMap {
+            previousTabOrder.firstIndex(of: $0)
+        }
         let removedNoteIDs = document.projects[projectIndex].noteIDs
         let wasSelected = document.selectedProjectID == id
+        if wasSelected {
+            rememberCurrentPaneState()
+        }
         document.projects.remove(at: projectIndex)
         document.clearPaneNoteReferences(in: removedNoteIDs)
+        normalizeOpenTerminalSpaces()
         expandedProjectIDs.formIntersection(document.projects.map(\.id))
         expandedFolderIDs.formIntersection(document.folderIDs)
 
@@ -611,7 +795,12 @@ final class WorkspaceStore: ObservableObject {
                 save()
                 return removedNoteIDs
             }
-            activateProject(at: min(projectIndex, document.projects.count - 1))
+            if !activateNearestSurvivingTerminalSpaceTab(
+                from: previousTabOrder,
+                around: selectedTabIndex
+            ) {
+                activateProject(at: min(projectIndex, document.projects.count - 1))
+            }
         }
         save()
         return removedNoteIDs
@@ -620,12 +809,31 @@ final class WorkspaceStore: ObservableObject {
     @discardableResult
     func removeItem(withID id: UUID, inProject projectID: UUID) -> Set<UUID> {
         guard let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
+            let item = document.projects[projectIndex].item(withID: id)
+        else {
+            return []
+        }
+        let previousTabOrder = document.openTerminalSpaceIDs
+        let selectedTabIndex = document.selectedSpaceID.flatMap {
+            previousTabOrder.firstIndex(of: $0)
+        }
+        let removedSelectedItem =
+            document.selectedItemID.map {
+                item.item(withID: $0) != nil
+            } ?? false
+        let removedSelectedSpace =
+            document.selectedSpaceID.map {
+                item.space(withID: $0) != nil
+            } ?? false
+
+        guard
             let removedItem = document.projects[projectIndex].removeItem(withID: id)
         else {
             return []
         }
         let removedNoteIDs = removedItem.noteIDs
         document.clearPaneNoteReferences(in: removedNoteIDs)
+        normalizeOpenTerminalSpaces()
 
         normalizeLastSelectedSpace(forProjectAt: projectIndex)
         normalizeLastSelectedItem(forProjectAt: projectIndex)
@@ -636,11 +844,18 @@ final class WorkspaceStore: ObservableObject {
             self.selectedFolderID = nil
         }
 
-        if document.selectedProjectID == projectID {
-            restoreActiveItem(
-                inProjectAt: projectIndex,
-                preferredItemID: document.selectedItemID
-            )
+        if document.selectedProjectID == projectID,
+            removedSelectedItem || removedSelectedSpace
+        {
+            if !activateNearestSurvivingTerminalSpaceTab(
+                from: previousTabOrder,
+                around: selectedTabIndex
+            ) {
+                restoreActiveItem(
+                    inProjectAt: projectIndex,
+                    preferredItemID: nil
+                )
+            }
         }
         normalizeZoom()
         save()
@@ -655,6 +870,7 @@ final class WorkspaceStore: ObservableObject {
         if zoomedPaneID != nil {
             zoomedPaneID = id
         }
+        rememberCurrentPaneState()
     }
 
     func splitFocusedPane(axis: PaneAxis) {
@@ -683,6 +899,7 @@ final class WorkspaceStore: ObservableObject {
         }
         self.focusedPaneID = newPane.id
         zoomedPaneID = nil
+        rememberCurrentPaneState()
         save()
     }
 
@@ -699,6 +916,7 @@ final class WorkspaceStore: ObservableObject {
             )
         }
         focusedPaneID = paneID
+        rememberCurrentPaneState()
         save()
     }
 
@@ -757,6 +975,7 @@ final class WorkspaceStore: ObservableObject {
         }
         focusedPaneID = sourcePaneID
         zoomedPaneID = nil
+        rememberCurrentPaneState()
         save()
         return previewPane.id
     }
@@ -817,31 +1036,56 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func closePane(withID paneID: UUID) {
-        guard let projectID = selectedProject?.id,
-            let space = selectedSpace,
-            space.layout.terminalIDs.contains(paneID)
+        guard
+            let projectIndex = document.projects.firstIndex(where: {
+                $0.terminalIDs.contains(paneID)
+            }),
+            let space = document.projects[projectIndex].space(
+                containingTerminalWithID: paneID
+            )
         else {
             return
         }
 
         if space.layout.terminalCount == 1 {
-            removeItem(withID: space.id, inProject: projectID)
+            removeItem(
+                withID: space.id,
+                inProject: document.projects[projectIndex].id
+            )
             return
         }
 
-        updateSelectedSpace { space in
-            guard let layout = space.layout.removingTerminal(withID: paneID) else {
-                return
-            }
-            space.layout = layout
+        guard
+            document.projects[projectIndex].updateSpace(
+                withID: space.id,
+                update: { space in
+                    guard let layout = space.layout.removingTerminal(withID: paneID) else {
+                        return
+                    }
+                    space.layout = layout
+                }
+            )
+        else {
+            return
         }
-        zoomedPaneID = nil
-        let focusedPaneRemains =
-            focusedPaneID.map {
-                selectedSpace?.layout.terminalIDs.contains($0) == true
-            } ?? false
-        if !focusedPaneRemains {
-            focusedPaneID = selectedSpace?.layout.firstTerminalID
+        let updatedSpace = document.projects[projectIndex].space(withID: space.id)
+        if lastFocusedPaneIDBySpaceID[space.id] == paneID {
+            lastFocusedPaneIDBySpaceID[space.id] = updatedSpace?.layout.firstTerminalID
+        }
+        if lastZoomedPaneIDBySpaceID[space.id] == paneID {
+            lastZoomedPaneIDBySpaceID.removeValue(forKey: space.id)
+        }
+
+        if document.selectedSpaceID == space.id {
+            zoomedPaneID = nil
+            let focusedPaneRemains =
+                focusedPaneID.map {
+                    updatedSpace?.layout.terminalIDs.contains($0) == true
+                } ?? false
+            if !focusedPaneRemains {
+                focusedPaneID = updatedSpace?.layout.firstTerminalID
+            }
+            rememberCurrentPaneState()
         }
         save()
     }
@@ -954,18 +1198,125 @@ final class WorkspaceStore: ObservableObject {
         return (space, sourcePane)
     }
 
+    private func activateSpace(
+        inProjectAt projectIndex: Int,
+        spaceID: UUID,
+        ensureTabIsOpen: Bool = true
+    ) {
+        guard let space = document.projects[projectIndex].space(withID: spaceID) else {
+            return
+        }
+        let projectID = document.projects[projectIndex].id
+        document.projects[projectIndex].lastSelectedSpaceID = spaceID
+        document.projects[projectIndex].lastSelectedItemID = spaceID
+        document.selectedProjectID = projectID
+        document.selectedItemID = spaceID
+        document.selectedSpaceID = spaceID
+        if ensureTabIsOpen {
+            ensureOpenTerminalSpace(withID: spaceID)
+        }
+        expandedProjectIDs.insert(projectID)
+        expandedFolderIDs.formUnion(
+            document.projects[projectIndex].ancestorFolderIDs(forSpaceWithID: spaceID)
+        )
+        selectedFolderID = nil
+
+        let rememberedPaneID = lastFocusedPaneIDBySpaceID[spaceID]
+        focusedPaneID =
+            rememberedPaneID.flatMap { remembered in
+                space.layout.terminalIDs.contains(remembered) ? remembered : nil
+            } ?? space.layout.firstTerminalID
+        let rememberedZoomID = lastZoomedPaneIDBySpaceID[spaceID]
+        zoomedPaneID =
+            rememberedZoomID.flatMap { remembered in
+                space.layout.terminalIDs.contains(remembered) ? remembered : nil
+            }
+        rememberCurrentPaneState()
+    }
+
+    @discardableResult
+    private func ensureOpenTerminalSpace(withID id: UUID) -> Bool {
+        guard document.space(withID: id) != nil,
+            !document.openTerminalSpaceIDs.contains(id)
+        else {
+            return false
+        }
+        document.openTerminalSpaceIDs.append(id)
+        return true
+    }
+
+    private func placeOpenTerminalSpace(withID id: UUID, before anchorID: UUID?) {
+        guard document.space(withID: id) != nil else {
+            return
+        }
+        var tabIDs = document.openTerminalSpaceIDs.filter { $0 != id }
+        let insertionIndex: Int
+        if let anchorID,
+            let anchorIndex = tabIDs.firstIndex(of: anchorID)
+        {
+            insertionIndex = anchorIndex
+        } else {
+            insertionIndex = tabIDs.endIndex
+        }
+        tabIDs.insert(id, at: insertionIndex)
+        document.openTerminalSpaceIDs = tabIDs
+    }
+
+    private func normalizeOpenTerminalSpaces() {
+        let validSpaceIDs = Set(
+            document.projects.flatMap { $0.terminalSpaces.map(\.id) }
+        )
+        var seen: Set<UUID> = []
+        document.openTerminalSpaceIDs = document.openTerminalSpaceIDs.filter { id in
+            validSpaceIDs.contains(id) && seen.insert(id).inserted
+        }
+        if let selectedSpaceID = document.selectedSpaceID,
+            validSpaceIDs.contains(selectedSpaceID)
+        {
+            ensureOpenTerminalSpace(withID: selectedSpaceID)
+        }
+        lastFocusedPaneIDBySpaceID = lastFocusedPaneIDBySpaceID.filter {
+            validSpaceIDs.contains($0.key)
+        }
+        lastZoomedPaneIDBySpaceID = lastZoomedPaneIDBySpaceID.filter {
+            validSpaceIDs.contains($0.key)
+        }
+    }
+
+    private func rememberCurrentPaneState() {
+        guard let spaceID = document.selectedSpaceID,
+            let space = document.space(withID: spaceID)
+        else {
+            return
+        }
+        if let focusedPaneID,
+            space.layout.terminalIDs.contains(focusedPaneID)
+        {
+            lastFocusedPaneIDBySpaceID[spaceID] = focusedPaneID
+        }
+        if let zoomedPaneID,
+            space.layout.terminalIDs.contains(zoomedPaneID)
+        {
+            lastZoomedPaneIDBySpaceID[spaceID] = zoomedPaneID
+        } else {
+            lastZoomedPaneIDBySpaceID.removeValue(forKey: spaceID)
+        }
+    }
+
     private func activateSpaceAfterPaneInsertion(
         projectIndex: Int,
         spaceID: UUID,
         focusedPaneID: UUID,
         expandedFolderID: UUID?
     ) {
+        rememberCurrentPaneState()
         let projectID = document.projects[projectIndex].id
         document.projects[projectIndex].lastSelectedItemID = spaceID
         document.projects[projectIndex].lastSelectedSpaceID = spaceID
         document.selectedProjectID = projectID
         document.selectedItemID = spaceID
         document.selectedSpaceID = spaceID
+        ensureOpenTerminalSpace(withID: spaceID)
         expandedProjectIDs.insert(projectID)
         expandedFolderIDs.formUnion(
             document.projects[projectIndex].ancestorFolderIDs(forSpaceWithID: spaceID)
@@ -979,6 +1330,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func activateProject(at index: Int, preferredItemID: UUID? = nil) {
+        rememberCurrentPaneState()
         zoomedPaneID = nil
         document.selectedProjectID = document.projects[index].id
         expandedProjectIDs.insert(document.projects[index].id)
@@ -1010,12 +1362,18 @@ final class WorkspaceStore: ObservableObject {
 
         document.projects[index].lastSelectedSpaceID = space.id
         document.selectedSpaceID = space.id
-        if let focusedPaneID,
-            space.layout.terminalIDs.contains(focusedPaneID)
-        {
-            return
-        }
-        focusedPaneID = space.layout.firstTerminalID
+        ensureOpenTerminalSpace(withID: space.id)
+        let rememberedPaneID = lastFocusedPaneIDBySpaceID[space.id]
+        focusedPaneID =
+            rememberedPaneID.flatMap { remembered in
+                space.layout.terminalIDs.contains(remembered) ? remembered : nil
+            } ?? space.layout.firstTerminalID
+        let rememberedZoomID = lastZoomedPaneIDBySpaceID[space.id]
+        zoomedPaneID =
+            rememberedZoomID.flatMap { remembered in
+                space.layout.terminalIDs.contains(remembered) ? remembered : nil
+            }
+        rememberCurrentPaneState()
     }
 
     private func normalizeLastSelectedSpace(forProjectAt index: Int) {
@@ -1052,6 +1410,7 @@ final class WorkspaceStore: ObservableObject {
         if zoomedPaneID != nil {
             zoomedPaneID = paneID
         }
+        rememberCurrentPaneState()
     }
 
     private func selectAdjacentSpace(offset: Int) {
@@ -1065,6 +1424,19 @@ final class WorkspaceStore: ObservableObject {
             return
         }
         selectSpace(withID: spaceID, inProject: project.id)
+    }
+
+    private func selectAdjacentOpenTerminalSpaceTab(offset: Int) {
+        guard
+            let spaceID = adjacentID(
+                in: document.openTerminalSpaceIDs,
+                currentID: document.selectedSpaceID,
+                offset: offset
+            )
+        else {
+            return
+        }
+        selectTerminalSpaceTab(withID: spaceID)
     }
 
     private func selectAdjacentProject(offset: Int) {
@@ -1114,6 +1486,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func normalizeSelection() {
+        normalizeOpenTerminalSpaces()
         for index in document.projects.indices {
             normalizeLastSelectedSpace(forProjectAt: index)
             normalizeLastSelectedItem(forProjectAt: index)
@@ -1131,10 +1504,77 @@ final class WorkspaceStore: ObservableObject {
             document.projects.firstIndex {
                 $0.id == document.selectedProjectID
             } ?? 0
-        activateProject(
-            at: projectIndex,
-            preferredItemID: document.selectedItemID ?? document.selectedSpaceID
+
+        if let selectedSpaceID = document.selectedSpaceID,
+            let owningProjectIndex = document.projects.firstIndex(where: {
+                $0.space(withID: selectedSpaceID) != nil
+            })
+        {
+            activateSpace(inProjectAt: owningProjectIndex, spaceID: selectedSpaceID)
+        } else if let selectedItemID = document.selectedItemID,
+            let owningProjectIndex = document.projects.firstIndex(where: {
+                $0.note(withID: selectedItemID) != nil
+            })
+        {
+            document.selectedProjectID = document.projects[owningProjectIndex].id
+            document.selectedItemID = selectedItemID
+            document.selectedSpaceID = nil
+            focusedPaneID = nil
+            zoomedPaneID = nil
+        } else if let firstOpenSpaceID = document.openTerminalSpaceIDs.first,
+            let owningProjectIndex = document.projects.firstIndex(where: {
+                $0.space(withID: firstOpenSpaceID) != nil
+            })
+        {
+            activateSpace(
+                inProjectAt: owningProjectIndex,
+                spaceID: firstOpenSpaceID,
+                ensureTabIsOpen: false
+            )
+        } else {
+            document.selectedProjectID = document.projects[projectIndex].id
+            document.selectedItemID = nil
+            document.selectedSpaceID = nil
+            focusedPaneID = nil
+            zoomedPaneID = nil
+        }
+        normalizeOpenTerminalSpaces()
+    }
+
+    @discardableResult
+    private func activateNearestSurvivingTerminalSpaceTab(
+        from previousOrder: [UUID],
+        around previousIndex: Int?
+    ) -> Bool {
+        let survivingIDs = Set(document.openTerminalSpaceIDs)
+        guard !survivingIDs.isEmpty else {
+            return false
+        }
+
+        var candidates: [UUID] = []
+        if let previousIndex {
+            if previousIndex + 1 < previousOrder.count {
+                candidates.append(contentsOf: previousOrder[(previousIndex + 1)...])
+            }
+            if previousIndex > 0 {
+                candidates.append(contentsOf: previousOrder[..<previousIndex].reversed())
+            }
+        }
+        candidates.append(contentsOf: document.openTerminalSpaceIDs)
+
+        guard let spaceID = candidates.first(where: survivingIDs.contains),
+            let projectIndex = document.projects.firstIndex(where: {
+                $0.space(withID: spaceID) != nil
+            })
+        else {
+            return false
+        }
+        activateSpace(
+            inProjectAt: projectIndex,
+            spaceID: spaceID,
+            ensureTabIsOpen: false
         )
+        return true
     }
 
     private func normalizedName(_ name: String) -> String? {

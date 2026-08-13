@@ -47,6 +47,18 @@ targets:
   Termuctive:
     type: application
     platform: macOS
+    info:
+      path: Sources/Termuctive/Info.plist
+      properties:
+        CFBundleDisplayName: Termuctive
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.developer-tools
+        UTExportedTypeDeclarations:
+          - UTTypeConformsTo:
+              - public.data
+            UTTypeDescription: Termuctive Terminal Space
+            UTTypeIdentifier: com.mattceran.termuctive.terminal-space
     sources:
       - Sources/Termuctive
       - path: Resources/termuctive-learning-pdf
@@ -65,9 +77,6 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Termuctive
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
         PRODUCT_BUNDLE_IDENTIFIER: com.mattceran.termuctive
     scheme:
       testTargets:

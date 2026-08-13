@@ -272,4 +272,71 @@ final class WorkspaceFileStoreTests: XCTestCase {
         XCTAssertEqual(loaded.schemaVersion, WorkspaceDocument.currentSchemaVersion)
         XCTAssertEqual(loaded.selectedSpace?.layout.terminal(withID: pane.id)?.content, .terminal)
     }
+
+    func testSchemaThreeWorkspaceSeedsItsSelectedSpaceAsAnOpenTerminalTab() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let pane = TerminalPane(workingDirectory: "/project")
+        let space = TerminalSpace(name: "Terminal", layout: .terminal(pane))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(space)],
+            lastSelectedSpaceID: space.id
+        )
+        let document = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedSpaceID: space.id
+        )
+        let fileURL = directory.appendingPathComponent("workspace.json")
+        let persistence = WorkspaceFileStore(fileURL: fileURL)
+        try persistence.save(document)
+        let data = try Data(contentsOf: fileURL)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        json["schemaVersion"] = 3
+        json.removeValue(forKey: "openTerminalSpaceIDs")
+        try JSONSerialization.data(withJSONObject: json).write(to: fileURL)
+
+        let loaded = try XCTUnwrap(persistence.load())
+
+        XCTAssertEqual(loaded.schemaVersion, WorkspaceDocument.currentSchemaVersion)
+        XCTAssertEqual(loaded.openTerminalSpaceIDs, [space.id])
+        XCTAssertEqual(loaded.selectedSpaceID, space.id)
+    }
+
+    func testSchemaFourRoundTripPreservesExplicitlyEmptyOpenTerminalTabs() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let pane = TerminalPane(workingDirectory: "/project")
+        let space = TerminalSpace(name: "Terminal", layout: .terminal(pane))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(space)]
+        )
+        let document = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            openTerminalSpaceIDs: []
+        )
+        let persistence = WorkspaceFileStore(
+            fileURL: directory.appendingPathComponent("workspace.json")
+        )
+
+        try persistence.save(document)
+        let loaded = try XCTUnwrap(persistence.load())
+
+        XCTAssertEqual(loaded, document)
+        XCTAssertTrue(loaded.openTerminalSpaceIDs.isEmpty)
+        XCTAssertNil(loaded.selectedSpaceID)
+    }
 }

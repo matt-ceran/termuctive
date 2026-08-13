@@ -54,6 +54,29 @@ struct TermuctiveApp: App {
         .defaultSize(width: 1180, height: 740)
         .commands {
             CommandMenu("Workspace") {
+                Button("Previous Terminal Tab") {
+                    store.selectPreviousTerminalSpaceTab()
+                }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .disabled(!store.canCycleOpenTerminalSpaceTabs)
+
+                Button("Next Terminal Tab") {
+                    store.selectNextTerminalSpaceTab()
+                }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .disabled(!store.canCycleOpenTerminalSpaceTabs)
+
+                Button("Close Terminal Tab") {
+                    guard let selectedSpaceID = store.document.selectedSpaceID else {
+                        return
+                    }
+                    store.closeTerminalSpaceTab(withID: selectedSpaceID)
+                }
+                .keyboardShortcut("w", modifiers: [.command])
+                .disabled(store.document.selectedSpaceID == nil)
+
+                Divider()
+
                 Button("Previous Project") {
                     store.selectPreviousProject()
                 }

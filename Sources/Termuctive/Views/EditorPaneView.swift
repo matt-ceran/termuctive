@@ -613,6 +613,7 @@ private struct EditorBufferView: View {
 
             CodeEditorView(
                 buffer: buffer,
+                requestsFocus: store.focusedPaneID == session.id,
                 focusHandler: {
                     store.focusPane(withID: session.id)
                 },

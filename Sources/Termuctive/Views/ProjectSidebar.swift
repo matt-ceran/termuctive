@@ -199,6 +199,18 @@ struct ProjectSidebar: View {
                 ) {
                     store.selectSpace(withID: space.id, inProject: projectID)
                 }
+                .draggable(
+                    TerminalSpaceDragPayload(spaceID: space.id, origin: .sidebar)
+                ) {
+                    Label(space.name, systemImage: "rectangle")
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(
+                            .regularMaterial,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                }
             )
 
         case .folder(let folder):

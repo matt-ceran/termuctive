@@ -10,6 +10,7 @@
 		071EA7304E17353E4EB23BBF /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 0AD4E51F30ECDFDC52C0703A /* main.c */; };
 		07A053EBAB97934575D8ADA2 /* TerminalAgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81D1C7B9D692A8C6CC67E621 /* TerminalAgentActivity.swift */; };
 		07B2F323B929A148128D94CB /* PDFPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4720A7AE0AACC8B4CA21F73D /* PDFPaneView.swift */; };
+		0A3FB0F180D5D70047B77E09 /* TerminalSpaceTabStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEAFFB65D7974634987D889C /* TerminalSpaceTabStrip.swift */; };
 		0EDAB564560B62D68C1A77FC /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */; };
 		12D3E55E6022C1E6195A8901 /* EditorPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B195DC1835EF17E3FE412DD /* EditorPaneView.swift */; };
 		15843F292139EDF92A81512F /* WorkspaceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30BA578C986DB04FBAB5C6C2 /* WorkspaceStoreTests.swift */; };
@@ -102,6 +103,7 @@
 		0223CBE6ED7BE1C14BF798D6 /* NoteRichTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRichTextTests.swift; sourceTree = "<group>"; };
 		0A79DDB24299CC213E7359B8 /* Termuctive-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Termuctive-Bridging-Header.h"; sourceTree = "<group>"; };
 		0AD4E51F30ECDFDC52C0703A /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
+		0ADAD78CB82A0ECE335F34BE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDocument.swift; sourceTree = "<group>"; };
 		11DE01D8F964F7BC73D3C106 /* NoteRichTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRichTextEditor.swift; sourceTree = "<group>"; };
 		1B484F673E364FAC9B7D899B /* NoteFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteFileStoreTests.swift; sourceTree = "<group>"; };
@@ -142,6 +144,7 @@
 		A70432B30AD7F3376A89EC8B /* TerminalAgentActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentActivityTests.swift; sourceTree = "<group>"; };
 		AB0FD1B1292DD9F1333C3EF4 /* ProjectNotesIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNotesIntegrationTests.swift; sourceTree = "<group>"; };
 		AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHostView.swift; sourceTree = "<group>"; };
+		AEAFFB65D7974634987D889C /* TerminalSpaceTabStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSpaceTabStrip.swift; sourceTree = "<group>"; };
 		B6E1A21021BE972DC78E104D /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
 		C2AC0D63CFFAFA3D2810C3DD /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		C619C2D8D39C031484E264A4 /* AppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettings.swift; sourceTree = "<group>"; };
@@ -275,6 +278,7 @@
 				F9939468A2BF3818F1590520 /* ProjectNoteView.swift */,
 				9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */,
 				480CE99E8A7C5B82ED091513 /* SidebarDisclosureSection.swift */,
+				AEAFFB65D7974634987D889C /* TerminalSpaceTabStrip.swift */,
 				EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */,
 			);
 			path = Views;
@@ -331,6 +335,7 @@
 				C619C2D8D39C031484E264A4 /* AppearanceSettings.swift */,
 				268474801E729AD15FCB6E04 /* ApplicationLifecycle.swift */,
 				1F784C4BBAE43A7B6C7F23B1 /* Assets.xcassets */,
+				0ADAD78CB82A0ECE335F34BE /* Info.plist */,
 				1F22CF52B8769F1072F775FF /* LearningPDF.swift */,
 				613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */,
 				35EA800971A4F8606824C500 /* PDFPreview.swift */,
@@ -526,6 +531,7 @@
 				4CE61662CADA79BBEC33A3C4 /* TerminalAgentActivityMonitor.swift in Sources */,
 				7B4B4C22F2ABFEAAF52AE48E /* TerminalHostView.swift in Sources */,
 				70B35C0392C0A9E12418F603 /* TerminalSessionPool.swift in Sources */,
+				0A3FB0F180D5D70047B77E09 /* TerminalSpaceTabStrip.swift in Sources */,
 				1B001D4A34F6BB63CF00B0A7 /* TermuctiveApp.swift in Sources */,
 				AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */,
 				BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */,
@@ -606,9 +612,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Termuctive;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_FILE = Sources/Termuctive/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -838,9 +842,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Termuctive;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_FILE = Sources/Termuctive/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

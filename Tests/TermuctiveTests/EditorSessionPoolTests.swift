@@ -154,6 +154,94 @@ final class EditorSessionPoolTests: XCTestCase {
         XCTAssertNil(editors.retainedSession(forPaneID: paneID))
     }
 
+    func testDiscardingPendingUnsavedPaneCloseAfterSwitchingTabsClosesOriginalPane()
+        async throws
+    {
+        let directory = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let fileURL = directory.appendingPathComponent("Feature.swift")
+        try Data("let value = 1\n".utf8).write(to: fileURL)
+
+        let store = WorkspaceStore(persistence: EditorPoolTestPersistence())
+        store.addProject(at: directory)
+        let firstSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+        let firstPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.addSpace()
+        let secondSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+        let secondPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.selectTerminalSpaceTab(withID: firstSpaceID)
+        let editors = EditorSessionPool(store: store)
+        defer {
+            editors.terminateAll()
+        }
+
+        editors.presentEditor(inPaneID: firstPaneID)
+        let firstSession = try XCTUnwrap(editors.session(forPaneID: firstPaneID))
+        await firstSession.openFile(fileURL)
+        firstSession.selectedBuffer?.updateText("let value = 2\n")
+        editors.requestClosePane(withID: firstPaneID)
+        store.selectTerminalSpaceTab(withID: secondSpaceID)
+
+        XCTAssertEqual(editors.pendingClosePaneID, firstPaneID)
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpaceID)
+        XCTAssertTrue(store.document.terminalIDs.contains(firstPaneID))
+
+        editors.discardAndClosePendingPane()
+
+        XCTAssertNil(editors.pendingClosePaneID)
+        XCTAssertNil(editors.retainedSession(forPaneID: firstPaneID))
+        XCTAssertFalse(store.document.terminalIDs.contains(firstPaneID))
+        XCTAssertNil(store.document.space(withID: firstSpaceID))
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpaceID)
+        XCTAssertEqual(store.focusedPaneID, secondPaneID)
+        XCTAssertTrue(store.document.terminalIDs.contains(secondPaneID))
+        XCTAssertEqual(try String(contentsOf: fileURL), "let value = 1\n")
+    }
+
+    func testSavingPendingUnsavedPaneCloseAfterSwitchingTabsClosesOriginalPane()
+        async throws
+    {
+        let directory = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let fileURL = directory.appendingPathComponent("Feature.swift")
+        try Data("let value = 1\n".utf8).write(to: fileURL)
+
+        let store = WorkspaceStore(persistence: EditorPoolTestPersistence())
+        store.addProject(at: directory)
+        let firstSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+        let firstPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.addSpace()
+        let secondSpaceID = try XCTUnwrap(store.selectedSpace?.id)
+        let secondPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.selectTerminalSpaceTab(withID: firstSpaceID)
+        let editors = EditorSessionPool(store: store)
+        defer {
+            editors.terminateAll()
+        }
+
+        editors.presentEditor(inPaneID: firstPaneID)
+        let firstSession = try XCTUnwrap(editors.session(forPaneID: firstPaneID))
+        await firstSession.openFile(fileURL)
+        firstSession.selectedBuffer?.updateText("let value = 2\n")
+        editors.requestClosePane(withID: firstPaneID)
+        store.selectTerminalSpaceTab(withID: secondSpaceID)
+
+        await editors.saveAndClosePendingPane()
+
+        XCTAssertNil(editors.pendingClosePaneID)
+        XCTAssertNil(editors.retainedSession(forPaneID: firstPaneID))
+        XCTAssertFalse(store.document.terminalIDs.contains(firstPaneID))
+        XCTAssertNil(store.document.space(withID: firstSpaceID))
+        XCTAssertEqual(store.document.selectedSpaceID, secondSpaceID)
+        XCTAssertEqual(store.focusedPaneID, secondPaneID)
+        XCTAssertTrue(store.document.terminalIDs.contains(secondPaneID))
+        XCTAssertEqual(try String(contentsOf: fileURL), "let value = 2\n")
+    }
+
     func testAggregateUnsavedStateAndScopedSaveCoverRetainedSessions() async throws {
         let directory = try makeTemporaryDirectory()
         defer {

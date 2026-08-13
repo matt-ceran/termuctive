@@ -182,6 +182,20 @@ indirect enum WorkspaceItem: Codable, Equatable, Identifiable {
         ancestorFolderIDs(forItemWithID: id)
     }
 
+    func namePath(forItemWithID id: UUID) -> [String]? {
+        switch self {
+        case .space, .note:
+            return self.id == id ? [name] : nil
+        case .folder(let folder):
+            for child in folder.children {
+                if let childPath = child.namePath(forItemWithID: id) {
+                    return [folder.name] + childPath
+                }
+            }
+            return nil
+        }
+    }
+
     func containsFolder(withID id: UUID) -> Bool {
         switch self {
         case .space, .note:
@@ -504,6 +518,10 @@ struct TerminalProject: Codable, Equatable, Identifiable {
         items.lazy.compactMap { $0.space(withID: id) }.first
     }
 
+    func space(containingTerminalWithID id: UUID) -> TerminalSpace? {
+        terminalSpaces.first { $0.layout.terminalIDs.contains(id) }
+    }
+
     func note(withID id: UUID) -> ProjectNote? {
         items.lazy.compactMap { $0.note(withID: id) }.first
     }
@@ -534,6 +552,10 @@ struct TerminalProject: Codable, Equatable, Identifiable {
 
     func ancestorFolderIDs(forItemWithID id: UUID) -> [UUID] {
         items.lazy.compactMap { $0.ancestorFolderIDs(forItemWithID: id) }.first ?? []
+    }
+
+    func namePath(forItemWithID id: UUID) -> [String]? {
+        items.lazy.compactMap { $0.namePath(forItemWithID: id) }.first
     }
 
     func containsFolder(withID id: UUID) -> Bool {
@@ -638,26 +660,30 @@ extension WorkspaceItem {
 }
 
 struct WorkspaceDocument: Codable, Equatable {
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     var schemaVersion: Int
     var projects: [TerminalProject]
     var selectedProjectID: UUID?
     var selectedItemID: UUID?
     var selectedSpaceID: UUID?
+    var openTerminalSpaceIDs: [UUID]
 
     init(
         schemaVersion: Int = currentSchemaVersion,
         projects: [TerminalProject] = [],
         selectedProjectID: UUID? = nil,
         selectedItemID: UUID? = nil,
-        selectedSpaceID: UUID? = nil
+        selectedSpaceID: UUID? = nil,
+        openTerminalSpaceIDs: [UUID]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.projects = projects
         self.selectedProjectID = selectedProjectID
         self.selectedItemID = selectedItemID ?? selectedSpaceID
         self.selectedSpaceID = selectedSpaceID
+        self.openTerminalSpaceIDs =
+            openTerminalSpaceIDs ?? selectedSpaceID.map { [$0] } ?? []
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -666,6 +692,7 @@ struct WorkspaceDocument: Codable, Equatable {
         case selectedProjectID
         case selectedItemID
         case selectedSpaceID
+        case openTerminalSpaceIDs
     }
 
     init(from decoder: any Decoder) throws {
@@ -677,6 +704,9 @@ struct WorkspaceDocument: Codable, Equatable {
         selectedItemID =
             try container.decodeIfPresent(UUID.self, forKey: .selectedItemID)
             ?? selectedSpaceID
+        openTerminalSpaceIDs =
+            try container.decodeIfPresent([UUID].self, forKey: .openTerminalSpaceIDs)
+            ?? selectedSpaceID.map { [$0] } ?? []
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -686,6 +716,7 @@ struct WorkspaceDocument: Codable, Equatable {
         try container.encodeIfPresent(selectedProjectID, forKey: .selectedProjectID)
         try container.encodeIfPresent(selectedItemID, forKey: .selectedItemID)
         try container.encodeIfPresent(selectedSpaceID, forKey: .selectedSpaceID)
+        try container.encode(openTerminalSpaceIDs, forKey: .openTerminalSpaceIDs)
     }
 
     var selectedProject: TerminalProject? {
@@ -738,12 +769,20 @@ struct WorkspaceDocument: Codable, Equatable {
         projects.lazy.compactMap { $0.terminal(withID: id) }.first
     }
 
+    func space(withID id: UUID) -> TerminalSpace? {
+        projects.lazy.compactMap { $0.space(withID: id) }.first
+    }
+
     func note(withID id: UUID) -> ProjectNote? {
         projects.lazy.compactMap { $0.note(withID: id) }.first
     }
 
     func project(containingTerminalWithID id: UUID) -> TerminalProject? {
         projects.first { $0.terminalIDs.contains(id) }
+    }
+
+    func project(containingSpaceWithID id: UUID) -> TerminalProject? {
+        projects.first { $0.space(withID: id) != nil }
     }
 
     mutating func updateTerminal(

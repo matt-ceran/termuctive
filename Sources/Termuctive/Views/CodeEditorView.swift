@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 struct CodeEditorView: NSViewRepresentable {
     @ObservedObject var buffer: EditorDocumentBuffer
+    let requestsFocus: Bool
     let focusHandler: () -> Void
     let saveHandler: () -> Void
 
@@ -145,6 +146,7 @@ struct CodeEditorView: NSViewRepresentable {
         textView.isIncrementalSearchingEnabled = true
         textView.saveHandler = saveHandler
         textView.focusHandler = focusHandler
+        textView.setLogicalFocus(requestsFocus)
         textView.string = buffer.text
         textView.setSelectedRange(NSRange(location: 0, length: 0))
         textView.delegate = context.coordinator
@@ -175,6 +177,7 @@ struct CodeEditorView: NSViewRepresentable {
         }
         textView.saveHandler = saveHandler
         textView.focusHandler = focusHandler
+        textView.setLogicalFocus(requestsFocus)
         context.coordinator.applyModelTextIfNeeded(to: textView)
         textView.updateDocumentGeometry(in: scrollView)
     }
@@ -191,6 +194,7 @@ final class SourceTextView: NSTextView {
     weak var lineNumberRuler: SourceLineNumberRulerView?
     var saveHandler: (() -> Void)?
     var focusHandler: (() -> Void)?
+    private var hasLogicalFocus = false
 
     override func keyDown(with event: NSEvent) {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
@@ -209,11 +213,28 @@ final class SourceTextView: NSTextView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let window else {
+        requestFocusWhenAttached()
+    }
+
+    func setLogicalFocus(_ isFocused: Bool) {
+        guard hasLogicalFocus != isFocused else {
+            return
+        }
+        hasLogicalFocus = isFocused
+        if isFocused {
+            requestFocusWhenAttached()
+        }
+    }
+
+    private func requestFocusWhenAttached() {
+        guard hasLogicalFocus, let window else {
             return
         }
         DispatchQueue.main.async { [weak self, weak window] in
-            guard let self, let window, self.window === window else {
+            guard let self, let window,
+                self.hasLogicalFocus,
+                self.window === window
+            else {
                 return
             }
             _ = window.makeFirstResponder(self)

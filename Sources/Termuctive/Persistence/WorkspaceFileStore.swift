@@ -40,7 +40,7 @@ struct WorkspaceFileStore: WorkspacePersisting {
         let data = try Data(contentsOf: fileURL)
         var document = try JSONDecoder().decode(WorkspaceDocument.self, from: data)
         switch document.schemaVersion {
-        case 1, 2:
+        case 1, 2, 3:
             document.schemaVersion = WorkspaceDocument.currentSchemaVersion
         case WorkspaceDocument.currentSchemaVersion:
             break

@@ -145,167 +145,288 @@ struct WorkspaceView: View {
     }
 
     private var workspaceBar: some View {
-        HStack(spacing: 6) {
-            if !store.isSidebarVisible {
-                Button {
-                    setSidebarVisible(true)
-                } label: {
-                    Image(systemName: "sidebar.left")
-                }
-                .buttonStyle(SquareIconButtonStyle())
-                .accessibilityLabel("Show projects")
-            }
-
-            if let project = store.selectedProject {
-                Text(project.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                if let space = store.selectedSpace {
-                    Text("/")
-                        .foregroundStyle(.tertiary)
-                    Text(space.name)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else if let note = store.selectedNote {
-                    Text("/")
-                        .foregroundStyle(.tertiary)
-                    Text(note.name)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer()
-
-            Menu {
-                Picker("App Appearance", selection: $appearance.appTheme) {
-                    ForEach(AppTheme.allCases) { theme in
-                        Text(theme.title).tag(theme)
+        GeometryReader { geometry in
+            HStack(spacing: 6) {
+                if !store.isSidebarVisible {
+                    Button {
+                        setSidebarVisible(true)
+                    } label: {
+                        Image(systemName: "sidebar.left")
                     }
+                    .buttonStyle(SquareIconButtonStyle())
+                    .accessibilityLabel("Show projects")
                 }
 
-                Picker("Terminal Appearance", selection: $appearance.terminalTheme) {
-                    ForEach(TerminalTheme.allCases) { theme in
-                        Text(theme.title).tag(theme)
-                    }
-                }
-            } label: {
-                Image(systemName: "circle.lefthalf.filled")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 30, height: 30)
-            .help("Appearance")
-            .accessibilityLabel("Appearance options")
-
-            Button {
-                toggleFocusedPaneEditor()
-            } label: {
-                Image(
-                    systemName: isFocusedPaneEditorPresented
-                        ? "terminal"
-                        : "chevron.left.forwardslash.chevron.right"
+                TerminalSpaceTabStrip(
+                    store: store,
+                    agentActivity: agentActivity,
+                    selectTab: selectTerminalSpaceTab
                 )
-            }
-            .buttonStyle(SquareIconButtonStyle())
-            .disabled(!canToggleFocusedPaneEditor)
-            .help(isFocusedPaneEditorPresented ? "Return to Terminal" : "Open IDE")
-            .accessibilityLabel(
-                isFocusedPaneEditorPresented
-                    ? "Return focused pane to terminal"
-                    : "Open IDE in focused pane"
-            )
+                .frame(minWidth: 112, maxWidth: .infinity)
+                .clipped()
 
-            Menu {
-                Button("New Note Pane on Right") {
-                    store.addNotePane(axis: .horizontal)
-                }
-                Button("New Note Pane Below") {
-                    store.addNotePane(axis: .vertical)
-                }
-                if let project = store.selectedProject,
-                    !project.notes.isEmpty
-                {
-                    Divider()
-                    ForEach(project.notes) { note in
-                        Menu(note.name) {
-                            Button("Open on Right") {
-                                store.openNoteInNewPane(
-                                    noteID: note.id,
-                                    inProjectWithID: project.id,
-                                    axis: .horizontal
-                                )
-                            }
-                            Button("Open Below") {
-                                store.openNoteInNewPane(
-                                    noteID: note.id,
-                                    inProjectWithID: project.id,
-                                    axis: .vertical
-                                )
+                terminalSpaceMenu
+                    .fixedSize()
+
+                workspaceActions(for: geometry.size.width)
+                    .fixedSize()
+                    .layoutPriority(1)
+            }
+            .padding(.horizontal, 6)
+            .frame(width: geometry.size.width, height: 40)
+        }
+        .frame(height: 40)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    @ViewBuilder
+    private func workspaceActions(for availableWidth: CGFloat) -> some View {
+        if availableWidth >= 520 {
+            fullWorkspaceActions
+        } else if availableWidth >= 390 {
+            compactWorkspaceActions
+        } else {
+            workspaceActionsMenu
+        }
+    }
+
+    private var terminalSpaceMenu: some View {
+        Menu {
+            ForEach(store.document.projects) { project in
+                if !project.terminalSpaces.isEmpty {
+                    Menu(project.name) {
+                        ForEach(project.terminalSpaces) { space in
+                            let spacePath =
+                                project.namePath(forItemWithID: space.id)?
+                                .joined(separator: " / ") ?? space.name
+                            Button {
+                                store.selectSpace(withID: space.id, inProject: project.id)
+                            } label: {
+                                if store.document.selectedSpaceID == space.id {
+                                    Label(spacePath, systemImage: "checkmark")
+                                } else {
+                                    Text(spacePath)
+                                }
                             }
                         }
                     }
                 }
-            } label: {
-                Image(systemName: "note.text.badge.plus")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 30, height: 30)
-            .disabled(!store.canAddPane)
-            .help("Add Note Pane")
-            .accessibilityLabel("Add note pane")
-
-            Button {
-                store.splitFocusedPane(axis: .horizontal)
-            } label: {
-                Image(systemName: "rectangle.split.2x1")
+            if !store.document.projects.isEmpty {
+                Divider()
             }
-            .buttonStyle(SquareIconButtonStyle())
-            .disabled(store.focusedPaneID == nil)
-            .help("Split Right")
-            .accessibilityLabel("Split terminal right")
-
-            Button {
-                store.splitFocusedPane(axis: .vertical)
-            } label: {
-                Image(systemName: "rectangle.split.1x2")
+            Button("New Terminal Space") {
+                store.addSpace()
             }
-            .buttonStyle(SquareIconButtonStyle())
-            .disabled(store.focusedPaneID == nil)
-            .help("Split Down")
-            .accessibilityLabel("Split terminal down")
-
-            Button {
-                togglePaneZoom()
-            } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-            }
-            .buttonStyle(SquareIconButtonStyle())
-            .disabled(!store.canZoomFocusedPane)
-            .help(store.isFocusedPaneZoomed ? "Show All Panes" : "Zoom Focused Pane")
-            .accessibilityLabel(
-                store.isFocusedPaneZoomed ? "Show all terminal panes" : "Zoom focused terminal pane"
-            )
-
-            Button {
-                guard let focusedPaneID = store.focusedPaneID else {
-                    return
-                }
-                editors.requestClosePane(withID: focusedPaneID)
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(SquareIconButtonStyle())
-            .disabled(!store.canCloseFocusedPane)
-            .help("Close Pane")
-            .accessibilityLabel("Close terminal pane")
+            .disabled(store.selectedProject == nil)
+            Button("Add Project...", action: chooseProject)
+        } label: {
+            Image(systemName: "plus")
         }
-        .padding(.horizontal, 6)
-        .frame(height: 40)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 30, height: 30)
+        .help("Open terminal tab")
+        .accessibilityLabel("Open terminal tab")
+    }
+
+    private var fullWorkspaceActions: some View {
+        HStack(spacing: 6) {
+            appearanceMenu
+            editorButton
+            notePaneMenu
+            splitRightButton
+            splitDownButton
+            zoomButton
+            closePaneButton
+        }
+    }
+
+    private var compactWorkspaceActions: some View {
+        HStack(spacing: 6) {
+            editorButton
+            notePaneMenu
+            workspaceActionsMenu
+        }
+    }
+
+    private var appearanceMenu: some View {
+        Menu {
+            appearancePickers
+        } label: {
+            Image(systemName: "circle.lefthalf.filled")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 30, height: 30)
+        .help("Appearance")
+        .accessibilityLabel("Appearance options")
+    }
+
+    @ViewBuilder
+    private var appearancePickers: some View {
+        Picker("App Appearance", selection: $appearance.appTheme) {
+            ForEach(AppTheme.allCases) { theme in
+                Text(theme.title).tag(theme)
+            }
+        }
+        Picker("Terminal Appearance", selection: $appearance.terminalTheme) {
+            ForEach(TerminalTheme.allCases) { theme in
+                Text(theme.title).tag(theme)
+            }
+        }
+    }
+
+    private var editorButton: some View {
+        Button {
+            toggleFocusedPaneEditor()
+        } label: {
+            Image(
+                systemName: isFocusedPaneEditorPresented
+                    ? "terminal"
+                    : "chevron.left.forwardslash.chevron.right"
+            )
+        }
+        .buttonStyle(SquareIconButtonStyle())
+        .disabled(!canToggleFocusedPaneEditor)
+        .help(isFocusedPaneEditorPresented ? "Return to Terminal" : "Open IDE")
+        .accessibilityLabel(
+            isFocusedPaneEditorPresented
+                ? "Return focused pane to terminal"
+                : "Open IDE in focused pane"
+        )
+    }
+
+    private var notePaneMenu: some View {
+        Menu {
+            notePaneActions
+        } label: {
+            Image(systemName: "note.text.badge.plus")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 30, height: 30)
+        .disabled(!store.canAddPane)
+        .help("Add Note Pane")
+        .accessibilityLabel("Add note pane")
+    }
+
+    @ViewBuilder
+    private var notePaneActions: some View {
+        Button("New Note Pane on Right") {
+            store.addNotePane(axis: .horizontal)
+        }
+        Button("New Note Pane Below") {
+            store.addNotePane(axis: .vertical)
+        }
+        if let project = store.selectedProject,
+            !project.notes.isEmpty
+        {
+            Divider()
+            ForEach(project.notes) { note in
+                Menu(note.name) {
+                    Button("Open on Right") {
+                        store.openNoteInNewPane(
+                            noteID: note.id,
+                            inProjectWithID: project.id,
+                            axis: .horizontal
+                        )
+                    }
+                    Button("Open Below") {
+                        store.openNoteInNewPane(
+                            noteID: note.id,
+                            inProjectWithID: project.id,
+                            axis: .vertical
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var splitRightButton: some View {
+        Button {
+            store.splitFocusedPane(axis: .horizontal)
+        } label: {
+            Image(systemName: "rectangle.split.2x1")
+        }
+        .buttonStyle(SquareIconButtonStyle())
+        .disabled(store.focusedPaneID == nil)
+        .help("Split Right")
+        .accessibilityLabel("Split terminal right")
+    }
+
+    private var splitDownButton: some View {
+        Button {
+            store.splitFocusedPane(axis: .vertical)
+        } label: {
+            Image(systemName: "rectangle.split.1x2")
+        }
+        .buttonStyle(SquareIconButtonStyle())
+        .disabled(store.focusedPaneID == nil)
+        .help("Split Down")
+        .accessibilityLabel("Split terminal down")
+    }
+
+    private var zoomButton: some View {
+        Button {
+            togglePaneZoom()
+        } label: {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+        }
+        .buttonStyle(SquareIconButtonStyle())
+        .disabled(!store.canZoomFocusedPane)
+        .help(store.isFocusedPaneZoomed ? "Show All Panes" : "Zoom Focused Pane")
+        .accessibilityLabel(
+            store.isFocusedPaneZoomed ? "Show all terminal panes" : "Zoom focused terminal pane"
+        )
+    }
+
+    private var closePaneButton: some View {
+        Button(action: requestFocusedPaneClose) {
+            Image(systemName: "xmark")
+        }
+        .buttonStyle(SquareIconButtonStyle())
+        .disabled(!store.canCloseFocusedPane)
+        .help("Close Pane")
+        .accessibilityLabel("Close terminal pane")
+    }
+
+    private var workspaceActionsMenu: some View {
+        Menu {
+            appearancePickers
+            Divider()
+            Button(isFocusedPaneEditorPresented ? "Return to Terminal" : "Open IDE") {
+                toggleFocusedPaneEditor()
+            }
+            .disabled(!canToggleFocusedPaneEditor)
+            Menu("Note Panes") {
+                notePaneActions
+            }
+            .disabled(!store.canAddPane)
+            Button("Split Right") {
+                store.splitFocusedPane(axis: .horizontal)
+            }
+            .disabled(store.focusedPaneID == nil)
+            Button("Split Down") {
+                store.splitFocusedPane(axis: .vertical)
+            }
+            .disabled(store.focusedPaneID == nil)
+            Button(store.isFocusedPaneZoomed ? "Show All Panes" : "Zoom Focused Pane") {
+                togglePaneZoom()
+            }
+            .disabled(!store.canZoomFocusedPane)
+            Divider()
+            Button("Close Pane", action: requestFocusedPaneClose)
+                .disabled(!store.canCloseFocusedPane)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 30, height: 30)
+        .help("Pane actions")
+        .accessibilityLabel("Pane actions")
     }
 
     @ViewBuilder
@@ -389,11 +510,34 @@ struct WorkspaceView: View {
 
     private var pendingPaneCloseTitle: String {
         guard let pendingClosePaneID = editors.pendingClosePaneID,
-            let pane = store.selectedSpace?.layout.terminal(withID: pendingClosePaneID)
+            let pane = store.document.terminal(withID: pendingClosePaneID)
         else {
             return "Close Pane?"
         }
         return "Close \(sessions.title(for: pane))?"
+    }
+
+    private func requestFocusedPaneClose() {
+        guard let focusedPaneID = store.focusedPaneID else {
+            return
+        }
+        editors.requestClosePane(withID: focusedPaneID)
+    }
+
+    private func selectTerminalSpaceTab(_ spaceID: UUID) {
+        store.selectTerminalSpaceTab(withID: spaceID)
+        Task { @MainActor in
+            await Task.yield()
+            guard store.document.selectedSpaceID == spaceID,
+                let pane = store.focusedPane,
+                pane.content == .terminal,
+                !editors.isEditorPresented(inPaneID: pane.id),
+                sessions.previewURL(for: pane.id) == nil
+            else {
+                return
+            }
+            sessions.focus(paneID: pane.id)
+        }
     }
 
     private func toggleFocusedPaneEditor() {
