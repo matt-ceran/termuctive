@@ -41,6 +41,7 @@ private enum PaneLeafPresentation: Equatable {
 @MainActor
 final class PaneTreeContainerView: NSView {
     private var rootController: PaneTreeNodeController?
+    private var leafHosts: [UUID: PaneLeafHost] = [:]
 
     override var isFlipped: Bool {
         true
@@ -66,34 +67,45 @@ final class PaneTreeContainerView: NSView {
             return
         }
 
-        rootController?.view.removeFromSuperview()
+        leafHosts = leafHosts.filter { node.terminalIDs.contains($0.key) }
+        let previousRootView = rootController?.view
         let controller = PaneTreeNodeController(
             node: node,
             store: store,
             sessions: sessions,
             editors: editors,
-            notes: notes
+            notes: notes,
+            leafHosts: &leafHosts
         )
         rootController = controller
         controller.view.frame = bounds
         controller.view.autoresizingMask = [.width, .height]
-        addSubview(controller.view)
+        if controller.view.superview !== self {
+            addSubview(controller.view)
+        }
+        if let previousRootView,
+            previousRootView !== controller.view,
+            previousRootView.superview === self
+        {
+            previousRootView.removeFromSuperview()
+        }
     }
 
     override func layout() {
         super.layout()
-        rootController?.view.frame = bounds
+        guard let rootView = rootController?.view,
+            rootView.frame != bounds
+        else {
+            return
+        }
+        rootView.frame = bounds
     }
 }
 
 @MainActor
 private final class PaneTreeNodeController {
     private enum Content {
-        case terminal(
-            pane: TerminalPane,
-            presentation: PaneLeafPresentation,
-            host: NSHostingView<AnyView>
-        )
+        case terminal(PaneLeafHost)
         case split(
             id: UUID,
             axis: PaneAxis,
@@ -107,8 +119,8 @@ private final class PaneTreeNodeController {
 
     var view: NSView {
         switch content {
-        case .terminal(_, _, let host):
-            host
+        case .terminal(let leafHost):
+            leafHost.host
         case .split(_, _, let view, _, _):
             view
         }
@@ -119,7 +131,8 @@ private final class PaneTreeNodeController {
         store: WorkspaceStore,
         sessions: TerminalSessionPool,
         editors: EditorSessionPool,
-        notes: NoteSessionPool
+        notes: NoteSessionPool,
+        leafHosts: inout [UUID: PaneLeafHost]
     ) {
         switch node {
         case .terminal(let pane):
@@ -128,8 +141,9 @@ private final class PaneTreeNodeController {
                 sessions: sessions,
                 editors: editors
             )
-            let host = NSHostingView(
-                rootView: Self.leafView(
+            let leafHost: PaneLeafHost
+            if let cachedHost = leafHosts[pane.id] {
+                cachedHost.update(
                     pane: pane,
                     presentation: presentation,
                     store: store,
@@ -137,13 +151,23 @@ private final class PaneTreeNodeController {
                     editors: editors,
                     notes: notes
                 )
-            )
-            host.sizingOptions = []
-            content = .terminal(
-                pane: pane,
-                presentation: presentation,
-                host: host
-            )
+                leafHost = cachedHost
+            } else {
+                leafHost = PaneLeafHost(
+                    pane: pane,
+                    presentation: presentation,
+                    rootView: Self.leafView(
+                        pane: pane,
+                        presentation: presentation,
+                        store: store,
+                        sessions: sessions,
+                        editors: editors,
+                        notes: notes
+                    )
+                )
+                leafHosts[pane.id] = leafHost
+            }
+            content = .terminal(leafHost)
 
         case .split(let split):
             let first = PaneTreeNodeController(
@@ -151,14 +175,16 @@ private final class PaneTreeNodeController {
                 store: store,
                 sessions: sessions,
                 editors: editors,
-                notes: notes
+                notes: notes,
+                leafHosts: &leafHosts
             )
             let second = PaneTreeNodeController(
                 node: split.second,
                 store: store,
                 sessions: sessions,
                 editors: editors,
-                notes: notes
+                notes: notes,
+                leafHosts: &leafHosts
             )
             let splitView = SmoothSplitView(axis: split.axis)
             splitView.addArrangedSubview(first.view)
@@ -180,8 +206,8 @@ private final class PaneTreeNodeController {
 
     func matchesStructure(of node: PaneNode) -> Bool {
         switch (content, node) {
-        case (.terminal(let pane, _, _), .terminal(let updatedPane)):
-            pane.id == updatedPane.id
+        case (.terminal(let leafHost), .terminal(let updatedPane)):
+            leafHost.pane.id == updatedPane.id
 
         case (
             .split(let id, let axis, _, let first, let second),
@@ -206,7 +232,7 @@ private final class PaneTreeNodeController {
     ) {
         switch (content, node) {
         case (
-            .terminal(let previousPane, let previousPresentation, let host),
+            .terminal(let leafHost),
             .terminal(let pane)
         ):
             let presentation = Self.presentation(
@@ -214,21 +240,13 @@ private final class PaneTreeNodeController {
                 sessions: sessions,
                 editors: editors
             )
-            guard pane != previousPane || presentation != previousPresentation else {
-                return
-            }
-            host.rootView = Self.leafView(
+            leafHost.update(
                 pane: pane,
                 presentation: presentation,
                 store: store,
                 sessions: sessions,
                 editors: editors,
                 notes: notes
-            )
-            content = .terminal(
-                pane: pane,
-                presentation: presentation,
-                host: host
             )
 
         case (
@@ -279,7 +297,7 @@ private final class PaneTreeNodeController {
         return .terminal
     }
 
-    private static func leafView(
+    fileprivate static func leafView(
         pane: TerminalPane,
         presentation: PaneLeafPresentation,
         store: WorkspaceStore,
@@ -324,6 +342,47 @@ private final class PaneTreeNodeController {
                 editors: editors
             )
             .id(pane.id)
+        )
+    }
+}
+
+@MainActor
+private final class PaneLeafHost {
+    private(set) var pane: TerminalPane
+    private(set) var presentation: PaneLeafPresentation
+    let host: NSHostingView<AnyView>
+
+    init(
+        pane: TerminalPane,
+        presentation: PaneLeafPresentation,
+        rootView: AnyView
+    ) {
+        self.pane = pane
+        self.presentation = presentation
+        host = NSHostingView(rootView: rootView)
+        host.sizingOptions = []
+    }
+
+    func update(
+        pane: TerminalPane,
+        presentation: PaneLeafPresentation,
+        store: WorkspaceStore,
+        sessions: TerminalSessionPool,
+        editors: EditorSessionPool,
+        notes: NoteSessionPool
+    ) {
+        guard self.pane != pane || self.presentation != presentation else {
+            return
+        }
+        self.pane = pane
+        self.presentation = presentation
+        host.rootView = PaneTreeNodeController.leafView(
+            pane: pane,
+            presentation: presentation,
+            store: store,
+            sessions: sessions,
+            editors: editors,
+            notes: notes
         )
     }
 }

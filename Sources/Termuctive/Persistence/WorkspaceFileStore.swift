@@ -1,12 +1,23 @@
 import Foundation
 
 protocol WorkspacePersisting {
+    var prefersBackgroundSaves: Bool { get }
     func load() throws -> WorkspaceDocument?
     func save(_ document: WorkspaceDocument) throws
 }
 
+extension WorkspacePersisting {
+    var prefersBackgroundSaves: Bool {
+        false
+    }
+}
+
 struct WorkspaceFileStore: WorkspacePersisting {
     let fileURL: URL
+
+    var prefersBackgroundSaves: Bool {
+        true
+    }
 
     static var live: WorkspaceFileStore {
         let applicationSupport = FileManager.default.urls(

@@ -1011,6 +1011,86 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.document.selectedProjectID, firstProject.id)
         XCTAssertEqual(store.document.selectedSpaceID, firstSpace.id)
     }
+
+    func testBackgroundPersistenceDoesNotBlockAndCoalescesLatestRatio() async throws {
+        let firstPane = TerminalPane(workingDirectory: "/project")
+        let secondPane = TerminalPane(workingDirectory: "/project")
+        let split = PaneSplit(
+            axis: .horizontal,
+            first: .terminal(firstPane),
+            second: .terminal(secondPane)
+        )
+        let space = TerminalSpace(name: "Terminal", layout: .split(split))
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.space(space)],
+            lastSelectedSpaceID: space.id
+        )
+        let persistence = SlowBackgroundWorkspacePersistence(
+            loadedDocument: WorkspaceDocument(
+                projects: [project],
+                selectedProjectID: project.id,
+                selectedSpaceID: space.id
+            )
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.commitSplitRatio(splitID: split.id, ratio: 0.6)
+        store.commitSplitRatio(splitID: split.id, ratio: 0.72)
+
+        let mainActorResponded = expectation(description: "Main actor stayed responsive")
+        Task { @MainActor in
+            mainActorResponded.fulfill()
+        }
+        await fulfillment(of: [mainActorResponded], timeout: 0.1)
+
+        try await store.flushPersistence()
+
+        let savedDocuments = persistence.savedDocuments
+        XCTAssertEqual(savedDocuments.count, 1)
+        guard case .split(let savedSplit) = savedDocuments.last?.selectedSpace?.layout else {
+            return XCTFail("Expected the latest split snapshot.")
+        }
+        XCTAssertEqual(savedSplit.ratio, 0.72)
+    }
+
+    func testFlushRetriesAFailedBackgroundWorkspaceSave() async throws {
+        let persistence = FailOnceBackgroundWorkspacePersistence()
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        try await store.flushPersistence()
+
+        XCTAssertEqual(persistence.attemptCount, 2)
+        XCTAssertEqual(persistence.savedDocument, store.document)
+        XCTAssertFalse(store.hasPendingPersistence)
+    }
+
+    func testMutationDuringFailedSaveRetryRemainsSerializedAndPersistsLatestDocument()
+        async throws
+    {
+        let retryStarted = expectation(description: "Failed save retry started")
+        let persistence = ControlledRetryWorkspacePersistence {
+            retryStarted.fulfill()
+        }
+        let store = WorkspaceStore(persistence: persistence)
+
+        store.addProject(at: URL(fileURLWithPath: "/tmp/first-project"))
+        let flushTask = Task { @MainActor in
+            try await store.flushPersistence()
+        }
+        await fulfillment(of: [retryStarted], timeout: 2)
+
+        store.addProject(at: URL(fileURLWithPath: "/tmp/latest-project"))
+        persistence.releaseRetry()
+        try await flushTask.value
+
+        XCTAssertEqual(persistence.maximumConcurrentSaveCount, 1)
+        XCTAssertEqual(persistence.savedDocuments.last, store.document)
+        XCTAssertEqual(persistence.savedDocuments.last?.projects.count, 2)
+        XCTAssertFalse(store.hasPendingPersistence)
+    }
 }
 
 private final class RecordingPersistence: WorkspacePersisting {
@@ -1023,5 +1103,143 @@ private final class RecordingPersistence: WorkspacePersisting {
 
     func save(_ document: WorkspaceDocument) throws {
         savedDocuments.append(document)
+    }
+}
+
+private final class SlowBackgroundWorkspacePersistence: WorkspacePersisting {
+    let prefersBackgroundSaves = true
+
+    private let lock = NSLock()
+    private let loadedDocument: WorkspaceDocument
+    private var storedDocuments: [WorkspaceDocument] = []
+
+    init(loadedDocument: WorkspaceDocument) {
+        self.loadedDocument = loadedDocument
+    }
+
+    var savedDocuments: [WorkspaceDocument] {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return storedDocuments
+    }
+
+    func load() throws -> WorkspaceDocument? {
+        loadedDocument
+    }
+
+    func save(_ document: WorkspaceDocument) throws {
+        Thread.sleep(forTimeInterval: 0.25)
+        lock.lock()
+        storedDocuments.append(document)
+        lock.unlock()
+    }
+}
+
+private final class FailOnceBackgroundWorkspacePersistence: WorkspacePersisting {
+    let prefersBackgroundSaves = true
+
+    private let lock = NSLock()
+    private var attempts = 0
+    private var storedDocument: WorkspaceDocument?
+
+    var attemptCount: Int {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return attempts
+    }
+
+    var savedDocument: WorkspaceDocument? {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return storedDocument
+    }
+
+    func load() throws -> WorkspaceDocument? {
+        nil
+    }
+
+    func save(_ document: WorkspaceDocument) throws {
+        lock.lock()
+        attempts += 1
+        let shouldFail = attempts == 1
+        if !shouldFail {
+            storedDocument = document
+        }
+        lock.unlock()
+        if shouldFail {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+}
+
+private final class ControlledRetryWorkspacePersistence: WorkspacePersisting {
+    let prefersBackgroundSaves = true
+
+    private let lock = NSLock()
+    private let retryStarted: () -> Void
+    private let retryRelease = DispatchSemaphore(value: 0)
+    private var attemptCount = 0
+    private var activeSaveCount = 0
+    private var maximumActiveSaveCount = 0
+    private var storedDocuments: [WorkspaceDocument] = []
+
+    init(retryStarted: @escaping () -> Void) {
+        self.retryStarted = retryStarted
+    }
+
+    var maximumConcurrentSaveCount: Int {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return maximumActiveSaveCount
+    }
+
+    var savedDocuments: [WorkspaceDocument] {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return storedDocuments
+    }
+
+    func load() throws -> WorkspaceDocument? {
+        nil
+    }
+
+    func save(_ document: WorkspaceDocument) throws {
+        lock.lock()
+        attemptCount += 1
+        let attempt = attemptCount
+        activeSaveCount += 1
+        maximumActiveSaveCount = max(maximumActiveSaveCount, activeSaveCount)
+        lock.unlock()
+        defer {
+            lock.lock()
+            activeSaveCount -= 1
+            lock.unlock()
+        }
+
+        if attempt == 1 {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        if attempt == 2 {
+            retryStarted()
+            _ = retryRelease.wait(timeout: .now() + 5)
+        }
+
+        lock.lock()
+        storedDocuments.append(document)
+        lock.unlock()
+    }
+
+    func releaseRetry() {
+        retryRelease.signal()
     }
 }

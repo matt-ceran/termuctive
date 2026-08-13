@@ -61,7 +61,7 @@ struct ProjectSidebar: View {
             Divider()
 
             ScrollView {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(store.document.projects) { project in
                         projectSection(project)
                     }
@@ -141,8 +141,11 @@ struct ProjectSidebar: View {
                 }
             }
 
-            SidebarDisclosureSection(isExpanded: isExpanded) {
-                VStack(spacing: 0) {
+            SidebarDisclosureSection(
+                isExpanded: isExpanded,
+                contentHeight: disclosureHeight(for: project.items)
+            ) {
+                LazyVStack(spacing: 0) {
                     ForEach(project.items) { item in
                         itemRow(
                             item,
@@ -222,8 +225,11 @@ struct ProjectSidebar: View {
                         }
                     }
 
-                    SidebarDisclosureSection(isExpanded: isExpanded) {
-                        VStack(spacing: 0) {
+                    SidebarDisclosureSection(
+                        isExpanded: isExpanded,
+                        contentHeight: disclosureHeight(for: folder.children)
+                    ) {
+                        LazyVStack(spacing: 0) {
                             ForEach(folder.children) { child in
                                 itemRow(
                                     child,
@@ -546,6 +552,22 @@ struct ProjectSidebar: View {
                 inItemWithID: itemID,
                 inProjectWithID: projectID
             )
+        }
+    }
+
+    private func disclosureHeight(for items: [WorkspaceItem]) -> CGFloat {
+        CGFloat(visibleRowCount(in: items)) * 28
+    }
+
+    private func visibleRowCount(in items: [WorkspaceItem]) -> Int {
+        items.reduce(into: 0) { count, item in
+            count += 1
+            guard case .folder(let folder) = item,
+                store.expandedFolderIDs.contains(folder.id)
+            else {
+                return
+            }
+            count += visibleRowCount(in: folder.children)
         }
     }
 }

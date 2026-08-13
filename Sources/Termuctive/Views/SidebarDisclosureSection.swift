@@ -10,50 +10,70 @@ enum SidebarMotion {
     static var panel: Animation {
         .smooth(duration: panelDuration)
     }
+
+    @MainActor
+    static func setSidebarVisible(
+        _ isVisible: Bool,
+        store: WorkspaceStore,
+        sessions: TerminalSessionPool
+    ) {
+        guard store.isSidebarVisible != isVisible else {
+            return
+        }
+        let transitionID = sessions.beginAnimatedLayoutTransition()
+        withAnimation(panel, completionCriteria: .logicallyComplete) {
+            store.isSidebarVisible = isVisible
+        } completion: {
+            sessions.finishAnimatedLayoutTransition(transitionID)
+        }
+    }
 }
 
 struct SidebarDisclosureSection<Content: View>: View {
     let isExpanded: Bool
+    let contentHeight: CGFloat
     private let content: Content
-
-    @State private var measuredHeight: CGFloat = 0
 
     init(
         isExpanded: Bool,
+        contentHeight: CGFloat,
         @ViewBuilder content: () -> Content
     ) {
         self.isExpanded = isExpanded
+        self.contentHeight = contentHeight
         self.content = content()
     }
 
     var body: some View {
-        content
-            .fixedSize(horizontal: false, vertical: true)
-            .background {
-                GeometryReader { geometry in
-                    Color.clear.preference(
-                        key: SidebarDisclosureHeightKey.self,
-                        value: geometry.size.height
+        Group {
+            if isExpanded {
+                content
+                    .modifier(
+                        SidebarDisclosureHeightModifier(
+                            height: contentHeight
+                        )
                     )
-                }
+                    .transition(
+                        .modifier(
+                            active: SidebarDisclosureHeightModifier(height: 0),
+                            identity: SidebarDisclosureHeightModifier(
+                                height: contentHeight
+                            )
+                        )
+                    )
             }
-            .frame(
-                height: isExpanded ? measuredHeight : 0,
-                alignment: .top
-            )
-            .clipped()
-            .allowsHitTesting(isExpanded)
-            .accessibilityHidden(!isExpanded)
-            .onPreferenceChange(SidebarDisclosureHeightKey.self) { height in
-                measuredHeight = height
-            }
+        }
+        .allowsHitTesting(isExpanded)
+        .accessibilityHidden(!isExpanded)
     }
 }
 
-private struct SidebarDisclosureHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+private struct SidebarDisclosureHeightModifier: ViewModifier {
+    let height: CGFloat
 
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+    func body(content: Content) -> some View {
+        content
+            .frame(height: max(height, 0), alignment: .top)
+            .clipped()
     }
 }

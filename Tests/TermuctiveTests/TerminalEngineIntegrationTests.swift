@@ -139,7 +139,7 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         XCTAssertTrue(terminal.fontSmoothing)
     }
 
-    func testInteractivePaneResizeCommitsOneSettledPTYSize() {
+    func testInteractiveDividerResizeCoalescesToDisplayFrames() {
         let terminal = TermuctiveTerminalView(
             frame: NSRect(x: 0, y: 0, width: 640, height: 480)
         )
@@ -152,21 +152,227 @@ final class TerminalEngineIntegrationTests: XCTestCase {
             }
         }
 
-        let initialSize = terminal.frame.size
-        terminal.beginInteractivePaneResize()
+        let lease = terminal.beginInteractivePaneResize()
         for width in stride(from: 600, through: 440, by: -20) {
-            terminal.setFrameSize(
-                NSSize(width: CGFloat(width), height: 420)
-            )
+            let size = NSSize(width: CGFloat(width), height: 420)
+            terminal.setFrameSize(size)
         }
 
-        XCTAssertEqual(terminal.frame.size, initialSize)
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 640, height: 480))
         XCTAssertEqual(processDelegate.resizeEvents.count, 0)
 
-        terminal.endInteractivePaneResize()
+        terminal.commitInteractiveResizeFrameForTesting()
 
         XCTAssertEqual(terminal.frame.size, NSSize(width: 440, height: 420))
         XCTAssertEqual(processDelegate.resizeEvents.count, 1)
+
+        terminal.setFrameSize(NSSize(width: 420, height: 400))
+        terminal.endInteractivePaneResize(lease)
+
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 420, height: 400))
+        XCTAssertEqual(processDelegate.resizeEvents.count, 2)
+    }
+
+    func testReversingAnimatedLayoutKeepsOnePTYResizeTransaction() throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+        terminal.frame = container.bounds
+        container.addSubview(terminal)
+        terminal.cancelInteractivePaneResizes()
+        let processDelegate = TerminalResizeTestDelegate()
+        terminal.processDelegate = processDelegate
+
+        let firstTransition = sessions.beginAnimatedLayoutTransition()
+        terminal.setFrameSize(NSSize(width: 520, height: 480))
+        terminal.commitInteractiveResizeFrameForTesting()
+        let reversedTransition = sessions.beginAnimatedLayoutTransition()
+
+        sessions.finishAnimatedLayoutTransition(firstTransition)
+        XCTAssertEqual(processDelegate.resizeEvents.count, 0)
+
+        terminal.setFrameSize(NSSize(width: 600, height: 480))
+        terminal.commitInteractiveResizeFrameForTesting()
+        XCTAssertEqual(processDelegate.resizeEvents.count, 0)
+
+        sessions.finishAnimatedLayoutTransition(reversedTransition)
+
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 600, height: 480))
+        XCTAssertEqual(processDelegate.resizeEvents.count, 1)
+    }
+
+    func testAnimatedLayoutReturningToOriginalSizeClearsPresentationTransform() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let container = NSView(frame: terminal.frame)
+        container.addSubview(terminal)
+        let transition = terminal.beginInteractivePaneResize(reason: .animatedLayout)
+
+        container.setFrameSize(NSSize(width: 500, height: 480))
+        terminal.setFrameSize(container.bounds.size)
+        terminal.commitInteractiveResizeFrameForTesting()
+        XCTAssertTrue(terminal.hasInteractivePresentationTransformForTesting)
+
+        container.setFrameSize(NSSize(width: 640, height: 480))
+        terminal.setFrameSize(container.bounds.size)
+        terminal.endInteractivePaneResize(transition)
+
+        XCTAssertFalse(terminal.hasInteractivePresentationTransformForTesting)
+        XCTAssertTrue(CATransform3DIsIdentity(terminal.layer?.transform ?? CATransform3DIdentity))
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 640, height: 480))
+    }
+
+    func testAnimatedLayoutKeepsRowPersistentBufferingWhileShellOutputStreams() async throws {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let container = NSView(frame: terminal.frame)
+        container.addSubview(terminal)
+        terminal.startProcess(
+            executable: "/bin/zsh",
+            args: ["-f"],
+            execName: "zsh"
+        )
+        defer {
+            if terminal.process.running {
+                terminal.terminate()
+            }
+        }
+        terminal.send(
+            txt: "PROMPT='(base) draingang@Ahmets-MacBook-Air-2 fylm-tv % '; "
+                + "PROMPT_EOL_MARK='%'; print -r -- TERMUCTIVE_READY\n"
+        )
+        _ = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_READY"],
+            timeout: 5
+        )
+
+        let transition = terminal.beginInteractivePaneResize(
+            reason: .animatedLayout
+        )
+        switch terminal.metalBufferingMode {
+        case .perRowPersistent:
+            break
+        case .perFrameAggregated:
+            XCTFail("Presentation-only layout must not replace the interactive-shell row cache.")
+        }
+
+        container.setFrameSize(NSSize(width: 880, height: 480))
+        terminal.setFrameSize(container.bounds.size)
+        terminal.commitInteractiveResizeFrameForTesting()
+        terminal.send(txt: "printf 'TERMUCTIVE_EXACT_REVERSAL_INPUT_OK\\n'\n")
+        _ = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_EXACT_REVERSAL_INPUT_OK"],
+            timeout: 5
+        )
+
+        container.setFrameSize(NSSize(width: 640, height: 480))
+        terminal.setFrameSize(container.bounds.size)
+        terminal.endInteractivePaneResize(transition)
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        let output = String(
+            decoding: terminal.getTerminal().getBufferAsData(),
+            as: UTF8.self
+        )
+        let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        XCTAssertFalse(terminal.hasInteractivePresentationTransformForTesting)
+        XCTAssertFalse(
+            lines.contains("%"),
+            "A zsh partial-line marker remained after the exact reversal: \(output)"
+        )
+    }
+
+    func testAnimatedResizeKeepsZshOutputStableUntilSettlement() async throws {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 900, height: 600)
+        )
+        let processDelegate = TerminalResizeTestDelegate()
+        terminal.processDelegate = processDelegate
+        terminal.startProcess(
+            executable: "/bin/zsh",
+            args: ["-f"],
+            execName: "zsh"
+        )
+        defer {
+            if terminal.process.running {
+                terminal.terminate()
+            }
+        }
+        terminal.send(
+            txt: "PROMPT='TERMUCTIVE_PROMPT % '; "
+                + "PROMPT_EOL_MARK='%'; "
+                + "print -r -- TERMUCTIVE_READY\n"
+        )
+        _ = try await terminalOutput(
+            from: terminal,
+            containing: ["TERMUCTIVE_READY"],
+            timeout: 5
+        )
+        processDelegate.reset()
+
+        let transition = terminal.beginInteractivePaneResize(
+            reason: .animatedLayout
+        )
+        for width in stride(from: 860, through: 620, by: -40) {
+            terminal.setFrameSize(NSSize(width: CGFloat(width), height: 600))
+            terminal.commitInteractiveResizeFrameForTesting()
+        }
+        terminal.send(txt: "print -r -- FROZEN_REVERSAL_INPUT_OK\n")
+        _ = try await terminalOutput(
+            from: terminal,
+            containing: ["FROZEN_REVERSAL_INPUT_OK"],
+            timeout: 5
+        )
+
+        XCTAssertEqual(processDelegate.resizeEvents.count, 0)
+
+        for width in stride(from: 660, through: 820, by: 40) {
+            terminal.setFrameSize(NSSize(width: CGFloat(width), height: 600))
+            terminal.commitInteractiveResizeFrameForTesting()
+        }
+        terminal.endInteractivePaneResize(transition)
+        let expectedSize =
+            "TERMUCTIVE_SIZE_\(terminal.getTerminal().rows) "
+            + "\(terminal.getTerminal().cols)"
+        terminal.send(
+            txt: "print -n -- TERMUCTIVE_SIZE_; stty size; "
+                + "print -r -- TERMUCTIVE_AFTER_REVERSAL\n"
+        )
+        let output = try await terminalOutput(
+            from: terminal,
+            containing: [expectedSize, "TERMUCTIVE_AFTER_REVERSAL"],
+            timeout: 5
+        )
+        let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        XCTAssertEqual(processDelegate.resizeEvents.count, 1)
+        XCTAssertTrue(output.contains(expectedSize))
+        XCTAssertFalse(
+            lines.contains("%"),
+            "A zsh partial-line marker remained after resize reversal: \(output)"
+        )
     }
 
     func testOverlappingResizeTransactionsWaitForEveryTransition() {
@@ -182,18 +388,201 @@ final class TerminalEngineIntegrationTests: XCTestCase {
             }
         }
 
-        terminal.beginInteractivePaneResize(reason: .animatedLayout)
-        terminal.beginInteractivePaneResize(reason: .divider)
+        let attachmentLease = terminal.beginInteractivePaneResize(reason: .attachment)
+        let dividerLease = terminal.beginInteractivePaneResize(reason: .divider)
         terminal.setFrameSize(NSSize(width: 500, height: 400))
-        terminal.endInteractivePaneResize(reason: .divider)
+        terminal.endInteractivePaneResize(dividerLease)
 
         XCTAssertEqual(terminal.frame.size, NSSize(width: 640, height: 480))
         XCTAssertEqual(processDelegate.resizeEvents.count, 0)
 
-        terminal.endInteractivePaneResize(reason: .animatedLayout)
+        terminal.endInteractivePaneResize(attachmentLease)
 
         XCTAssertEqual(terminal.frame.size, NSSize(width: 500, height: 400))
         XCTAssertEqual(processDelegate.resizeEvents.count, 1)
+    }
+
+    func testStaleAttachmentLeaseCannotReleaseNewAttachment() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let initialSize = terminal.frame.size
+        let staleLease = terminal.beginInteractivePaneResize(reason: .attachment)
+        let currentLease = terminal.beginInteractivePaneResize(reason: .attachment)
+
+        terminal.setFrameSize(NSSize(width: 500, height: 400))
+        terminal.endInteractivePaneResize(staleLease)
+
+        XCTAssertEqual(terminal.frame.size, initialSize)
+
+        terminal.endInteractivePaneResize(currentLease)
+
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 500, height: 400))
+    }
+
+    func testAttachmentReturningToSettledSizeCancelsStalePendingGeometry() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let lease = terminal.beginInteractivePaneResize(reason: .attachment)
+
+        terminal.setFrameSize(NSSize(width: 500, height: 400))
+        terminal.setFrameSize(NSSize(width: 640, height: 480))
+        terminal.endInteractivePaneResize(lease)
+
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 640, height: 480))
+    }
+
+    func testRepeatedTerminalSizeDoesNotRequestAnotherDraw() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        terminal.needsDisplay = false
+
+        for _ in 0..<500 {
+            terminal.setFrameSize(NSSize(width: 640, height: 480))
+        }
+
+        XCTAssertFalse(terminal.needsDisplay)
+        XCTAssertEqual(terminal.frame.size, NSSize(width: 640, height: 480))
+    }
+
+    func testInteractiveResizeRestoresPersistentMetalBuffering() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+
+        let lease = terminal.beginInteractivePaneResize(reason: .divider)
+        switch terminal.metalBufferingMode {
+        case .perFrameAggregated:
+            break
+        case .perRowPersistent:
+            XCTFail("Interactive resizing should aggregate the visible frame.")
+        }
+
+        terminal.endInteractivePaneResize(lease)
+        switch terminal.metalBufferingMode {
+        case .perRowPersistent:
+            break
+        case .perFrameAggregated:
+            XCTFail("Settled terminals should restore row-persistent buffering.")
+        }
+    }
+
+    func testPresentationOnlyResizeAggregatesOnlyWhileLogicalResizeOverlaps() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+
+        let animatedLease = terminal.beginInteractivePaneResize(reason: .animatedLayout)
+        assertRowPersistentBuffering(terminal)
+
+        terminal.setFrameSize(NSSize(width: 520, height: 480))
+        assertRowPersistentBuffering(terminal)
+
+        let dividerLease = terminal.beginInteractivePaneResize(reason: .divider)
+        assertAggregatedBuffering(terminal)
+
+        terminal.endInteractivePaneResize(dividerLease)
+        assertRowPersistentBuffering(terminal)
+
+        terminal.setFrameSize(NSSize(width: 640, height: 480))
+        terminal.endInteractivePaneResize(animatedLease)
+        assertRowPersistentBuffering(terminal)
+    }
+
+    func testViewportReparentingReleasesItsWindowResizeLease() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let viewport = TerminalViewportView(terminal: terminal)
+        viewport.viewWillStartLiveResize()
+        let replacement = NSView(frame: viewport.bounds)
+        terminal.removeFromSuperview()
+        replacement.addSubview(terminal)
+
+        viewport.prepareForDetachment()
+
+        switch terminal.metalBufferingMode {
+        case .perRowPersistent:
+            break
+        case .perFrameAggregated:
+            XCTFail("A detached viewport must release the lease it owns.")
+        }
+    }
+
+    func testVerticalResizeCommitKeepsTerminalInsideViewport() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let viewport = TerminalViewportView(terminal: terminal)
+        viewport.frame = terminal.frame
+        terminal.cancelInteractivePaneResizes()
+        viewport.layoutSubtreeIfNeeded()
+        let lease = terminal.beginInteractivePaneResize(reason: .windowLiveResize)
+
+        viewport.setFrameSize(NSSize(width: 640, height: 600))
+        viewport.layoutSubtreeIfNeeded()
+        terminal.commitInteractiveResizeFrameForTesting()
+
+        XCTAssertEqual(terminal.frame, viewport.bounds)
+        XCTAssertTrue(viewport.bounds.contains(terminal.frame))
+
+        terminal.endInteractivePaneResize(lease)
+    }
+
+    func testDisplayLinkIsInvalidatedAfterResizeEnds() {
+        let terminal = TermuctiveTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        let lease = terminal.beginInteractivePaneResize(reason: .divider)
+        terminal.setFrameSize(NSSize(width: 500, height: 400))
+
+        XCTAssertTrue(terminal.hasInteractiveFrameCommitScheduledForTesting)
+
+        terminal.endInteractivePaneResize(lease)
+
+        XCTAssertFalse(terminal.hasInteractiveFrameCommitScheduledForTesting)
+    }
+
+    func testRemovingPaneDuringAnimatedTransitionCancelsCapturedResizeOwner() throws {
+        let persistence = TerminalTestPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let layout = try XCTUnwrap(store.selectedSpace?.layout)
+        let pane = try XCTUnwrap(layout.terminal(withID: layout.firstTerminalID))
+        let sessions = TerminalSessionPool(store: store)
+        let terminal = sessions.terminalView(for: pane)
+        defer {
+            sessions.terminateAll()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+        terminal.frame = container.bounds
+        container.addSubview(terminal)
+        terminal.cancelInteractivePaneResizes()
+
+        let transitionID = sessions.beginAnimatedLayoutTransition()
+        terminal.setFrameSize(NSSize(width: 500, height: 400))
+        XCTAssertTrue(terminal.hasInteractiveFrameCommitScheduledForTesting)
+
+        sessions.reconcile(validPaneIDs: [])
+
+        XCTAssertFalse(terminal.hasInteractiveFrameCommitScheduledForTesting)
+        switch terminal.metalBufferingMode {
+        case .perRowPersistent:
+            break
+        case .perFrameAggregated:
+            XCTFail("Removing a pane left its interactive rendering mode active.")
+        }
+        sessions.finishAnimatedLayoutTransition(transitionID)
     }
 
     func testCodexStyleStreamingDoesNotDelayEscapeInput() async throws {
@@ -618,6 +1007,32 @@ final class TerminalEngineIntegrationTests: XCTestCase {
         )
     }
 
+    private func assertRowPersistentBuffering(
+        _ terminal: TermuctiveTerminalView,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        switch terminal.metalBufferingMode {
+        case .perRowPersistent:
+            break
+        case .perFrameAggregated:
+            XCTFail("Expected row-persistent terminal buffering.", file: file, line: line)
+        }
+    }
+
+    private func assertAggregatedBuffering(
+        _ terminal: TermuctiveTerminalView,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        switch terminal.metalBufferingMode {
+        case .perFrameAggregated:
+            break
+        case .perRowPersistent:
+            XCTFail("Expected full-frame terminal buffering.", file: file, line: line)
+        }
+    }
+
     private func terminalOutput(
         from terminal: LocalProcessTerminalView,
         containing markers: [String],
@@ -689,6 +1104,10 @@ private final class TerminalTestDelegate: NSObject, LocalProcessTerminalViewDele
 
 private final class TerminalResizeTestDelegate: NSObject, LocalProcessTerminalViewDelegate {
     private(set) var resizeEvents: [(columns: Int, rows: Int)] = []
+
+    func reset() {
+        resizeEvents.removeAll()
+    }
 
     func sizeChanged(
         source: LocalProcessTerminalView,

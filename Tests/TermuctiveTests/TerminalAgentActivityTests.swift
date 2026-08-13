@@ -673,6 +673,42 @@ final class TerminalAgentActivityTests: XCTestCase {
         )
     }
 
+    func testCollapsedDisclosureDoesNotMaterializeHiddenRows() async {
+        let counter = DisclosureRowCounter()
+        let hostingView = NSHostingView(
+            rootView: DisclosurePerformanceHarness(
+                isExpanded: false,
+                rowCount: 1_000,
+                counter: counter
+            )
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 240, height: 400)
+        hostingView.layoutSubtreeIfNeeded()
+        await Task.yield()
+
+        XCTAssertEqual(counter.createdCount, 0)
+
+        hostingView.rootView = DisclosurePerformanceHarness(
+            isExpanded: true,
+            rowCount: 1_000,
+            counter: counter
+        )
+        hostingView.layoutSubtreeIfNeeded()
+        await Task.yield()
+
+        XCTAssertEqual(counter.createdCount, 1_000)
+
+        hostingView.rootView = DisclosurePerformanceHarness(
+            isExpanded: false,
+            rowCount: 1_000,
+            counter: counter
+        )
+        hostingView.layoutSubtreeIfNeeded()
+        await Task.yield()
+
+        XCTAssertEqual(counter.removedCount, 1_000)
+    }
+
     private func fixtureExecutable(named name: String) throws -> URL {
         let url = Bundle.main
             .bundleURL
@@ -872,4 +908,65 @@ private struct EmptyAgentNotePersistence: NotePersisting {
     func save(_ document: NoteDocument) throws {}
 
     func archive(noteID: UUID) throws {}
+}
+
+@MainActor
+private final class DisclosureRowCounter {
+    private(set) var createdCount = 0
+    private(set) var removedCount = 0
+
+    func recordCreation() {
+        createdCount += 1
+    }
+
+    func recordRemoval() {
+        removedCount += 1
+    }
+}
+
+private struct DisclosurePerformanceHarness: View {
+    let isExpanded: Bool
+    let rowCount: Int
+    let counter: DisclosureRowCounter
+
+    var body: some View {
+        SidebarDisclosureSection(
+            isExpanded: isExpanded,
+            contentHeight: CGFloat(rowCount * 28)
+        ) {
+            VStack(spacing: 0) {
+                ForEach(0..<rowCount, id: \.self) { _ in
+                    DisclosureCountingRow(counter: counter)
+                        .frame(height: 28)
+                }
+            }
+        }
+    }
+}
+
+private struct DisclosureCountingRow: NSViewRepresentable {
+    let counter: DisclosureRowCounter
+
+    final class Coordinator {
+        let counter: DisclosureRowCounter
+
+        init(counter: DisclosureRowCounter) {
+            self.counter = counter
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(counter: counter)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        counter.recordCreation()
+        return NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.counter.recordRemoval()
+    }
 }

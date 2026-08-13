@@ -20,7 +20,9 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     private var watcher: ProjectFileWatcher?
     private var eventRefreshTask: Task<Void, Never>?
     private var bufferRefreshTask: Task<Void, Never>?
+    private var treeRefreshTask: Task<Void, Never>?
     private var treeRefreshGeneration = 0
+    private var isPresented = true
 
     init(paneID: UUID, rootURL: URL) {
         id = paneID
@@ -38,6 +40,10 @@ final class EditorPaneSession: ObservableObject, Identifiable {
 
     var hasUnsavedChanges: Bool {
         buffers.contains { $0.hasUncommittedChanges }
+    }
+
+    var isFileActivityRunning: Bool {
+        watcher != nil || treeRefreshTask != nil || bufferRefreshTask != nil
     }
 
     func openFile(_ url: URL, collapseNavigator: Bool = false) async {
@@ -139,19 +145,33 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     }
 
     func refreshFileTree() {
+        guard isPresented else {
+            return
+        }
         treeRefreshGeneration &+= 1
         let generation = treeRefreshGeneration
         let projectRoot = rootURL
         isRefreshingFileTree = true
-        Task { @MainActor [weak self] in
-            let result = await Task.detached(priority: .utility) {
+        treeRefreshTask?.cancel()
+        treeRefreshTask = Task { @MainActor [weak self] in
+            let scan = Task.detached(priority: .utility) {
                 Result {
                     try EditorFileTreeBuilder.build(rootURL: projectRoot)
                 }
-            }.value
-            guard let self, treeRefreshGeneration == generation else {
+            }
+            let result = await withTaskCancellationHandler {
+                await scan.value
+            } onCancel: {
+                scan.cancel()
+            }
+            guard let self,
+                !Task.isCancelled,
+                isPresented,
+                treeRefreshGeneration == generation
+            else {
                 return
             }
+            treeRefreshTask = nil
             isRefreshingFileTree = false
             switch result {
             case .success(let tree):
@@ -164,6 +184,29 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     }
 
     func stop() {
+        isPresented = false
+        stopFileActivity()
+    }
+
+    func setPresented(_ isPresented: Bool) {
+        guard self.isPresented != isPresented else {
+            return
+        }
+        self.isPresented = isPresented
+        if isPresented {
+            startWatching()
+            refreshFileTree()
+            startBufferRefreshPollingIfNeeded()
+        } else {
+            stopFileActivity()
+        }
+    }
+
+    private func stopFileActivity() {
+        treeRefreshGeneration &+= 1
+        treeRefreshTask?.cancel()
+        treeRefreshTask = nil
+        isRefreshingFileTree = false
         eventRefreshTask?.cancel()
         eventRefreshTask = nil
         bufferRefreshTask?.cancel()
@@ -193,6 +236,11 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     }
 
     private func startWatching() {
+        guard isPresented,
+            watcher == nil
+        else {
+            return
+        }
         watcher = ProjectFileWatcher(rootURL: rootURL) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.handleFileSystemEvent()
@@ -201,6 +249,9 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     }
 
     private func handleFileSystemEvent() {
+        guard isPresented else {
+            return
+        }
         eventRefreshTask?.cancel()
         eventRefreshTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 120_000_000)
@@ -218,7 +269,10 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     }
 
     private func startBufferRefreshPollingIfNeeded() {
-        guard bufferRefreshTask == nil else {
+        guard isPresented,
+            !buffers.isEmpty,
+            bufferRefreshTask == nil
+        else {
             return
         }
         bufferRefreshTask = Task { @MainActor [weak self] in
@@ -249,6 +303,7 @@ final class EditorSessionPool: ObservableObject {
 
     private let store: WorkspaceStore
     private var sessions: [UUID: EditorPaneSession] = [:]
+    private var visiblePaneIDs: Set<UUID>?
 
     init(store: WorkspaceStore) {
         self.store = store
@@ -301,12 +356,24 @@ final class EditorSessionPool: ObservableObject {
             )
         }
         presentedPaneIDs.insert(paneID)
+        updateSessionActivity(forPaneID: paneID)
         store.focusPane(withID: paneID)
     }
 
     func dismissEditor(inPaneID paneID: UUID) {
         presentedPaneIDs.remove(paneID)
+        updateSessionActivity(forPaneID: paneID)
         store.focusPane(withID: paneID)
+    }
+
+    func setVisiblePaneIDs(_ paneIDs: Set<UUID>) {
+        guard visiblePaneIDs != paneIDs else {
+            return
+        }
+        visiblePaneIDs = paneIDs
+        for paneID in sessions.keys {
+            updateSessionActivity(forPaneID: paneID)
+        }
     }
 
     func requestClosePane(withID paneID: UUID) {
@@ -373,5 +440,12 @@ final class EditorSessionPool: ObservableObject {
     private func removeSession(forPaneID paneID: UUID) {
         sessions.removeValue(forKey: paneID)?.stop()
         presentedPaneIDs.remove(paneID)
+    }
+
+    private func updateSessionActivity(forPaneID paneID: UUID) {
+        let isVisible = visiblePaneIDs?.contains(paneID) ?? true
+        sessions[paneID]?.setPresented(
+            isVisible && presentedPaneIDs.contains(paneID)
+        )
     }
 }

@@ -44,15 +44,20 @@ struct WorkspaceView: View {
             sessions.reconcile(validPaneIDs: store.document.terminalIDs)
             editors.reconcile(validPaneIDs: store.document.terminalIDs)
             notes.reconcile(validNoteIDs: store.document.noteIDs)
+            refreshVisibleEditorPanes()
             refreshActivityTopology()
         }
         .onChange(of: store.document.terminalIDs) { _, paneIDs in
             sessions.reconcile(validPaneIDs: paneIDs)
             editors.reconcile(validPaneIDs: paneIDs)
+            refreshVisibleEditorPanes()
             refreshActivityTopology()
         }
         .onChange(of: store.document.noteIDs) { _, noteIDs in
             notes.reconcile(validNoteIDs: noteIDs)
+        }
+        .onChange(of: renderedEditorPaneIDs) { _, paneIDs in
+            editors.setVisiblePaneIDs(paneIDs)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
@@ -115,6 +120,28 @@ struct WorkspaceView: View {
         }
         activityTopology = topology
         agentActivity.reconcile(topology: topology)
+    }
+
+    private func refreshVisibleEditorPanes() {
+        editors.setVisiblePaneIDs(renderedEditorPaneIDs)
+    }
+
+    var renderedEditorPaneIDs: Set<UUID> {
+        guard let selectedSpace = store.selectedSpace else {
+            return []
+        }
+        let renderedPaneIDs: Set<UUID>
+        if let zoomedPaneID = store.zoomedPaneID,
+            selectedSpace.layout.terminalIDs.contains(zoomedPaneID)
+        {
+            renderedPaneIDs = [zoomedPaneID]
+        } else {
+            renderedPaneIDs = selectedSpace.layout.terminalIDs
+        }
+        return renderedPaneIDs.filter { paneID in
+            editors.isEditorPresented(inPaneID: paneID)
+                && sessions.previewURL(for: paneID) == nil
+        }
     }
 
     private var workspaceBar: some View {
@@ -386,14 +413,10 @@ struct WorkspaceView: View {
     }
 
     private func setSidebarVisible(_ isVisible: Bool) {
-        guard store.isSidebarVisible != isVisible else {
-            return
-        }
-        sessions.prepareForAnimatedLayoutTransition(
-            duration: SidebarMotion.panelDuration
+        SidebarMotion.setSidebarVisible(
+            isVisible,
+            store: store,
+            sessions: sessions
         )
-        withAnimation(SidebarMotion.panel) {
-            store.isSidebarVisible = isVisible
-        }
     }
 }

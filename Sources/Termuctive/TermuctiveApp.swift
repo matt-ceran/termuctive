@@ -43,6 +43,7 @@ struct TermuctiveApp: App {
             )
             .preferredColorScheme(appearance.appTheme.colorScheme)
             .onAppear {
+                applicationDelegate.workspaceStore = store
                 applicationDelegate.editorSessions = editors
                 applicationDelegate.noteSessions = notes
             }
@@ -336,15 +337,11 @@ struct TermuctiveApp: App {
     }
 
     private func setSidebarVisible(_ isVisible: Bool) {
-        guard store.isSidebarVisible != isVisible else {
-            return
-        }
-        sessions.prepareForAnimatedLayoutTransition(
-            duration: SidebarMotion.panelDuration
+        SidebarMotion.setSidebarVisible(
+            isVisible,
+            store: store,
+            sessions: sessions
         )
-        withAnimation(SidebarMotion.panel) {
-            store.isSidebarVisible = isVisible
-        }
     }
 }
 

@@ -26,9 +26,11 @@ final class EditorSessionPoolTests: XCTestCase {
         await originalSession.openFile(fileURL)
         let buffer = try XCTUnwrap(originalSession.selectedBuffer)
         buffer.updateText("let value = 2\n")
+        XCTAssertTrue(originalSession.isFileActivityRunning)
 
         editors.dismissEditor(inPaneID: paneID)
         XCTAssertFalse(editors.isEditorPresented(inPaneID: paneID))
+        XCTAssertFalse(originalSession.isFileActivityRunning)
         editors.presentEditor(inPaneID: paneID)
 
         let restoredSession = try XCTUnwrap(editors.session(forPaneID: paneID))
@@ -36,6 +38,85 @@ final class EditorSessionPoolTests: XCTestCase {
         XCTAssertTrue(restoredSession.selectedBuffer === buffer)
         XCTAssertEqual(restoredSession.selectedBuffer?.text, "let value = 2\n")
         XCTAssertTrue(restoredSession.hasUnsavedChanges)
+        XCTAssertTrue(restoredSession.isFileActivityRunning)
+    }
+
+    func testHiddenSpacePausesRetainedEditorFileActivity() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = WorkspaceStore(persistence: EditorPoolTestPersistence())
+        store.addProject(at: directory)
+        let firstPaneID = try XCTUnwrap(store.focusedPaneID)
+        let editors = EditorSessionPool(store: store)
+        defer {
+            editors.terminateAll()
+        }
+
+        editors.presentEditor(inPaneID: firstPaneID)
+        let firstSession = try XCTUnwrap(editors.session(forPaneID: firstPaneID))
+        editors.setVisiblePaneIDs([firstPaneID])
+        XCTAssertTrue(firstSession.isFileActivityRunning)
+
+        store.addSpace()
+        let secondPaneID = try XCTUnwrap(store.focusedPaneID)
+        editors.setVisiblePaneIDs([secondPaneID])
+
+        XCTAssertFalse(firstSession.isFileActivityRunning)
+        XCTAssertTrue(editors.isEditorPresented(inPaneID: firstPaneID))
+
+        editors.setVisiblePaneIDs([firstPaneID])
+
+        XCTAssertTrue(firstSession.isFileActivityRunning)
+    }
+
+    func testZoomPausesEditorsThatAreNotActuallyRendered() throws {
+        let directory = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = WorkspaceStore(persistence: EditorPoolTestPersistence())
+        store.addProject(at: directory)
+        let firstPaneID = try XCTUnwrap(store.focusedPaneID)
+        store.splitFocusedPane(axis: .horizontal)
+        let secondPaneID = try XCTUnwrap(store.focusedPaneID)
+        let activity = AgentActivityRegistry()
+        let sessions = TerminalSessionPool(
+            store: store,
+            agentActivityRegistry: activity
+        )
+        let editors = EditorSessionPool(store: store)
+        let notes = NoteSessionPool()
+        defer {
+            notes.terminateAll()
+            editors.terminateAll()
+            sessions.terminateAll()
+        }
+        editors.presentEditor(inPaneID: firstPaneID)
+        editors.presentEditor(inPaneID: secondPaneID)
+        let firstSession = try XCTUnwrap(editors.session(forPaneID: firstPaneID))
+        let secondSession = try XCTUnwrap(editors.session(forPaneID: secondPaneID))
+        let workspace = WorkspaceView(
+            store: store,
+            sessions: sessions,
+            editors: editors,
+            notes: notes,
+            appearance: AppearanceSettings(),
+            agentActivity: activity
+        )
+
+        XCTAssertEqual(workspace.renderedEditorPaneIDs, [firstPaneID, secondPaneID])
+
+        store.focusPane(withID: firstPaneID)
+        store.toggleFocusedPaneZoom()
+        editors.setVisiblePaneIDs(workspace.renderedEditorPaneIDs)
+
+        XCTAssertEqual(workspace.renderedEditorPaneIDs, [firstPaneID])
+        XCTAssertTrue(firstSession.isFileActivityRunning)
+        XCTAssertFalse(secondSession.isFileActivityRunning)
     }
 
     func testClosingPaneWithUnsavedEditorChangesRequiresConfirmation() async throws {

@@ -26,9 +26,11 @@ final class SmoothSplitView: NSSplitView {
     private var isTrackingDivider = false
     private var isApplyingRatio = false
     private var needsRatioApplication = true
-    private var lastLayoutSize = NSSize.zero
+    private var lastDividerRect: NSRect?
     private var dividerTrackingArea: NSTrackingArea?
     private var isDividerHovered = false
+    private var terminalResizeLeases:
+        [ObjectIdentifier: (terminal: TermuctiveTerminalView, lease: TerminalResizeLease)] = [:]
 
     init(axis: PaneAxis) {
         super.init(frame: .zero)
@@ -66,7 +68,11 @@ final class SmoothSplitView: NSSplitView {
     }
 
     func setRatio(_ ratio: Double) {
-        desiredRatio = min(max(ratio, 0.1), 0.9)
+        let clampedRatio = min(max(ratio, 0.1), 0.9)
+        guard abs(desiredRatio - clampedRatio) > 0.000_001 else {
+            return
+        }
+        desiredRatio = clampedRatio
         guard !isTrackingDivider else {
             return
         }
@@ -84,15 +90,17 @@ final class SmoothSplitView: NSSplitView {
     }
 
     override func layout() {
-        let sizeChanged = bounds.size != lastLayoutSize
         super.layout()
         if !isTrackingDivider,
-            needsRatioApplication || sizeChanged
+            needsRatioApplication
         {
             applyDesiredRatio()
         }
-        lastLayoutSize = bounds.size
-        window?.invalidateCursorRects(for: self)
+        let dividerRect = currentDividerRect
+        if dividerRect != lastDividerRect {
+            lastDividerRect = dividerRect
+            window?.invalidateCursorRects(for: self)
+        }
     }
 
     override func drawDivider(in rect: NSRect) {
@@ -159,8 +167,8 @@ final class SmoothSplitView: NSSplitView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let dividerTrackingArea {
-            removeTrackingArea(dividerTrackingArea)
+        guard dividerTrackingArea == nil else {
+            return
         }
         let trackingArea = NSTrackingArea(
             rect: .zero,
@@ -243,13 +251,33 @@ final class SmoothSplitView: NSSplitView {
     }
 
     private func setTerminalResizeMode(active: Bool) {
-        for terminal in descendantTerminalViews(in: self) {
-            if active {
-                terminal.beginInteractivePaneResize(reason: .divider)
-            } else {
-                terminal.endInteractivePaneResize(reason: .divider)
+        if active {
+            for terminal in descendantTerminalViews(in: self) {
+                let key = ObjectIdentifier(terminal)
+                guard terminalResizeLeases[key] == nil else {
+                    continue
+                }
+                terminalResizeLeases[key] = (
+                    terminal,
+                    terminal.beginInteractivePaneResize(reason: .divider)
+                )
             }
+            return
         }
+
+        let leases = terminalResizeLeases
+        terminalResizeLeases.removeAll()
+        for (_, owner) in leases {
+            owner.terminal.endInteractivePaneResize(owner.lease)
+        }
+    }
+
+    func beginTerminalResizeForTesting() {
+        setTerminalResizeMode(active: true)
+    }
+
+    func endTerminalResizeForTesting() {
+        setTerminalResizeMode(active: false)
     }
 
     private func descendantTerminalViews(in view: NSView) -> [TermuctiveTerminalView] {

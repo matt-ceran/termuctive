@@ -12,6 +12,9 @@ final class WorkspaceStore: ObservableObject {
     @Published var isSidebarVisible = true
 
     private let persistence: any WorkspacePersisting
+    private var persistenceGeneration = 0
+    private var persistenceTask: Task<Void, Never>?
+    private var persistenceError: (any Error)?
 
     init(persistence: any WorkspacePersisting = WorkspaceFileStore.live) {
         self.persistence = persistence
@@ -58,6 +61,28 @@ final class WorkspaceStore: ObservableObject {
 
     var canAddPane: Bool {
         selectedProject.map { canAddPane(inProjectWithID: $0.id) } ?? false
+    }
+
+    var hasPendingPersistence: Bool {
+        persistenceTask != nil || persistenceError != nil
+    }
+
+    func flushPersistence() async throws {
+        var retriedFailedSave = false
+        while true {
+            if let persistenceTask {
+                await persistenceTask.value
+                continue
+            }
+            guard let persistenceError else {
+                return
+            }
+            guard !retriedFailedSave else {
+                throw persistenceError
+            }
+            retriedFailedSave = true
+            enqueuePersistence(document, generation: persistenceGeneration)
+        }
     }
 
     var canPresentEditorInFocusedPane: Bool {
@@ -1131,10 +1156,79 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func save() {
+        guard persistence.prefersBackgroundSaves else {
+            saveSynchronously()
+            return
+        }
+
+        persistenceGeneration &+= 1
+        enqueuePersistence(document, generation: persistenceGeneration)
+    }
+
+    private func enqueuePersistence(
+        _ document: WorkspaceDocument,
+        generation: Int
+    ) {
+        let previousTask = persistenceTask
+        let request = WorkspacePersistenceRequest(persistence: persistence, document: document)
+        persistenceTask = Task { @MainActor [weak self] in
+            await previousTask?.value
+            guard let self,
+                persistenceGeneration == generation
+            else {
+                return
+            }
+            let outcome = await Task.detached(priority: .utility) {
+                request.perform()
+            }.value
+            guard persistenceGeneration == generation else {
+                return
+            }
+            persistenceTask = nil
+            switch outcome {
+            case .success:
+                persistenceError = nil
+            case .failure(let error):
+                persistenceError = error
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveSynchronously() {
         do {
             try persistence.save(document)
+            persistenceError = nil
         } catch {
+            persistenceError = error
             errorMessage = error.localizedDescription
         }
     }
+}
+
+private final class WorkspacePersistenceRequest: @unchecked Sendable {
+    let persistence: any WorkspacePersisting
+    let document: WorkspaceDocument
+
+    init(
+        persistence: any WorkspacePersisting,
+        document: WorkspaceDocument
+    ) {
+        self.persistence = persistence
+        self.document = document
+    }
+
+    func perform() -> WorkspacePersistenceOutcome {
+        do {
+            try persistence.save(document)
+            return .success
+        } catch {
+            return .failure(error)
+        }
+    }
+}
+
+private enum WorkspacePersistenceOutcome: @unchecked Sendable {
+    case success
+    case failure(any Error)
 }

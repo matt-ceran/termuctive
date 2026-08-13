@@ -18,19 +18,17 @@ struct TerminalHostView: NSViewRepresentable {
         let terminal = sessions.terminalView(for: pane)
         let viewport = TerminalViewportView(terminal: terminal)
         context.coordinator.wasFocused = isFocused
-        if isFocused {
-            terminal.requestFocus()
-        }
+        terminal.setWantsFocus(isFocused)
         return viewport
     }
 
     func updateNSView(_ viewport: TerminalViewportView, context: Context) {
-        let shouldFocus = isFocused && !context.coordinator.wasFocused
+        let focusChanged = isFocused != context.coordinator.wasFocused
         context.coordinator.wasFocused = isFocused
-        guard shouldFocus else {
+        guard focusChanged else {
             return
         }
-        viewport.terminal.requestFocus()
+        viewport.terminal.setWantsFocus(isFocused)
     }
 
     static func dismantleNSView(
@@ -45,13 +43,17 @@ struct TerminalHostView: NSViewRepresentable {
 final class TerminalViewportView: NSView {
     let terminal: TermuctiveTerminalView
 
+    private var attachmentLease: TerminalResizeLease?
+    private var windowResizeLease: TerminalResizeLease?
+    private var lastRequestedSize = NSSize.zero
+    private var lastBackgroundColor: CGColor?
+
     init(terminal: TermuctiveTerminalView) {
         self.terminal = terminal
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = true
-        // Keep the terminal grid fixed while this viewport is attached and laid out.
-        terminal.beginInteractivePaneResize(reason: .attachment)
+        attachmentLease = terminal.beginInteractivePaneResize(reason: .attachment)
         addSubview(terminal)
         updateBackgroundColor()
     }
@@ -65,9 +67,12 @@ final class TerminalViewportView: NSView {
         guard terminal.superview === self else {
             return
         }
-        terminal.setFrameSize(bounds.size)
+        let requestedSize = bounds.size
+        if requestedSize != lastRequestedSize {
+            lastRequestedSize = requestedSize
+            terminal.setFrameSize(requestedSize)
+        }
         alignTerminalToTop()
-        updateBackgroundColor()
     }
 
     override func viewDidMoveToWindow() {
@@ -75,24 +80,25 @@ final class TerminalViewportView: NSView {
         guard terminal.superview === self else {
             return
         }
-        terminal.beginInteractivePaneResize(reason: .attachment)
+        beginAttachmentStabilization()
         guard window != nil else {
             return
         }
 
-        // SwiftUI can apply more than one intermediate frame while reattaching a pooled view.
+        let lease = attachmentLease
         DispatchQueue.main.async { [weak self] in
-            DispatchQueue.main.async { [weak self] in
-                guard let self,
-                    window != nil,
-                    terminal.superview === self
-                else {
-                    return
-                }
-                layoutSubtreeIfNeeded()
-                terminal.endInteractivePaneResize(reason: .attachment)
-                alignTerminalToTop()
+            guard let self,
+                window != nil,
+                terminal.superview === self,
+                attachmentLease == lease,
+                let lease
+            else {
+                return
             }
+            layoutSubtreeIfNeeded()
+            terminal.endInteractivePaneResize(lease)
+            attachmentLease = nil
+            alignTerminalToTop()
         }
     }
 
@@ -101,35 +107,67 @@ final class TerminalViewportView: NSView {
         guard terminal.superview === self else {
             return
         }
-        terminal.beginInteractivePaneResize(reason: .windowLiveResize)
+        if windowResizeLease == nil {
+            windowResizeLease = terminal.beginInteractivePaneResize(
+                reason: .windowLiveResize
+            )
+        }
     }
 
     override func viewDidEndLiveResize() {
         super.viewDidEndLiveResize()
+        endWindowResizeLease()
         guard terminal.superview === self else {
             return
         }
-        terminal.endInteractivePaneResize(reason: .windowLiveResize)
         alignTerminalToTop()
     }
 
     func prepareForDetachment() {
+        endWindowResizeLease()
         guard terminal.superview === self else {
             return
         }
-        terminal.beginInteractivePaneResize(reason: .attachment)
+        beginAttachmentStabilization()
+        terminal.setWantsFocus(false)
     }
 
     func updateBackgroundColor() {
-        layer?.backgroundColor = terminal.nativeBackgroundColor.cgColor
+        let backgroundColor = terminal.nativeBackgroundColor.cgColor
+        guard lastBackgroundColor != backgroundColor else {
+            return
+        }
+        lastBackgroundColor = backgroundColor
+        layer?.backgroundColor = backgroundColor
+    }
+
+    func terminalFrameDidCommit() {
+        guard terminal.superview === self else {
+            return
+        }
+        alignTerminalToTop()
     }
 
     private func alignTerminalToTop() {
-        terminal.setFrameOrigin(
-            NSPoint(
-                x: bounds.minX,
-                y: bounds.maxY - terminal.frame.height
-            )
+        let origin = NSPoint(
+            x: bounds.minX,
+            y: bounds.maxY - terminal.frame.height
         )
+        guard terminal.frame.origin != origin else {
+            return
+        }
+        terminal.setFrameOrigin(origin)
+    }
+
+    private func beginAttachmentStabilization() {
+        attachmentLease = terminal.beginInteractivePaneResize(reason: .attachment)
+    }
+
+    private func endWindowResizeLease() {
+        guard let windowResizeLease else {
+            return
+        }
+        terminal.endInteractivePaneResize(windowResizeLease)
+        self.windowResizeLease = nil
     }
 }

@@ -41,6 +41,7 @@ enum EditorFileTreeBuilder {
         remainingItemCount: inout Int,
         isTruncated: inout Bool
     ) throws -> [EditorFileNode] {
+        try Task.checkCancellation()
         guard remainingItemCount > 0 else {
             isTruncated = true
             return []
@@ -61,6 +62,7 @@ enum EditorFileTreeBuilder {
         var entries: [(url: URL, isDirectory: Bool, canTraverse: Bool)] = []
         entries.reserveCapacity(urls.count)
         for url in urls where url.lastPathComponent != ".DS_Store" {
+            try Task.checkCancellation()
             let values = try? url.resourceValues(forKeys: resourceKeys)
             let isDirectory = values?.isDirectory == true
             if isDirectory, ignoredDirectoryNames.contains(url.lastPathComponent) {
@@ -93,6 +95,7 @@ enum EditorFileTreeBuilder {
         var nodes: [EditorFileNode] = []
         nodes.reserveCapacity(entries.count)
         for entry in entries {
+            try Task.checkCancellation()
             guard remainingItemCount > 0 else {
                 isTruncated = true
                 break

@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import QuartzCore
 import SwiftTerm
 
 enum TerminalSessionStatus: Equatable {
@@ -25,7 +26,7 @@ final class TerminalSessionPool: ObservableObject {
     private var agentActivityCommandTail: Task<Void, Never>?
     private var sessions: [UUID: TerminalSession] = [:]
     private var recentPDFURLs: [UUID: [URL]] = [:]
-    private var layoutTransitionGeneration = 0
+    private var animatedLayoutTransition: AnimatedLayoutTransition?
 
     init(
         store: WorkspaceStore,
@@ -225,24 +226,33 @@ final class TerminalSessionPool: ObservableObject {
         }
     }
 
-    func prepareForAnimatedLayoutTransition(duration: TimeInterval) {
-        layoutTransitionGeneration &+= 1
-        let generation = layoutTransitionGeneration
-        for session in sessions.values {
-            session.view.beginInteractivePaneResize(reason: .animatedLayout)
+    func beginAnimatedLayoutTransition() -> UUID {
+        let id = UUID()
+        var leases = animatedLayoutTransition?.leases ?? [:]
+        for (paneID, session) in sessions
+        where session.view.window != nil
+            && session.view.superview != nil
+            && leases[paneID] == nil
+        {
+            leases[paneID] = AnimatedLayoutLease(
+                terminal: session.view,
+                lease: session.view.beginInteractivePaneResize(reason: .animatedLayout)
+            )
         }
+        animatedLayoutTransition = AnimatedLayoutTransition(id: id, leases: leases)
+        return id
+    }
 
-        Task { @MainActor [weak self] in
-            let nanoseconds = UInt64(max(duration + 0.04, 0) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
-            guard let self,
-                layoutTransitionGeneration == generation
-            else {
-                return
-            }
-            for session in sessions.values {
-                session.view.endInteractivePaneResize(reason: .animatedLayout)
-            }
+    func finishAnimatedLayoutTransition(_ id: UUID?) {
+        guard let id,
+            let transition = animatedLayoutTransition,
+            transition.id == id
+        else {
+            return
+        }
+        animatedLayoutTransition = nil
+        for ownership in transition.leases.values {
+            ownership.terminal.endInteractivePaneResize(ownership.lease)
         }
     }
 
@@ -266,8 +276,21 @@ final class TerminalSessionPool: ObservableObject {
 
     func reconcile(validPaneIDs: Set<UUID>) {
         let removedIDs = Set(sessions.keys).subtracting(validPaneIDs)
+        if var transition = animatedLayoutTransition {
+            for id in removedIDs {
+                guard let ownership = transition.leases.removeValue(forKey: id) else {
+                    continue
+                }
+                ownership.terminal.endInteractivePaneResize(ownership.lease)
+            }
+            animatedLayoutTransition = transition.leases.isEmpty ? nil : transition
+        }
         for id in removedIDs {
-            sessions.removeValue(forKey: id)?.terminate()
+            guard let session = sessions.removeValue(forKey: id) else {
+                continue
+            }
+            session.view.cancelInteractivePaneResizes()
+            session.terminate()
             titles.removeValue(forKey: id)
             statuses.removeValue(forKey: id)
             pdfPreviewURLs.removeValue(forKey: id)
@@ -277,7 +300,7 @@ final class TerminalSessionPool: ObservableObject {
     }
 
     func terminateAll() {
-        layoutTransitionGeneration &+= 1
+        finishAnimatedLayoutTransition(animatedLayoutTransition?.id)
         for session in sessions.values {
             session.view.cancelInteractivePaneResizes()
             session.terminate()
@@ -442,6 +465,34 @@ enum TerminalResizeReason: Hashable {
     case windowLiveResize
 }
 
+struct TerminalResizeLease: Hashable {
+    fileprivate let id: UUID
+    fileprivate let reason: TerminalResizeReason
+}
+
+private struct AnimatedLayoutTransition {
+    let id: UUID
+    var leases: [UUID: AnimatedLayoutLease]
+}
+
+private struct AnimatedLayoutLease {
+    let terminal: TermuctiveTerminalView
+    let lease: TerminalResizeLease
+}
+
+@MainActor
+private final class TerminalFrameAnimator: NSObject {
+    weak var terminal: TermuctiveTerminalView?
+
+    init(terminal: TermuctiveTerminalView) {
+        self.terminal = terminal
+    }
+
+    @objc func displayLinkDidFire(_ displayLink: CADisplayLink) {
+        terminal?.advanceInteractiveFrame(displayLink)
+    }
+}
+
 final class TermuctiveTerminalView: LocalProcessTerminalView {
     var focusHandler: (() -> Void)?
     var localCommandHandler: ((TerminalLocalCommand) -> Void)?
@@ -453,8 +504,12 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
     private var suppressEnhancedSubmitRelease = false
     private var hasPendingFocusRequest = false
     private var hasAttemptedAcceleratedRendering = false
-    private var activeResizeReasons: Set<TerminalResizeReason> = []
+    private var activeResizeLeases: [UUID: TerminalResizeReason] = [:]
+    private var attachmentLeaseID: UUID?
     private var pendingFrameSize: NSSize?
+    private var resizeDisplayLink: CADisplayLink?
+    private var frameAnimator: TerminalFrameAnimator?
+    private var interactivePresentationFrame: CGRect?
     private var mouseDownForCurrentGesture: NSEvent?
     private var shouldReportCurrentMouseClick = false
     private var didDragCurrentMouseGesture = false
@@ -475,21 +530,144 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
             super.setFrameSize(newSize)
             return
         }
+        guard newSize != frame.size else {
+            pendingFrameSize = nil
+            if isAnimatedLayoutFrozen {
+                resetPresentationGeometry()
+            }
+            return
+        }
         guard isUsableFrameSize(newSize) else {
             return
         }
-        guard activeResizeReasons.isEmpty else {
-            // The viewport clips the stable grid until the final size is committed.
+        guard attachmentLeaseID == nil else {
             pendingFrameSize = newSize
             return
         }
-        pendingFrameSize = nil
-        super.setFrameSize(newSize)
+        guard hasInteractiveResizeLease else {
+            pendingFrameSize = nil
+            super.setFrameSize(newSize)
+            notifyViewportOfFrameCommit()
+            return
+        }
+        pendingFrameSize = newSize
+        scheduleInteractiveFrameCommit()
+    }
+
+    deinit {
+        resizeDisplayLink?.invalidate()
+    }
+
+    func commitInteractiveResizeFrameForTesting() {
+        if isAnimatedLayoutFrozen {
+            advanceAnimatedLayoutFrame(nil)
+        } else {
+            commitPendingFrameSizeIfPossible()
+        }
+    }
+
+    var hasInteractiveFrameCommitScheduledForTesting: Bool {
+        resizeDisplayLink != nil
+    }
+
+    var hasInteractivePresentationTransformForTesting: Bool {
+        interactivePresentationFrame != nil
+    }
+
+    private var hasInteractiveResizeLease: Bool {
+        activeResizeLeases.values.contains { $0 != .attachment }
+    }
+
+    private var isAnimatedLayoutFrozen: Bool {
+        activeResizeLeases.values.contains(.animatedLayout)
+    }
+
+    private func scheduleInteractiveFrameCommit() {
+        if resizeDisplayLink == nil {
+            let animator = TerminalFrameAnimator(terminal: self)
+            let displayLink = displayLink(
+                target: animator,
+                selector: #selector(TerminalFrameAnimator.displayLinkDidFire(_:))
+            )
+            displayLink.add(to: .main, forMode: .common)
+            frameAnimator = animator
+            resizeDisplayLink = displayLink
+        }
+        resizeDisplayLink?.isPaused = false
+    }
+
+    fileprivate func advanceInteractiveFrame(_ displayLink: CADisplayLink?) {
+        if isAnimatedLayoutFrozen {
+            advanceAnimatedLayoutFrame(displayLink)
+            return
+        }
+        commitPendingFrameSizeIfPossible()
+        if pendingFrameSize == nil {
+            displayLink?.isPaused = true
+        }
+    }
+
+    private func advanceAnimatedLayoutFrame(_ displayLink: CADisplayLink?) {
+        guard isAnimatedLayoutFrozen,
+            attachmentLeaseID == nil,
+            pendingFrameSize != nil,
+            let superview
+        else {
+            displayLink?.isPaused = true
+            return
+        }
+        let targetFrame = superview.bounds
+        let currentFrame = interactivePresentationFrame ?? frame
+        let nextFrame = interpolatedFrame(
+            from: currentFrame,
+            to: targetFrame,
+            progress: 0.42
+        )
+        interactivePresentationFrame = nextFrame
+        let sourceSize = frame.size
+        let scaleX = nextFrame.width / max(sourceSize.width, 1)
+        let scaleY = nextFrame.height / max(sourceSize.height, 1)
+        let transform = CATransform3DConcat(
+            CATransform3DMakeTranslation(nextFrame.minX, nextFrame.minY, 0),
+            CATransform3DMakeScale(scaleX, scaleY, 1)
+        )
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.anchorPoint = .zero
+        layer?.position = .zero
+        layer?.transform = transform
+        CATransaction.commit()
+    }
+
+    private func invalidateInteractiveFrameCommits() {
+        resizeDisplayLink?.invalidate()
+        resizeDisplayLink = nil
+        frameAnimator = nil
+    }
+
+    private func commitLatestFrameAtResizeEnd() {
+        if isAnimatedLayoutFrozen {
+            if pendingFrameSize != nil {
+                scheduleInteractiveFrameCommit()
+            }
+            return
+        }
+        commitPendingFrameSizeIfPossible()
+        guard !hasInteractiveResizeLease else {
+            return
+        }
+        invalidateInteractiveFrameCommits()
     }
 
     func requestFocus() {
-        hasPendingFocusRequest = true
-        applyPendingFocusRequest()
+        setWantsFocus(true)
+    }
+
+    func setWantsFocus(_ wantsFocus: Bool) {
+        hasPendingFocusRequest = wantsFocus
+        if wantsFocus {
+            applyPendingFocusRequest()
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -675,24 +853,43 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         return nil
     }
 
-    func beginInteractivePaneResize(reason: TerminalResizeReason = .divider) {
-        activeResizeReasons.insert(reason)
+    @discardableResult
+    func beginInteractivePaneResize(
+        reason: TerminalResizeReason = .divider
+    ) -> TerminalResizeLease {
+        let lease = TerminalResizeLease(id: UUID(), reason: reason)
+        if reason == .attachment,
+            let attachmentLeaseID
+        {
+            activeResizeLeases.removeValue(forKey: attachmentLeaseID)
+        }
+        activeResizeLeases[lease.id] = reason
+        if reason == .attachment {
+            attachmentLeaseID = lease.id
+        }
+        updateInteractiveRenderingMode()
+        return lease
     }
 
-    func endInteractivePaneResize(reason: TerminalResizeReason = .divider) {
-        activeResizeReasons.remove(reason)
-        guard activeResizeReasons.isEmpty,
-            let pendingFrameSize
-        else {
+    func endInteractivePaneResize(_ lease: TerminalResizeLease) {
+        guard activeResizeLeases[lease.id] == lease.reason else {
             return
         }
-        self.pendingFrameSize = nil
-        super.setFrameSize(pendingFrameSize)
+        activeResizeLeases.removeValue(forKey: lease.id)
+        if attachmentLeaseID == lease.id {
+            attachmentLeaseID = nil
+        }
+        updateInteractiveRenderingMode()
+        commitLatestFrameAtResizeEnd()
     }
 
     func cancelInteractivePaneResizes() {
-        activeResizeReasons.removeAll()
+        activeResizeLeases.removeAll()
+        attachmentLeaseID = nil
         pendingFrameSize = nil
+        resetPresentationGeometry()
+        invalidateInteractiveFrameCommits()
+        metalBufferingMode = .perRowPersistent
     }
 
     private func isUsableFrameSize(_ size: NSSize) -> Bool {
@@ -711,6 +908,56 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         let cellHeight = optimalSize.height / CGFloat(max(terminal.rows, 1))
         return size.width >= max(cellWidth, 1)
             && size.height >= max(cellHeight, 1)
+    }
+
+    private func updateInteractiveRenderingMode() {
+        let needsFullFrameAggregation = activeResizeLeases.values.contains { reason in
+            reason == .divider || reason == .windowLiveResize
+        }
+        metalBufferingMode =
+            needsFullFrameAggregation ? .perFrameAggregated : .perRowPersistent
+    }
+
+    private func commitPendingFrameSizeIfPossible() {
+        guard attachmentLeaseID == nil,
+            let pendingFrameSize
+        else {
+            return
+        }
+        self.pendingFrameSize = nil
+        guard pendingFrameSize != frame.size,
+            isUsableFrameSize(pendingFrameSize)
+        else {
+            return
+        }
+        resetPresentationGeometry()
+        super.setFrameSize(pendingFrameSize)
+        notifyViewportOfFrameCommit()
+    }
+
+    private func notifyViewportOfFrameCommit() {
+        (superview as? TerminalViewportView)?.terminalFrameDidCommit()
+    }
+
+    private func interpolatedFrame(
+        from currentFrame: CGRect,
+        to targetFrame: CGRect,
+        progress: CGFloat
+    ) -> CGRect {
+        CGRect(
+            x: currentFrame.minX + (targetFrame.minX - currentFrame.minX) * progress,
+            y: currentFrame.minY + (targetFrame.minY - currentFrame.minY) * progress,
+            width: currentFrame.width + (targetFrame.width - currentFrame.width) * progress,
+            height: currentFrame.height + (targetFrame.height - currentFrame.height) * progress
+        )
+    }
+
+    private func resetPresentationGeometry() {
+        interactivePresentationFrame = nil
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.transform = CATransform3DIdentity
+        CATransaction.commit()
     }
 
     private func applyPendingFocusRequest() {
@@ -872,6 +1119,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     func terminate() {
         endAgentActivitySession()
+        view.cancelInteractivePaneResizes()
         if view.process.running {
             view.terminate()
         }

@@ -44,6 +44,10 @@ final class PaneTreeRenderingTests: XCTestCase {
         container.layoutSubtreeIfNeeded()
         await Task.yield()
         let initialTerminalView = sessions.terminalView(for: initialPane)
+        var initialViewport: TerminalViewportView? = try XCTUnwrap(
+            ancestor(of: TerminalViewportView.self, from: initialTerminalView)
+        )
+        weak let initialViewportReference = initialViewport
         XCTAssertTrue(initialTerminalView.isDescendant(of: container))
 
         store.splitFocusedPane(axis: .horizontal)
@@ -64,6 +68,10 @@ final class PaneTreeRenderingTests: XCTestCase {
         let addedTerminalView = sessions.terminalView(for: addedPane)
         XCTAssertTrue(initialTerminalView.isDescendant(of: container))
         XCTAssertTrue(addedTerminalView.isDescendant(of: container))
+        XCTAssertTrue(
+            ancestor(of: TerminalViewportView.self, from: initialTerminalView)
+                === initialViewport
+        )
 
         store.closeFocusedPane()
         container.configure(
@@ -76,6 +84,32 @@ final class PaneTreeRenderingTests: XCTestCase {
         container.layoutSubtreeIfNeeded()
         await Task.yield()
         XCTAssertTrue(initialTerminalView.isDescendant(of: container))
+        XCTAssertTrue(
+            ancestor(of: TerminalViewportView.self, from: initialTerminalView)
+                === initialViewport
+        )
+
+        store.addSpace()
+        let newSpacePane = try XCTUnwrap(
+            store.selectedSpace?.layout.terminal(
+                withID: try XCTUnwrap(store.focusedPaneID)
+            )
+        )
+        container.configure(
+            node: try XCTUnwrap(store.selectedSpace?.layout),
+            store: store,
+            sessions: sessions,
+            editors: editors,
+            notes: notes
+        )
+        container.layoutSubtreeIfNeeded()
+        initialViewport = nil
+
+        try await waitUntil {
+            initialViewportReference == nil
+        }
+        XCTAssertTrue(sessions.terminalView(for: initialPane) === initialTerminalView)
+        XCTAssertTrue(sessions.terminalView(for: newSpacePane).isDescendant(of: container))
     }
 
     func testPDFPreviewDetachesAndRestoresTheExistingTerminalView() async throws {
@@ -502,6 +536,17 @@ final class PaneTreeRenderingTests: XCTestCase {
             if let match = firstSubview(of: type, in: subview) {
                 return match
             }
+        }
+        return nil
+    }
+
+    private func ancestor<T: NSView>(of type: T.Type, from view: NSView) -> T? {
+        var candidate = view.superview
+        while let currentView = candidate {
+            if let match = currentView as? T {
+                return match
+            }
+            candidate = currentView.superview
         }
         return nil
     }
