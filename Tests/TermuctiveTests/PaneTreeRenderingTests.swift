@@ -47,7 +47,7 @@ final class PaneTreeRenderingTests: XCTestCase {
         var initialViewport: TerminalViewportView? = try XCTUnwrap(
             ancestor(of: TerminalViewportView.self, from: initialTerminalView)
         )
-        weak let initialViewportReference = initialViewport
+        let initialViewportReference = WeakPaneReference(initialViewport)
         XCTAssertTrue(initialTerminalView.isDescendant(of: container))
 
         store.splitFocusedPane(axis: .horizontal)
@@ -106,7 +106,7 @@ final class PaneTreeRenderingTests: XCTestCase {
         initialViewport = nil
 
         try await waitUntil {
-            initialViewportReference == nil
+            initialViewportReference.value == nil
         }
         XCTAssertTrue(sessions.terminalView(for: initialPane) === initialTerminalView)
         XCTAssertTrue(sessions.terminalView(for: newSpacePane).isDescendant(of: container))
@@ -563,6 +563,14 @@ final class PaneTreeRenderingTests: XCTestCase {
             }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
+    }
+}
+
+private final class WeakPaneReference<Object: AnyObject> {
+    weak var value: Object?
+
+    init(_ value: Object?) {
+        self.value = value
     }
 }
 
