@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 import XCTest
@@ -357,6 +358,93 @@ final class ProjectNotesIntegrationTests: XCTestCase {
         )
     }
 
+    func testMouseSelectionPublishesOneAtomicToolbarUpdateAndKeepsEditorResponsive()
+        async throws
+    {
+        let styled = NSMutableAttributedString(
+            string: "Styled text",
+            attributes: NoteRichTextArchive.defaultBodyAttributes.merging([
+                .font: NSFont.systemFont(ofSize: 28, weight: .bold),
+                .foregroundColor: NSColor.systemRed,
+            ]) { _, replacement in replacement }
+        )
+        styled.append(
+            NSAttributedString(
+                string: " followed by ordinary body text",
+                attributes: NoteRichTextArchive.defaultBodyAttributes
+            )
+        )
+        let controller = NoteRichTextController()
+        let hostingView = NSHostingView(
+            rootView: NoteRichTextEditorView(
+                rtfData: try NoteRichTextArchive.data(from: styled),
+                controller: controller,
+                onFocus: {},
+                requestsFocus: true,
+                onChange: { _ in }
+            )
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 640, height: 260)
+        let window = NSWindow(
+            contentRect: hostingView.bounds,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+        let textView = try XCTUnwrap(firstSubview(of: NoteTextView.self, in: hostingView))
+        window.makeFirstResponder(textView)
+
+        textView.setSelectedRange(NSRange(location: styled.length - 2, length: 0))
+        try await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(controller.selectedStyle, .body)
+
+        var isTrackingMouse = false
+        var publicationsDuringTracking = 0
+        var totalSelectionPublications = 0
+        let observation = controller.objectWillChange.sink {
+            totalSelectionPublications += 1
+            if isTrackingMouse {
+                publicationsDuringTracking += 1
+            }
+        }
+        defer { observation.cancel() }
+
+        let start = try textSelectionPoint(atCharacterIndex: 1, in: textView)
+        let end = try textSelectionPoint(atCharacterIndex: 8, in: textView)
+        let mouseDown = try XCTUnwrap(mouseEvent(.leftMouseDown, at: start, in: window))
+        let drag = try XCTUnwrap(mouseEvent(.leftMouseDragged, at: end, in: window))
+        let mouseUp = try XCTUnwrap(mouseEvent(.leftMouseUp, at: end, in: window))
+        for event in [drag, drag, drag, drag, mouseUp] {
+            NSApplication.shared.postEvent(event, atStart: false)
+        }
+
+        isTrackingMouse = true
+        textView.mouseDown(with: mouseDown)
+        isTrackingMouse = false
+
+        XCTAssertGreaterThan(textView.selectedRange().length, 0)
+        XCTAssertEqual(publicationsDuringTracking, 0)
+        try await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(totalSelectionPublications, 1)
+        controller.toggleItalic()
+        XCTAssertTrue(
+            NSFontManager.shared.traits(
+                of: try XCTUnwrap(
+                    textView.textStorage?.attribute(
+                        .font,
+                        at: textView.selectedRange().location,
+                        effectiveRange: nil
+                    ) as? NSFont
+                )
+            ).contains(.italicFontMask)
+        )
+        textView.insertText("replacement", replacementRange: textView.selectedRange())
+        XCTAssertTrue(textView.string.contains("replacement"))
+        XCTAssertTrue(textView.isDescendant(of: hostingView))
+    }
+
     func testInlineImagePlacementResizeAndPersistenceThroughTheRenderedNote() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "termuctive-inline-image-\(UUID().uuidString)",
@@ -494,6 +582,25 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             atCharacterIndex: characterIndex,
             effectiveRange: nil
         ) as? NSColor
+    }
+
+    private func textSelectionPoint(
+        atCharacterIndex characterIndex: Int,
+        in textView: NSTextView
+    ) throws -> NSPoint {
+        let layoutManager = try XCTUnwrap(textView.layoutManager)
+        let textContainer = try XCTUnwrap(textView.textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+        let glyphIndex = layoutManager.glyphIndexForCharacter(at: characterIndex)
+        let glyphRect = layoutManager.boundingRect(
+            forGlyphRange: NSRange(location: glyphIndex, length: 1),
+            in: textContainer
+        )
+        let point = NSPoint(
+            x: textView.textContainerOrigin.x + glyphRect.midX,
+            y: textView.textContainerOrigin.y + glyphRect.midY
+        )
+        return textView.convert(point, to: nil)
     }
 
     private func mouseEvent(

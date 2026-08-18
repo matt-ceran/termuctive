@@ -191,16 +191,31 @@ enum NoteRichTextArchive {
 }
 
 @MainActor
+private struct NoteRichTextSelectionState: Equatable {
+    var selectedStyle: NoteTextStyle = .body
+    var fontFamily = "System"
+    var fontSize = 14.0
+    var textColor = NoteRGBAColor.black
+    var alignment: NoteTextAlignment = .left
+    var isBold = false
+    var isItalic = false
+    var isUnderlined = false
+    var isStruckThrough = false
+}
+
+@MainActor
 final class NoteRichTextController: ObservableObject {
-    @Published private(set) var selectedStyle: NoteTextStyle = .body
-    @Published private(set) var fontFamily = "System"
-    @Published private(set) var fontSize = 14.0
-    @Published private(set) var textColor = NoteRGBAColor.black
-    @Published private(set) var alignment: NoteTextAlignment = .left
-    @Published private(set) var isBold = false
-    @Published private(set) var isItalic = false
-    @Published private(set) var isUnderlined = false
-    @Published private(set) var isStruckThrough = false
+    @Published private var selectionState = NoteRichTextSelectionState()
+
+    var selectedStyle: NoteTextStyle { selectionState.selectedStyle }
+    var fontFamily: String { selectionState.fontFamily }
+    var fontSize: Double { selectionState.fontSize }
+    var textColor: NoteRGBAColor { selectionState.textColor }
+    var alignment: NoteTextAlignment { selectionState.alignment }
+    var isBold: Bool { selectionState.isBold }
+    var isItalic: Bool { selectionState.isItalic }
+    var isUnderlined: Bool { selectionState.isUnderlined }
+    var isStruckThrough: Bool { selectionState.isStruckThrough }
 
     weak var textView: NSTextView?
     private var onContentChange: (() -> Void)?
@@ -252,9 +267,6 @@ final class NoteRichTextController: ObservableObject {
         let paragraphRange = paragraphRange(for: selectedRange, in: textView)
         applyParagraphStyle(style, to: paragraphRange, in: textView)
         applyStyleFont(style, to: paragraphRange, in: textView)
-        if selectedStyle != style {
-            selectedStyle = style
-        }
         emitChange()
     }
 
@@ -292,18 +304,12 @@ final class NoteRichTextController: ObservableObject {
             }
             return resolvedFont
         }
-        if fontFamily != family {
-            fontFamily = family
-        }
     }
 
     func setFontSize(_ size: Double) {
         let resolvedSize = min(max(size, 8), 96)
         mutateFonts { font in
             NSFont(descriptor: font.fontDescriptor, size: CGFloat(resolvedSize)) ?? font
-        }
-        if fontSize != resolvedSize {
-            fontSize = resolvedSize
         }
     }
 
@@ -312,9 +318,6 @@ final class NoteRichTextController: ObservableObject {
             return
         }
         applyAttribute(.foregroundColor, value: color.nsColor, in: textView)
-        if textColor != color {
-            textColor = color
-        }
         emitChange()
     }
 
@@ -325,9 +328,6 @@ final class NoteRichTextController: ObservableObject {
         let range = paragraphRange(for: textView.selectedRange(), in: textView)
         mutateParagraphs(in: range, textView: textView) { paragraphStyle in
             paragraphStyle.alignment = alignment.nativeValue
-        }
-        if self.alignment != alignment {
-            self.alignment = alignment
         }
         emitChange()
     }
@@ -378,59 +378,39 @@ final class NoteRichTextController: ObservableObject {
         guard let textView else {
             return
         }
+        var state = selectionState
         let attributes = effectiveAttributes(in: textView)
         if let font = attributes[.font] as? NSFont {
-            let resolvedFamily = displayName(for: font.familyName ?? font.fontName)
-            let resolvedSize = Double(font.pointSize)
             let traits = NSFontManager.shared.traits(of: font)
-            let resolvedBold = traits.contains(.boldFontMask)
-            let resolvedItalic = traits.contains(.italicFontMask)
-            let resolvedStyle = inferredStyle(for: font, attributes: attributes)
-            if fontFamily != resolvedFamily {
-                fontFamily = resolvedFamily
-            }
-            if fontSize != resolvedSize {
-                fontSize = resolvedSize
-            }
-            if isBold != resolvedBold {
-                isBold = resolvedBold
-            }
-            if isItalic != resolvedItalic {
-                isItalic = resolvedItalic
-            }
-            if selectedStyle != resolvedStyle {
-                selectedStyle = resolvedStyle
-            }
+            state.fontFamily = displayName(for: font.familyName ?? font.fontName)
+            state.fontSize = Double(font.pointSize)
+            state.isBold = traits.contains(.boldFontMask)
+            state.isItalic = traits.contains(.italicFontMask)
+            state.selectedStyle = inferredStyle(for: font, attributes: attributes)
         }
         if let color = attributes[.foregroundColor] as? NSColor {
-            let resolvedColor = NoteRGBAColor(nsColor: color)
-            if textColor != resolvedColor {
-                textColor = resolvedColor
-            }
+            state.textColor = NoteRGBAColor(nsColor: color)
         }
-        let resolvedUnderline = (attributes[.underlineStyle] as? Int ?? 0) != 0
-        let resolvedStrikethrough = (attributes[.strikethroughStyle] as? Int ?? 0) != 0
-        if isUnderlined != resolvedUnderline {
-            isUnderlined = resolvedUnderline
-        }
-        if isStruckThrough != resolvedStrikethrough {
-            isStruckThrough = resolvedStrikethrough
-        }
+        state.isUnderlined = (attributes[.underlineStyle] as? Int ?? 0) != 0
+        state.isStruckThrough = (attributes[.strikethroughStyle] as? Int ?? 0) != 0
         if let paragraphStyle = attributes[.paragraphStyle] as? NSParagraphStyle {
-            let resolvedAlignment = alignmentValue(for: paragraphStyle.alignment)
-            if alignment != resolvedAlignment {
-                alignment = resolvedAlignment
-            }
+            state.alignment = alignmentValue(for: paragraphStyle.alignment)
+        }
+        if selectionState != state {
+            selectionState = state
         }
     }
 
     func scheduleSelectionStateRefresh() {
-        selectionRefreshTask?.cancel()
+        guard selectionRefreshTask == nil else {
+            return
+        }
         selectionRefreshTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 10_000_000)
+            await Task.yield()
             guard let self, !Task.isCancelled else {
                 return
             }
+            selectionRefreshTask = nil
             refreshSelectionState()
         }
     }
@@ -533,10 +513,6 @@ final class NoteRichTextController: ObservableObject {
                 let font = value as? NSFont ?? NSFont.systemFont(ofSize: 14)
                 textStorage.addAttribute(.font, value: makeFont(font), range: range)
             }
-        }
-        let resolvedSize = Double(style.fontSize)
-        if fontSize != resolvedSize {
-            fontSize = resolvedSize
         }
     }
 
@@ -744,6 +720,9 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.focusHandler = onFocus
+        textView.selectionTrackingDidEndHandler = { [weak controller] in
+            controller?.scheduleSelectionStateRefresh()
+        }
         textView.delegate = context.coordinator
         textView.textStorage?.setAttributedString(
             NoteRichTextArchive.attributedString(from: rtfData))
@@ -785,6 +764,9 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             coordinator?.publishCurrentContent()
         }
         textView.focusHandler = onFocus
+        textView.selectionTrackingDidEndHandler = { [weak controller] in
+            controller?.scheduleSelectionStateRefresh()
+        }
         textView.setLogicalFocus(requestsFocus)
         context.coordinator.applyPalette(
             colorScheme: colorScheme,
@@ -802,6 +784,7 @@ struct NoteRichTextEditorView: NSViewRepresentable {
         if textView.textStorage?.delegate === coordinator {
             textView.textStorage?.delegate = nil
         }
+        (textView as? NoteTextView)?.selectionTrackingDidEndHandler = nil
         textView.delegate = nil
     }
 
@@ -843,6 +826,11 @@ struct NoteRichTextEditorView: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
+            if let textView = notification.object as? NoteTextView,
+                textView.isTrackingTextSelection
+            {
+                return
+            }
             parent.controller.scheduleSelectionStateRefresh()
         }
 
@@ -974,6 +962,8 @@ final class NoteTextView: NSTextView {
     var focusHandler: (() -> Void)?
     var imageDragPreview: NoteImageDragPreview?
     var isPreparingInlineImages = false
+    var selectionTrackingDidEndHandler: (() -> Void)?
+    private(set) var isTrackingTextSelection = false
     private var hasLogicalFocus = false
 
     func setLogicalFocus(_ isFocused: Bool) {
@@ -991,6 +981,11 @@ final class NoteTextView: NSTextView {
 
     override func mouseDown(with event: NSEvent) {
         focusHandler?()
+        isTrackingTextSelection = true
+        defer {
+            isTrackingTextSelection = false
+            selectionTrackingDidEndHandler?()
+        }
         super.mouseDown(with: event)
     }
 
