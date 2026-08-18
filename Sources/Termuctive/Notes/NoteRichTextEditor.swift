@@ -24,36 +24,7 @@ enum NoteEditorPalette {
         for color: NoteRGBAColor,
         colorScheme: ColorScheme
     ) -> NSColor {
-        guard colorScheme == .dark,
-            isAutomaticDarkNeutral(color)
-        else {
-            return color.nsColor
-        }
-        return textColor(for: colorScheme)
-    }
-
-    static func shouldUseAutomaticTextColor(_ color: NSColor) -> Bool {
-        guard let rgb = color.usingColorSpace(.deviceRGB) else {
-            return false
-        }
-        return isAutomaticDarkNeutral(
-            NoteRGBAColor(
-                red: Double(rgb.redComponent),
-                green: Double(rgb.greenComponent),
-                blue: Double(rgb.blueComponent),
-                alpha: Double(rgb.alphaComponent)
-            )
-        )
-    }
-
-    private static func isAutomaticDarkNeutral(_ color: NoteRGBAColor) -> Bool {
-        let channels = [color.red, color.green, color.blue]
-        guard let minimum = channels.min(),
-            let maximum = channels.max()
-        else {
-            return false
-        }
-        return maximum <= 0.16 && maximum - minimum <= 0.04
+        colorScheme == .dark ? textColor(for: colorScheme) : color.nsColor
     }
 }
 
@@ -912,23 +883,11 @@ struct NoteRichTextEditorView: NSViewRepresentable {
                 return
             }
             let textColor = NoteEditorPalette.textColor(for: colorScheme)
-            textStorage.enumerateAttribute(
+            layoutManager.addTemporaryAttribute(
                 .foregroundColor,
-                in: range
-            ) { value, range, _ in
-                guard
-                    value == nil
-                        || (value as? NSColor).map(NoteEditorPalette.shouldUseAutomaticTextColor)
-                            == true
-                else {
-                    return
-                }
-                layoutManager.addTemporaryAttribute(
-                    .foregroundColor,
-                    value: textColor,
-                    forCharacterRange: range
-                )
-            }
+                value: textColor,
+                forCharacterRange: range
+            )
             textView.needsDisplay = true
         }
     }

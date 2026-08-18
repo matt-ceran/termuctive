@@ -280,9 +280,17 @@ final class ProjectNotesIntegrationTests: XCTestCase {
 
     func testNoteTextFollowsLightDarkLightAppearanceWithoutChangingStoredRTF() async throws {
         let note = ProjectNote(name: "Theme")
-        let source = NSAttributedString(
+        let source = NSMutableAttributedString(
             string: "Automatic text",
             attributes: NoteRichTextArchive.defaultBodyAttributes
+        )
+        source.append(
+            NSAttributedString(
+                string: " and colored text",
+                attributes: NoteRichTextArchive.defaultBodyAttributes.merging([
+                    .foregroundColor: NSColor.systemRed
+                ]) { _, explicit in explicit }
+            )
         )
         let originalRTF = try NoteRichTextArchive.data(from: source)
         let persistence = ThemeNotePersistence(
@@ -320,6 +328,10 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             textView.backgroundColor.usingColorSpace(.deviceRGB)?.redComponent ?? 1 < 0.2
                 && (self.temporaryForegroundColor(in: textView)?
                     .usingColorSpace(.deviceRGB)?.redComponent ?? 0) > 0.9
+                && (self.temporaryForegroundColor(
+                    in: textView,
+                    at: "Automatic text".utf16.count + 1
+                )?.usingColorSpace(.deviceRGB)?.greenComponent ?? 0) > 0.9
         }
 
         theme.scheme = .light
@@ -366,9 +378,16 @@ final class ProjectNotesIntegrationTests: XCTestCase {
     }
 
     private func temporaryForegroundColor(in textView: NSTextView) -> NSColor? {
+        temporaryForegroundColor(in: textView, at: 0)
+    }
+
+    private func temporaryForegroundColor(
+        in textView: NSTextView,
+        at characterIndex: Int
+    ) -> NSColor? {
         textView.layoutManager?.temporaryAttribute(
             .foregroundColor,
-            atCharacterIndex: 0,
+            atCharacterIndex: characterIndex,
             effectiveRange: nil
         ) as? NSColor
     }

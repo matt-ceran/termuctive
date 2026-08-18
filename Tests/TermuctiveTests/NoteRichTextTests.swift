@@ -28,7 +28,9 @@ final class NoteRichTextTests: XCTestCase {
         XCTAssertLessThan(background.redComponent, 0.2)
         XCTAssertGreaterThan(text.redComponent, 0.9)
         XCTAssertGreaterThan(automatic.redComponent, 0.9)
-        XCTAssertGreaterThan(explicitRed.redComponent, explicitRed.blueComponent)
+        XCTAssertGreaterThan(explicitRed.redComponent, 0.9)
+        XCTAssertGreaterThan(explicitRed.greenComponent, 0.9)
+        XCTAssertGreaterThan(explicitRed.blueComponent, 0.9)
     }
 
     func testToolbarLayoutRespondsToPaneWidthAndWorkspaceMode() {
