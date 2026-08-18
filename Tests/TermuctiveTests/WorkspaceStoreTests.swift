@@ -251,6 +251,135 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(persistence.savedDocuments.isEmpty)
     }
 
+    func testMovingSelectedNoteAcrossProjectsPreservesIdentityPaneAndOpenTab() throws {
+        let note = ProjectNote(name: "Plan")
+        let sourceTerminalPane = TerminalPane(workingDirectory: "/source")
+        let sourceNotePane = TerminalPane(
+            workingDirectory: "/source",
+            content: .note(note.id)
+        )
+        let sourceSpace = TerminalSpace(
+            name: "Terminal",
+            layout: .split(
+                PaneSplit(
+                    axis: .horizontal,
+                    first: .terminal(sourceTerminalPane),
+                    second: .terminal(sourceNotePane)
+                )
+            )
+        )
+        let sourceFolder = WorkspaceFolder(
+            name: "Drafts",
+            children: [.note(note)]
+        )
+        let sourceProject = TerminalProject(
+            name: "Source",
+            rootDirectory: "/source",
+            items: [.space(sourceSpace), .folder(sourceFolder)],
+            lastSelectedItemID: note.id,
+            lastSelectedSpaceID: sourceSpace.id
+        )
+        let existingNote = ProjectNote(name: "Plan")
+        let destinationFolder = WorkspaceFolder(
+            name: "Archive",
+            children: [.note(existingNote)]
+        )
+        let destinationProject = TerminalProject(
+            name: "Destination",
+            rootDirectory: "/destination",
+            items: [.folder(destinationFolder)]
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [sourceProject, destinationProject],
+            selectedProjectID: sourceProject.id,
+            selectedItemID: note.id,
+            openTerminalSpaceIDs: [sourceSpace.id],
+            openNoteIDs: [note.id]
+        )
+        let store = WorkspaceStore(persistence: persistence)
+        let terminalIDs = store.document.terminalIDs
+
+        let moved = store.moveNote(
+            withID: note.id,
+            fromProjectWithID: sourceProject.id,
+            toProjectWithID: destinationProject.id,
+            toFolderWithID: destinationFolder.id
+        )
+
+        XCTAssertTrue(moved)
+        XCTAssertNil(store.document.projects[0].note(withID: note.id))
+        let movedNote = try XCTUnwrap(store.document.projects[1].note(withID: note.id))
+        XCTAssertEqual(movedNote.name, "Plan 2")
+        XCTAssertEqual(
+            store.document.projects[1].ancestorFolderIDs(forItemWithID: note.id),
+            [destinationFolder.id]
+        )
+        XCTAssertEqual(store.document.selectedProjectID, destinationProject.id)
+        XCTAssertEqual(store.selectedNote?.id, note.id)
+        XCTAssertEqual(store.document.openNoteIDs, [note.id])
+        XCTAssertEqual(store.openNoteTabs.first?.projectID, destinationProject.id)
+        XCTAssertEqual(store.openNoteTabs.first?.noteName, "Plan 2")
+        XCTAssertEqual(store.document.terminalIDs, terminalIDs)
+        XCTAssertEqual(
+            store.document.projects[0].space(withID: sourceSpace.id)?
+                .layout.terminal(withID: sourceNotePane.id)?.content,
+            .note(note.id)
+        )
+        XCTAssertEqual(
+            store.document.projects[0].lastSelectedItemID,
+            sourceSpace.id
+        )
+        XCTAssertTrue(store.expandedProjectIDs.contains(destinationProject.id))
+        XCTAssertTrue(store.expandedFolderIDs.contains(destinationFolder.id))
+        XCTAssertEqual(persistence.savedDocuments, [store.document])
+    }
+
+    func testMovingNoteRejectsItsCurrentContainerAndInvalidDestinations() {
+        let note = ProjectNote(name: "Plan")
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.note(note)],
+            lastSelectedItemID: note.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedItemID: note.id
+        )
+        let store = WorkspaceStore(persistence: persistence)
+
+        XCTAssertFalse(
+            store.moveNote(
+                withID: note.id,
+                fromProjectWithID: project.id,
+                toProjectWithID: project.id,
+                toFolderWithID: nil
+            )
+        )
+        XCTAssertFalse(
+            store.moveNote(
+                withID: note.id,
+                fromProjectWithID: project.id,
+                toProjectWithID: project.id,
+                toFolderWithID: UUID()
+            )
+        )
+        XCTAssertFalse(
+            store.moveNote(
+                withID: note.id,
+                fromProjectWithID: UUID(),
+                toProjectWithID: project.id,
+                toFolderWithID: nil
+            )
+        )
+
+        XCTAssertEqual(store.document.projects, [project])
+        XCTAssertTrue(persistence.savedDocuments.isEmpty)
+    }
+
     func testAddingNotePaneCreatesSidebarNoteAndKeepsTerminalSpaceSelected() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)

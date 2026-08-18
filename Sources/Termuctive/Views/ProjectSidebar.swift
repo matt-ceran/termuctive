@@ -1,4 +1,21 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+extension UTType {
+    static let termuctiveProjectNote = UTType(
+        exportedAs: "com.mattceran.termuctive.project-note",
+        conformingTo: .data
+    )
+}
+
+struct ProjectNoteDragPayload: Codable, Hashable, Transferable {
+    let noteID: UUID
+    let sourceProjectID: UUID
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .termuctiveProjectNote)
+    }
+}
 
 struct ProjectSidebar: View {
     @ObservedObject var store: WorkspaceStore
@@ -140,6 +157,13 @@ struct ProjectSidebar: View {
                     store.selectProject(withID: project.id)
                 }
             }
+            .modifier(
+                ProjectNoteDropDestination(
+                    store: store,
+                    projectID: project.id,
+                    folderID: nil
+                )
+            )
 
             SidebarDisclosureSection(
                 isExpanded: isExpanded,
@@ -178,6 +202,22 @@ struct ProjectSidebar: View {
                         && store.selectedFolderID == nil
                 ) {
                     store.selectNote(withID: note.id, inProject: projectID)
+                }
+                .draggable(
+                    ProjectNoteDragPayload(
+                        noteID: note.id,
+                        sourceProjectID: projectID
+                    )
+                ) {
+                    Label(note.name, systemImage: "note.text")
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(
+                            .regularMaterial,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
                 }
             )
 
@@ -236,6 +276,13 @@ struct ProjectSidebar: View {
                             store.toggleFolder(withID: folder.id)
                         }
                     }
+                    .modifier(
+                        ProjectNoteDropDestination(
+                            store: store,
+                            projectID: projectID,
+                            folderID: folder.id
+                        )
+                    )
 
                     SidebarDisclosureSection(
                         isExpanded: isExpanded,
@@ -582,6 +629,57 @@ struct ProjectSidebar: View {
             }
             count += visibleRowCount(in: folder.children)
         }
+    }
+}
+
+private struct ProjectNoteDropDestination: ViewModifier {
+    @ObservedObject var store: WorkspaceStore
+    let projectID: UUID
+    let folderID: UUID?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isTargeted = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                isTargeted
+                    ? Color.accentColor.opacity(0.12)
+                    : Color.clear
+            )
+            .overlay {
+                if isTargeted {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .stroke(Color.accentColor.opacity(0.9), lineWidth: 1.5)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                }
+            }
+            .scaleEffect(isTargeted && !reduceMotion ? 1.01 : 1)
+            .dropDestination(for: ProjectNoteDragPayload.self) { payloads, _ in
+                guard let payload = payloads.first else {
+                    return false
+                }
+                isTargeted = false
+                let move = {
+                    store.moveNote(
+                        withID: payload.noteID,
+                        fromProjectWithID: payload.sourceProjectID,
+                        toProjectWithID: projectID,
+                        toFolderWithID: folderID
+                    )
+                }
+                if reduceMotion {
+                    return move()
+                }
+                return withAnimation(.snappy(duration: 0.2), move)
+            } isTargeted: {
+                isTargeted = $0
+            }
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: isTargeted
+            )
     }
 }
 

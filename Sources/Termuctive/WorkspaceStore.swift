@@ -463,6 +463,83 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
+    @discardableResult
+    func moveNote(
+        withID noteID: UUID,
+        fromProjectWithID sourceProjectID: UUID,
+        toProjectWithID destinationProjectID: UUID,
+        toFolderWithID destinationFolderID: UUID?
+    ) -> Bool {
+        guard
+            let sourceIndex = document.projects.firstIndex(where: {
+                $0.id == sourceProjectID
+            }),
+            let destinationIndex = document.projects.firstIndex(where: {
+                $0.id == destinationProjectID
+            }),
+            document.projects[sourceIndex].note(withID: noteID) != nil,
+            destinationFolderID.map({
+                document.projects[destinationIndex].containsFolder(withID: $0)
+            }) ?? true,
+            sourceIndex == destinationIndex
+                || document.projects[destinationIndex].note(withID: noteID) == nil
+        else {
+            return false
+        }
+
+        let sourceFolderID = document.projects[sourceIndex]
+            .ancestorFolderIDs(forItemWithID: noteID)
+            .last
+        guard
+            sourceProjectID != destinationProjectID
+                || sourceFolderID != destinationFolderID
+        else {
+            return false
+        }
+
+        let wasSelected = document.selectedNote?.id == noteID
+        var updatedProjects = document.projects
+        guard
+            case .note(var movedNote) = updatedProjects[sourceIndex].removeItem(
+                withID: noteID
+            )
+        else {
+            return false
+        }
+
+        let destinationNames =
+            updatedProjects[destinationIndex].childNames(
+                inFolderWithID: destinationFolderID
+            ) ?? []
+        movedNote.name = uniqueName(base: movedNote.name, existing: destinationNames)
+        guard
+            updatedProjects[destinationIndex].append(
+                .note(movedNote),
+                toFolderWithID: destinationFolderID
+            )
+        else {
+            return false
+        }
+
+        document.projects = updatedProjects
+        normalizeLastSelectedItem(forProjectAt: sourceIndex)
+        if destinationIndex != sourceIndex {
+            normalizeLastSelectedItem(forProjectAt: destinationIndex)
+        }
+        expandedProjectIDs.insert(destinationProjectID)
+        expandedFolderIDs.formUnion(
+            document.projects[destinationIndex].ancestorFolderIDs(
+                forItemWithID: noteID
+            )
+        )
+
+        if wasSelected {
+            activateNote(inProjectAt: destinationIndex, noteID: noteID)
+        }
+        save()
+        return true
+    }
+
     func selectFolder(withID id: UUID, inProject projectID: UUID) {
         guard
             let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),

@@ -503,6 +503,156 @@ final class ProjectNotesIntegrationTests: XCTestCase {
         add(narrowAttachment)
     }
 
+    func testMovingNoteAcrossProjectFoldersPreservesItsRenderedSession() async throws {
+        let fileManager = FileManager.default
+        let rootDirectory = fileManager.temporaryDirectory.appendingPathComponent(
+            "termuctive-note-move-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let sourceDirectory = rootDirectory.appendingPathComponent(
+            "Source",
+            isDirectory: true
+        )
+        let destinationDirectory = rootDirectory.appendingPathComponent(
+            "Destination",
+            isDirectory: true
+        )
+        let notesDirectory = rootDirectory.appendingPathComponent(
+            "Saved Notes",
+            isDirectory: true
+        )
+        try fileManager.createDirectory(
+            at: sourceDirectory,
+            withIntermediateDirectories: true
+        )
+        try fileManager.createDirectory(
+            at: destinationDirectory,
+            withIntermediateDirectories: true
+        )
+        defer {
+            try? fileManager.removeItem(at: rootDirectory)
+        }
+
+        let defaultsSuiteName = "TermuctiveTests.NoteMove.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsSuiteName))
+        defer {
+            defaults.removePersistentDomain(forName: defaultsSuiteName)
+        }
+
+        let store = WorkspaceStore(persistence: ProjectNotesWorkspacePersistence())
+        store.addProject(at: sourceDirectory)
+        let sourceProjectID = try XCTUnwrap(store.document.selectedProjectID)
+        store.addFolder(
+            toFolderWithID: nil,
+            inProjectWithID: sourceProjectID
+        )
+        let sourceFolderID = try XCTUnwrap(store.selectedFolderID)
+        store.addNote()
+        let note = try XCTUnwrap(store.selectedNote)
+
+        store.addProject(at: destinationDirectory)
+        let destinationProjectID = try XCTUnwrap(store.document.selectedProjectID)
+        store.addFolder(
+            toFolderWithID: nil,
+            inProjectWithID: destinationProjectID
+        )
+        let destinationFolderID = try XCTUnwrap(store.selectedFolderID)
+        store.selectNote(withID: note.id, inProject: sourceProjectID)
+
+        let sessions = TerminalSessionPool(store: store)
+        let editors = EditorSessionPool(store: store)
+        let noteStore = NoteFileStore(directoryURL: notesDirectory)
+        let notes = NoteSessionPool(persistence: noteStore)
+        let appearance = AppearanceSettings(defaults: defaults)
+        let noteSession = notes.session(for: note)
+        defer {
+            notes.terminateAll()
+            editors.terminateAll()
+            sessions.terminateAll()
+        }
+
+        let hostingView = NSHostingView(
+            rootView: WorkspaceView(
+                store: store,
+                sessions: sessions,
+                editors: editors,
+                notes: notes,
+                appearance: appearance,
+                agentActivity: sessions.agentActivityRegistry
+            )
+            .preferredColorScheme(.dark)
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1_180, height: 740),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+
+        let textView = try XCTUnwrap(firstSubview(of: NSTextView.self, in: hostingView))
+        textView.insertText(
+            "Session survives the move",
+            replacementRange: NSRange(location: 0, length: 0)
+        )
+        try await waitUntil("the source note edit to reach its session") {
+            NoteRichTextArchive.attributedString(
+                from: noteSession.document.richTextRTF
+            ).string == "Session survives the move"
+        }
+        try await waitUntil("the source note to use the dark text palette") {
+            (self.temporaryForegroundColor(in: textView)?
+                .usingColorSpace(.deviceRGB)?.redComponent ?? 0) > 0.9
+        }
+        let terminalIDs = store.document.terminalIDs
+
+        XCTAssertTrue(
+            store.moveNote(
+                withID: note.id,
+                fromProjectWithID: sourceProjectID,
+                toProjectWithID: destinationProjectID,
+                toFolderWithID: destinationFolderID
+            )
+        )
+
+        try await waitUntil("the moved note to remain rendered") {
+            guard
+                let movedTextView = self.firstSubview(
+                    of: NSTextView.self,
+                    in: hostingView
+                )
+            else {
+                return false
+            }
+            return movedTextView.string == "Session survives the move"
+                && (self.temporaryForegroundColor(in: movedTextView)?
+                    .usingColorSpace(.deviceRGB)?.redComponent ?? 0) > 0.9
+        }
+        XCTAssertNil(
+            store.document.projects.first { $0.id == sourceProjectID }?
+                .note(withID: note.id)
+        )
+        let destinationProject = try XCTUnwrap(
+            store.document.projects.first { $0.id == destinationProjectID }
+        )
+        XCTAssertEqual(
+            destinationProject.ancestorFolderIDs(forItemWithID: note.id),
+            [destinationFolderID]
+        )
+        XCTAssertEqual(store.document.selectedProjectID, destinationProjectID)
+        XCTAssertEqual(store.selectedNote?.id, note.id)
+        XCTAssertEqual(store.document.terminalIDs, terminalIDs)
+        XCTAssertTrue(notes.retainedSession(forNoteID: note.id) === noteSession)
+        XCTAssertTrue(store.expandedFolderIDs.contains(destinationFolderID))
+        XCTAssertTrue(store.expandedFolderIDs.contains(sourceFolderID))
+
+        let attachment = XCTAttachment(image: try renderedImage(of: hostingView))
+        attachment.name = "Note moved between project folders"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testInlineImagePlacementResizeAndPersistenceThroughTheRenderedNote() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "termuctive-inline-image-\(UUID().uuidString)",
