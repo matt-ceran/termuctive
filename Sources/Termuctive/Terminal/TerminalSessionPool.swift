@@ -104,9 +104,17 @@ final class TerminalSessionPool: ObservableObject {
                     )
                 }
             },
-            onAgentActivityHint: { [weak self] paneID, sessionID in
+            onAgentActivitySubmission: { [weak self] paneID, sessionID in
                 Task { @MainActor in
-                    self?.requestAgentActivityPoll(
+                    self?.recordAgentActivitySubmission(
+                        paneID: paneID,
+                        sessionID: sessionID
+                    )
+                }
+            },
+            onAgentActivityOutput: { [weak self] paneID, sessionID in
+                Task { @MainActor in
+                    self?.recordAgentActivityOutput(
                         paneID: paneID,
                         sessionID: sessionID
                     )
@@ -400,7 +408,7 @@ final class TerminalSessionPool: ObservableObject {
         }
     }
 
-    private func requestAgentActivityPoll(
+    private func recordAgentActivitySubmission(
         paneID: UUID,
         sessionID: UUID
     ) {
@@ -408,7 +416,22 @@ final class TerminalSessionPool: ObservableObject {
             return
         }
         enqueueAgentActivityCommand { monitor in
-            await monitor.requestImmediatePoll(
+            await monitor.recordSubmission(
+                paneID: paneID,
+                sessionID: sessionID
+            )
+        }
+    }
+
+    private func recordAgentActivityOutput(
+        paneID: UUID,
+        sessionID: UUID
+    ) {
+        guard sessions[paneID]?.activitySessionID == sessionID else {
+            return
+        }
+        enqueueAgentActivityCommand { monitor in
+            await monitor.recordOutput(
                 paneID: paneID,
                 sessionID: sessionID
             )
@@ -1018,6 +1041,8 @@ struct TerminalShellConfiguration {
 }
 
 private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate {
+    private static let agentOutputSignalIntervalNanoseconds: UInt64 = 100_000_000
+
     let paneID: UUID
     let view: TermuctiveTerminalView
     private(set) var startedAt = Date()
@@ -1026,6 +1051,8 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     private var pane: TerminalPane
     private let shellConfiguration: TerminalShellConfiguration
     private var outputPDFTracker = TerminalOutputPDFTracker()
+    private var outputActivityClassifier = TerminalOutputActivityClassifier()
+    private var lastAgentOutputSignalTime: UInt64?
     private let onTitleChange: (UUID, String) -> Void
     private let onDirectoryChange: (UUID, String) -> Void
     private let onLocalCommand: (UUID, TerminalLocalCommand) -> Void
@@ -1038,7 +1065,8 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
             AgentShellIdentity,
             UUID
         ) -> Void
-    private let onAgentActivityHint: (UUID, UUID) -> Void
+    private let onAgentActivitySubmission: (UUID, UUID) -> Void
+    private let onAgentActivityOutput: (UUID, UUID) -> Void
     private let onAgentActivityStopped: (UUID, UUID) -> Void
     private let onTermination: (UUID, Int32?) -> Void
 
@@ -1060,7 +1088,8 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
                 AgentShellIdentity,
                 UUID
             ) -> Void,
-        onAgentActivityHint: @escaping (UUID, UUID) -> Void,
+        onAgentActivitySubmission: @escaping (UUID, UUID) -> Void,
+        onAgentActivityOutput: @escaping (UUID, UUID) -> Void,
         onAgentActivityStopped: @escaping (UUID, UUID) -> Void,
         onTermination: @escaping (UUID, Int32?) -> Void
     ) {
@@ -1073,7 +1102,8 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         self.onPDFPathDetected = onPDFPathDetected
         self.captureAgentShellIdentity = captureAgentShellIdentity
         self.onAgentActivityStarted = onAgentActivityStarted
-        self.onAgentActivityHint = onAgentActivityHint
+        self.onAgentActivitySubmission = onAgentActivitySubmission
+        self.onAgentActivityOutput = onAgentActivityOutput
         self.onAgentActivityStopped = onAgentActivityStopped
         self.onTermination = onTermination
         view = TermuctiveTerminalView(frame: .zero)
@@ -1093,7 +1123,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
             self?.trackOutput(bytes)
         }
         view.activitySubmissionHandler = { [weak self] in
-            self?.requestAgentActivityPoll()
+            self?.recordAgentActivitySubmission()
         }
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.fontSmoothing = true
@@ -1180,6 +1210,8 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
         startedAt = Date()
         outputPDFTracker = TerminalOutputPDFTracker()
+        outputActivityClassifier = TerminalOutputActivityClassifier()
+        lastAgentOutputSignalTime = nil
         let currentDirectory = Self.validDirectory(pane.workingDirectory)
         if currentDirectory != pane.workingDirectory {
             self.pane.workingDirectory = currentDirectory
@@ -1206,13 +1238,34 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     private func trackOutput(_ bytes: ArraySlice<UInt8>) {
         trackPDFs(in: bytes)
+        guard outputActivityClassifier.consume(bytes) else {
+            return
+        }
+        recordAgentActivityOutput()
     }
 
-    private func requestAgentActivityPoll() {
+    private func recordAgentActivitySubmission() {
         guard let activitySessionID else {
             return
         }
-        onAgentActivityHint(paneID, activitySessionID)
+        onAgentActivitySubmission(paneID, activitySessionID)
+    }
+
+    private func recordAgentActivityOutput() {
+        guard let activitySessionID else {
+            return
+        }
+        let currentTime = DispatchTime.now().uptimeNanoseconds
+        guard
+            lastAgentOutputSignalTime.map({ previousTime in
+                currentTime >= previousTime
+                    && currentTime - previousTime >= Self.agentOutputSignalIntervalNanoseconds
+            }) ?? true
+        else {
+            return
+        }
+        lastAgentOutputSignalTime = currentTime
+        onAgentActivityOutput(paneID, activitySessionID)
     }
 
     private func endAgentActivitySession() {

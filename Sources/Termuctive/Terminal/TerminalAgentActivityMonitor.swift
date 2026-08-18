@@ -14,6 +14,11 @@ actor TerminalAgentActivityMonitor {
         let shellIdentity: AgentShellIdentity
         var consecutiveMisses = 0
         var activity = TerminalAgentActivity.absent
+        var detectedKinds: Set<TerminalAgentKind> = []
+        var cpuTimes: [Int32: UInt64] = [:]
+        var submissionTime: UInt64?
+        var lastEvidenceTime: UInt64?
+        var lastImmediatePollTime: UInt64?
         var nextPollTime: UInt64
     }
 
@@ -24,7 +29,12 @@ actor TerminalAgentActivityMonitor {
 
     private let inspector: any AgentProcessInspecting
     private let activePollIntervalNanoseconds: UInt64
+    private let presentAgentPollIntervalNanoseconds: UInt64
     private let idlePollIntervalNanoseconds: UInt64
+    private let activityQuietPeriodNanoseconds: UInt64
+    private let agentDiscoveryWindowNanoseconds: UInt64
+    private let minimumCPUAdvanceNanoseconds: UInt64
+    private let outputPollThrottleNanoseconds: UInt64
     private let automaticallyPolls: Bool
     private let now: @Sendable () -> UInt64
     private let activitySink: ActivitySink
@@ -36,7 +46,12 @@ actor TerminalAgentActivityMonitor {
     init(
         inspector: any AgentProcessInspecting = MacAgentProcessInspector(),
         activePollIntervalNanoseconds: UInt64 = 750_000_000,
+        presentAgentPollIntervalNanoseconds: UInt64 = 2_000_000_000,
         idlePollIntervalNanoseconds: UInt64 = 4_000_000_000,
+        activityQuietPeriodNanoseconds: UInt64 = 3_000_000_000,
+        agentDiscoveryWindowNanoseconds: UInt64 = 5_000_000_000,
+        minimumCPUAdvanceNanoseconds: UInt64 = 10_000_000,
+        outputPollThrottleNanoseconds: UInt64 = 100_000_000,
         automaticallyPolls: Bool = true,
         now: @escaping @Sendable () -> UInt64 = {
             DispatchTime.now().uptimeNanoseconds
@@ -45,7 +60,12 @@ actor TerminalAgentActivityMonitor {
     ) {
         self.inspector = inspector
         self.activePollIntervalNanoseconds = activePollIntervalNanoseconds
+        self.presentAgentPollIntervalNanoseconds = presentAgentPollIntervalNanoseconds
         self.idlePollIntervalNanoseconds = idlePollIntervalNanoseconds
+        self.activityQuietPeriodNanoseconds = activityQuietPeriodNanoseconds
+        self.agentDiscoveryWindowNanoseconds = agentDiscoveryWindowNanoseconds
+        self.minimumCPUAdvanceNanoseconds = minimumCPUAdvanceNanoseconds
+        self.outputPollThrottleNanoseconds = outputPollThrottleNanoseconds
         self.automaticallyPolls = automaticallyPolls
         self.now = now
         self.activitySink = activitySink
@@ -79,10 +99,18 @@ actor TerminalAgentActivityMonitor {
         wakeScheduler()
     }
 
-    func requestImmediatePoll(paneID: UUID, sessionID: UUID) async {
-        guard registrations[paneID]?.sessionID == sessionID else {
+    func recordSubmission(paneID: UUID, sessionID: UUID) async {
+        guard var registration = registrations[paneID],
+            registration.sessionID == sessionID
+        else {
             return
         }
+        let currentTime = now()
+        registration.submissionTime = currentTime
+        registration.lastEvidenceTime = currentTime
+        registration.lastImmediatePollTime = currentTime
+        registration.nextPollTime = currentTime
+        registrations[paneID] = registration
         await poll(paneID: paneID)
         guard registrations[paneID]?.sessionID == sessionID,
             registrations[paneID]?.activity.phase == .absent
@@ -90,6 +118,38 @@ actor TerminalAgentActivityMonitor {
             return
         }
         scheduleDiscovery(paneID: paneID, sessionID: sessionID)
+    }
+
+    func recordOutput(paneID: UUID, sessionID: UUID) async {
+        guard var registration = registrations[paneID],
+            registration.sessionID == sessionID
+        else {
+            return
+        }
+        let currentTime = now()
+        guard registration.submissionTime != nil,
+            !registration.detectedKinds.isEmpty
+                || hasRecentSubmission(registration, at: currentTime)
+        else {
+            return
+        }
+
+        registration.lastEvidenceTime = currentTime
+        let shouldPollImmediately =
+            registration.activity.phase == .absent
+            && registration.lastImmediatePollTime.map {
+                currentTime >= $0
+                    && currentTime - $0 >= outputPollThrottleNanoseconds
+            } ?? true
+        if shouldPollImmediately {
+            registration.lastImmediatePollTime = currentTime
+            registration.nextPollTime = currentTime
+        }
+        registrations[paneID] = registration
+
+        if shouldPollImmediately {
+            await poll(paneID: paneID)
+        }
     }
 
     func stopAll() {
@@ -123,6 +183,7 @@ actor TerminalAgentActivityMonitor {
         guard var registration = registrations[paneID] else {
             return
         }
+        let currentTime = now()
         let inspection = inspector.inspect(
             shellPID: registration.shellPID,
             expectedIdentity: registration.shellIdentity
@@ -146,7 +207,10 @@ actor TerminalAgentActivityMonitor {
 
         case .unavailable:
             registration.consecutiveMisses += 1
-            registration.nextPollTime = nextPollTime(for: registration.activity)
+            registration.nextPollTime = nextPollTime(
+                for: registration,
+                at: currentTime
+            )
             registrations[paneID] = registration
             if registration.consecutiveMisses >= 2 {
                 await publish(
@@ -173,7 +237,18 @@ actor TerminalAgentActivityMonitor {
 
             guard !snapshot.processes.isEmpty else {
                 registration.consecutiveMisses += 1
-                registration.nextPollTime = nextPollTime(for: registration.activity)
+                if registration.consecutiveMisses >= 2 {
+                    registration.detectedKinds = []
+                    registration.cpuTimes = [:]
+                    if !hasRecentSubmission(registration, at: currentTime) {
+                        registration.submissionTime = nil
+                        registration.lastEvidenceTime = nil
+                    }
+                }
+                registration.nextPollTime = nextPollTime(
+                    for: registration,
+                    at: currentTime
+                )
                 registrations[paneID] = registration
                 if registration.consecutiveMisses >= 2 {
                     await publish(
@@ -186,11 +261,27 @@ actor TerminalAgentActivityMonitor {
             }
 
             registration.consecutiveMisses = 0
-            registration.nextPollTime = now() + activePollIntervalNanoseconds
+            if registration.submissionTime != nil,
+                cpuDidAdvance(in: snapshot.processes, from: registration.cpuTimes)
+            {
+                registration.lastEvidenceTime = currentTime
+            }
+            registration.detectedKinds = Set(snapshot.processes.map(\.kind))
+            registration.cpuTimes = Dictionary(
+                uniqueKeysWithValues: snapshot.processes.map {
+                    ($0.processID, $0.cpuTimeNanoseconds)
+                }
+            )
+            registration.nextPollTime = nextPollTime(
+                for: registration,
+                at: currentTime
+            )
             registrations[paneID] = registration
             cancelDiscovery(paneID: paneID, sessionID: registration.sessionID)
             await publish(
-                .active(Set(snapshot.processes.map(\.kind))),
+                hasRecentEvidence(registration, at: currentTime)
+                    ? .active(registration.detectedKinds)
+                    : .absent,
                 paneID: paneID,
                 sessionID: registration.sessionID
             )
@@ -209,16 +300,70 @@ actor TerminalAgentActivityMonitor {
             return
         }
         registration.activity = activity
-        registration.nextPollTime = nextPollTime(for: activity)
+        registration.nextPollTime = nextPollTime(
+            for: registration,
+            at: now()
+        )
         registrations[paneID] = registration
         await activitySink(paneID, sessionID, activity)
         wakeScheduler()
     }
 
-    private func nextPollTime(for activity: TerminalAgentActivity) -> UInt64 {
-        now()
-            + (activity.phase == .active
-                ? activePollIntervalNanoseconds : idlePollIntervalNanoseconds)
+    private func nextPollTime(
+        for registration: Registration,
+        at currentTime: UInt64
+    ) -> UInt64 {
+        let interval: UInt64
+        if registration.activity.phase == .active
+            || hasRecentSubmission(registration, at: currentTime)
+        {
+            interval = activePollIntervalNanoseconds
+        } else if !registration.detectedKinds.isEmpty {
+            interval = presentAgentPollIntervalNanoseconds
+        } else {
+            interval = idlePollIntervalNanoseconds
+        }
+        return currentTime + interval
+    }
+
+    private func hasRecentSubmission(
+        _ registration: Registration,
+        at currentTime: UInt64
+    ) -> Bool {
+        guard let submissionTime = registration.submissionTime,
+            currentTime >= submissionTime
+        else {
+            return false
+        }
+        return currentTime - submissionTime <= agentDiscoveryWindowNanoseconds
+    }
+
+    private func hasRecentEvidence(
+        _ registration: Registration,
+        at currentTime: UInt64
+    ) -> Bool {
+        guard let evidenceTime = registration.lastEvidenceTime,
+            currentTime >= evidenceTime
+        else {
+            return false
+        }
+        return currentTime - evidenceTime <= activityQuietPeriodNanoseconds
+    }
+
+    private func cpuDidAdvance(
+        in processes: [AgentProcessSample],
+        from previousTimes: [Int32: UInt64]
+    ) -> Bool {
+        processes.contains { process in
+            guard process.cpuTimeNanoseconds > 0,
+                let previousTime = previousTimes[process.processID],
+                process.cpuTimeNanoseconds >= previousTime
+            else {
+                return false
+            }
+            return process.cpuTimeNanoseconds - previousTime
+                >= minimumCPUAdvanceNanoseconds
+        }
     }
 
     private func wakeScheduler() {
@@ -265,7 +410,7 @@ actor TerminalAgentActivityMonitor {
                     return
                 }
                 guard let self,
-                    await self.isCurrentAbsentSession(
+                    await self.isCurrentDiscoveringSession(
                         paneID: paneID,
                         sessionID: sessionID
                     )
@@ -293,11 +438,15 @@ actor TerminalAgentActivityMonitor {
         discoveries.removeValue(forKey: paneID)
     }
 
-    private func isCurrentAbsentSession(paneID: UUID, sessionID: UUID) -> Bool {
+    private func isCurrentDiscoveringSession(
+        paneID: UUID,
+        sessionID: UUID
+    ) -> Bool {
         guard let registration = registrations[paneID] else {
             return false
         }
         return registration.sessionID == sessionID
             && registration.activity.phase == .absent
+            && hasRecentSubmission(registration, at: now())
     }
 }

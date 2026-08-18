@@ -66,6 +66,17 @@ struct AgentShellIdentity: Equatable, Sendable {
 struct AgentProcessSample: Equatable, Sendable {
     let processID: Int32
     let kind: TerminalAgentKind
+    let cpuTimeNanoseconds: UInt64
+
+    init(
+        processID: Int32,
+        kind: TerminalAgentKind,
+        cpuTimeNanoseconds: UInt64 = 0
+    ) {
+        self.processID = processID
+        self.kind = kind
+        self.cpuTimeNanoseconds = cpuTimeNanoseconds
+    }
 }
 
 struct AgentProcessSnapshot: Equatable, Sendable {
@@ -148,7 +159,8 @@ struct MacAgentProcessInspector: AgentProcessInspecting {
             }
             return AgentProcessSample(
                 processID: processID,
-                kind: kind
+                kind: kind,
+                cpuTimeNanoseconds: processInfo.cpuTimeNanoseconds
             )
         }
 
@@ -401,5 +413,66 @@ enum TerminalAgentProcessMatcher {
             return ""
         }
         return URL(fileURLWithPath: value).lastPathComponent.lowercased()
+    }
+}
+
+struct TerminalOutputActivityClassifier {
+    private enum EscapeState {
+        case normal
+        case escape
+        case controlSequence
+        case operatingSystemCommand
+        case operatingSystemCommandEscape
+    }
+
+    private var state = EscapeState.normal
+
+    mutating func consume(_ bytes: ArraySlice<UInt8>) -> Bool {
+        var visibleByteCount = 0
+
+        for byte in bytes {
+            switch state {
+            case .normal:
+                if byte == 0x1B {
+                    state = .escape
+                } else if byte >= 0x20, byte != 0x7F {
+                    visibleByteCount += 1
+                    if visibleByteCount >= 2 {
+                        return true
+                    }
+                }
+
+            case .escape:
+                switch byte {
+                case 0x5B:
+                    state = .controlSequence
+                case 0x5D:
+                    state = .operatingSystemCommand
+                default:
+                    state = .normal
+                }
+
+            case .controlSequence:
+                if (0x40...0x7E).contains(byte) {
+                    state = .normal
+                }
+
+            case .operatingSystemCommand:
+                if byte == 0x07 {
+                    state = .normal
+                } else if byte == 0x1B {
+                    state = .operatingSystemCommandEscape
+                }
+
+            case .operatingSystemCommandEscape:
+                state = byte == 0x5C ? .normal : .operatingSystemCommand
+            }
+        }
+        return false
+    }
+
+    static func containsVisibleContent(_ bytes: ArraySlice<UInt8>) -> Bool {
+        var classifier = TerminalOutputActivityClassifier()
+        return classifier.consume(bytes)
     }
 }

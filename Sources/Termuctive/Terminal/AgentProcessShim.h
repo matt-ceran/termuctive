@@ -11,6 +11,7 @@ typedef struct TMCProcessInfo {
     int32_t foregroundProcessGroupID;
     uint64_t startSeconds;
     uint64_t startMicroseconds;
+    uint64_t cpuTimeNanoseconds;
 } TMCProcessInfo;
 
 int32_t TMCReadProcessInfo(pid_t processID, TMCProcessInfo *processInfo);

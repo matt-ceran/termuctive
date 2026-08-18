@@ -84,6 +84,36 @@ final class TerminalAgentActivityTests: XCTestCase {
         )
     }
 
+    func testOutputClassifierIgnoresControlTrafficAndSingleKeyEchoes() {
+        let cursorMovement = Array("\u{1B}[2K\u{1B}[14G".utf8)
+        let titleUpdate = Array("\u{1B}]0;Codex is idle\u{7}".utf8)
+        let singleKeyEcho = Array("x".utf8)
+        let response = Array("Working on it".utf8)
+        let unicodeSpinner = Array("⠋".utf8)
+
+        XCTAssertFalse(
+            TerminalOutputActivityClassifier.containsVisibleContent(cursorMovement[...])
+        )
+        XCTAssertFalse(
+            TerminalOutputActivityClassifier.containsVisibleContent(titleUpdate[...])
+        )
+        XCTAssertFalse(
+            TerminalOutputActivityClassifier.containsVisibleContent(singleKeyEcho[...])
+        )
+        XCTAssertTrue(
+            TerminalOutputActivityClassifier.containsVisibleContent(response[...])
+        )
+        XCTAssertTrue(
+            TerminalOutputActivityClassifier.containsVisibleContent(unicodeSpinner[...])
+        )
+
+        var splitSequenceClassifier = TerminalOutputActivityClassifier()
+        let controlPrefix = Array("\u{1B}[".utf8)
+        let controlSuffix = Array("2K".utf8)
+        XCTAssertFalse(splitSequenceClassifier.consume(controlPrefix[...]))
+        XCTAssertFalse(splitSequenceClassifier.consume(controlSuffix[...]))
+    }
+
     func testCArgumentReaderClassifiesARealWrapperProcess() async throws {
         let wrapper = try fixtureExecutable(named: "node")
         let process = Process()
@@ -272,7 +302,7 @@ final class TerminalAgentActivityTests: XCTestCase {
             shellIdentity: identity,
             sessionID: sessionID
         )
-        await monitor.pollNow()
+        await monitor.recordSubmission(paneID: paneID, sessionID: sessionID)
         await monitor.pollNow()
         XCTAssertEqual(updates, [.active([.codex])])
 
@@ -290,7 +320,7 @@ final class TerminalAgentActivityTests: XCTestCase {
         XCTAssertEqual(updates.map(\.phase), [.active, .absent])
 
         inspector.inspection = .snapshot(activeSnapshot)
-        await monitor.requestImmediatePoll(paneID: paneID, sessionID: sessionID)
+        await monitor.recordSubmission(paneID: paneID, sessionID: sessionID)
         XCTAssertEqual(updates.map(\.phase), [.active, .absent, .active])
 
         inspector.inspection = .shellTerminated
@@ -298,8 +328,89 @@ final class TerminalAgentActivityTests: XCTestCase {
         XCTAssertEqual(updates.map(\.phase), [.active, .absent, .active, .absent])
 
         inspector.inspection = .snapshot(activeSnapshot)
-        await monitor.requestImmediatePoll(paneID: paneID, sessionID: sessionID)
+        await monitor.recordSubmission(paneID: paneID, sessionID: sessionID)
         XCTAssertEqual(updates.map(\.phase), [.active, .absent, .active, .absent])
+        await monitor.stopAll()
+    }
+
+    func testMonitorClearsAnIdleForegroundAgentAndUsesOutputOrCPUAsFreshEvidence() async {
+        let paneID = UUID()
+        let sessionID = UUID()
+        let identity = shellIdentity(processID: 123)
+        let clock = LockedAgentClock(now: 1)
+        let inspector = LockedAgentProcessInspector(
+            identity: identity,
+            inspection: .snapshot(
+                AgentProcessSnapshot(
+                    shellIdentity: identity,
+                    processes: [
+                        AgentProcessSample(
+                            processID: 456,
+                            kind: .codex,
+                            cpuTimeNanoseconds: 100_000_000
+                        )
+                    ]
+                )
+            )
+        )
+        var updates: [TerminalAgentActivity] = []
+        let monitor = TerminalAgentActivityMonitor(
+            inspector: inspector,
+            activityQuietPeriodNanoseconds: 3_000_000_000,
+            automaticallyPolls: false,
+            now: { clock.now },
+            activitySink: { _, _, activity in
+                updates.append(activity)
+            }
+        )
+
+        await monitor.register(
+            paneID: paneID,
+            shellPID: identity.processID,
+            shellIdentity: identity,
+            sessionID: sessionID
+        )
+        await monitor.pollNow()
+        XCTAssertTrue(updates.isEmpty)
+
+        await monitor.recordSubmission(paneID: paneID, sessionID: sessionID)
+        XCTAssertEqual(updates.map(\.phase), [.active])
+
+        clock.advance(by: 3_000_000_001)
+        await monitor.pollNow()
+        XCTAssertEqual(updates.map(\.phase), [.active, .absent])
+
+        await monitor.recordOutput(paneID: paneID, sessionID: sessionID)
+        XCTAssertEqual(updates.map(\.phase), [.active, .absent, .active])
+
+        clock.advance(by: 3_000_000_001)
+        await monitor.pollNow()
+        XCTAssertEqual(updates.map(\.phase), [.active, .absent, .active, .absent])
+
+        inspector.inspection = .snapshot(
+            AgentProcessSnapshot(
+                shellIdentity: identity,
+                processes: [
+                    AgentProcessSample(
+                        processID: 456,
+                        kind: .codex,
+                        cpuTimeNanoseconds: 120_000_000
+                    )
+                ]
+            )
+        )
+        await monitor.pollNow()
+        XCTAssertEqual(
+            updates.map(\.phase),
+            [.active, .absent, .active, .absent, .active]
+        )
+
+        clock.advance(by: 3_000_000_001)
+        await monitor.pollNow()
+        XCTAssertEqual(
+            updates.map(\.phase),
+            [.active, .absent, .active, .absent, .active, .absent]
+        )
         await monitor.stopAll()
     }
 
@@ -339,8 +450,8 @@ final class TerminalAgentActivityTests: XCTestCase {
             shellIdentity: identity,
             sessionID: currentSession
         )
+        await monitor.recordSubmission(paneID: paneID, sessionID: currentSession)
         await monitor.unregister(paneID: paneID, sessionID: firstSession)
-        await monitor.pollNow()
         XCTAssertEqual(updates.last?.0, currentSession)
         XCTAssertEqual(updates.last?.1, .active([.codex]))
 
@@ -428,7 +539,7 @@ final class TerminalAgentActivityTests: XCTestCase {
             for: activeIdentity.processID
         )
 
-        await monitor.requestImmediatePoll(
+        await monitor.recordSubmission(
             paneID: activePaneID,
             sessionID: activeSessionID
         )
@@ -487,7 +598,7 @@ final class TerminalAgentActivityTests: XCTestCase {
         terminal.frame = NSRect(x: 0, y: 0, width: 700, height: 480)
 
         let readyMarker = "TERMUCTIVE_AGENT_READY_\(UUID().uuidString.prefix(8))"
-        terminal.send(txt: "printf '\(readyMarker)\\n'\n")
+        submitTerminalLine("printf '\(readyMarker)\\n'", in: terminal)
         try await waitUntil("the isolated shell to become ready", timeout: 5) {
             self.terminalOutput(terminal).contains(readyMarker)
         }
@@ -504,28 +615,40 @@ final class TerminalAgentActivityTests: XCTestCase {
         let originalTerminal = terminal
         let quotedFixture = shellQuote(fixture.path)
 
-        terminal.send(txt: "\(quotedFixture) | /bin/cat\n")
+        submitTerminalLine("\(quotedFixture) | /bin/cat", in: terminal)
         try await waitUntil("the Codex fixture pipeline to become active", timeout: 6) {
             signal.summary.phase == .active
                 && signal.summary.kinds == [.codex]
         }
 
         let echoMarker = "TERMUCTIVE_AGENT_ECHO_\(UUID().uuidString.prefix(8))"
-        terminal.send(txt: "\(echoMarker)\n")
+        submitTerminalLine(echoMarker, in: terminal)
         try await waitUntil("the Codex fixture to echo terminal input", timeout: 3) {
             self.terminalOutput(terminal).contains(echoMarker)
         }
         XCTAssertEqual(signal.summary.phase, .active)
+
+        try await waitUntil("the foreground Codex fixture to become idle", timeout: 7) {
+            signal.summary.phase == .absent
+        }
+        XCTAssertTrue(terminal.process.running)
+
+        let resumedMarker = "TERMUCTIVE_AGENT_RESUMED_\(UUID().uuidString.prefix(8))"
+        submitTerminalLine(resumedMarker, in: terminal)
+        try await waitUntil("new Codex work to reactivate the indicator", timeout: 3) {
+            self.terminalOutput(terminal).contains(resumedMarker)
+                && signal.summary.phase == .active
+        }
 
         terminal.send(txt: "\u{4}")
         try await waitUntil("the Codex fixture to leave the foreground", timeout: 6) {
             signal.summary.phase == .absent
         }
 
-        terminal.send(txt: "\(quotedFixture) &\n")
+        submitTerminalLine("\(quotedFixture) &", in: terminal)
         try await Task.sleep(nanoseconds: 1_800_000_000)
         XCTAssertEqual(signal.summary, .absent)
-        terminal.send(txt: "kill $!\n")
+        submitTerminalLine("kill $!", in: terminal)
 
         XCTAssertTrue(originalTerminal === sessions.terminalView(for: pane))
         XCTAssertEqual(poolPublicationCount, 0)
@@ -796,6 +919,18 @@ final class TerminalAgentActivityTests: XCTestCase {
         )
     }
 
+    private func submitTerminalLine(
+        _ line: String,
+        in terminal: TermuctiveTerminalView
+    ) {
+        terminal.insertText(
+            line,
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        let returnKey: [UInt8] = [13]
+        terminal.send(source: terminal, data: returnKey[...])
+    }
+
     private func descendants(of view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap(descendants)
     }
@@ -814,6 +949,25 @@ final class TerminalAgentActivityTests: XCTestCase {
 
 private enum AgentActivityTestError: Error {
     case timedOut
+}
+
+private final class LockedAgentClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedNow: UInt64
+
+    init(now: UInt64) {
+        storedNow = now
+    }
+
+    var now: UInt64 {
+        lock.withLock { storedNow }
+    }
+
+    func advance(by duration: UInt64) {
+        lock.withLock {
+            storedNow += duration
+        }
+    }
 }
 
 private final class LockedAgentProcessInspector: AgentProcessInspecting {

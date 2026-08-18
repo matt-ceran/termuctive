@@ -36,6 +36,20 @@ int32_t TMCReadProcessInfo(pid_t processID, TMCProcessInfo *processInfo) {
     processInfo->startSeconds = bsdInfo.pbi_start_tvsec;
     processInfo->startMicroseconds = bsdInfo.pbi_start_tvusec;
 
+    struct proc_taskinfo taskInfo;
+    memset(&taskInfo, 0, sizeof(taskInfo));
+    int taskBytes = proc_pidinfo(
+        processID,
+        PROC_PIDTASKINFO,
+        0,
+        &taskInfo,
+        (int)sizeof(taskInfo)
+    );
+    if (taskBytes == (int)sizeof(taskInfo)) {
+        processInfo->cpuTimeNanoseconds =
+            taskInfo.pti_total_user + taskInfo.pti_total_system;
+    }
+
     return 1;
 }
 
