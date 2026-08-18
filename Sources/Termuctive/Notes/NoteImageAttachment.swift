@@ -491,10 +491,12 @@ extension NoteTextView {
         setSelectedRange(NSRange(location: destinationIndex, length: 1))
         let undoDestination = sourceIndex > destinationIndex ? sourceIndex + 1 : sourceIndex
         undoManager?.registerUndo(withTarget: self) { textView in
-            _ = textView.moveImageAttachment(
-                from: destinationIndex,
-                to: undoDestination
-            )
+            MainActor.assumeIsolated {
+                _ = textView.moveImageAttachment(
+                    from: destinationIndex,
+                    to: undoDestination
+                )
+            }
         }
         return destinationIndex
     }
@@ -517,7 +519,9 @@ extension NoteTextView {
         applyImageAttachmentSize(resolvedSize, at: characterIndex)
         didChangeText()
         undoManager?.registerUndo(withTarget: self) { textView in
-            _ = textView.resizeImageAttachment(at: characterIndex, to: previousSize)
+            MainActor.assumeIsolated {
+                _ = textView.resizeImageAttachment(at: characterIndex, to: previousSize)
+            }
         }
         return true
     }
@@ -569,7 +573,9 @@ extension NoteTextView {
         setSelectedRange(NSRange(location: characterIndex, length: 1))
         didChangeText()
         undoManager?.registerUndo(withTarget: self) { textView in
-            _ = textView.resizeImageAttachment(at: characterIndex, to: originalSize)
+            MainActor.assumeIsolated {
+                _ = textView.resizeImageAttachment(at: characterIndex, to: originalSize)
+            }
         }
         return true
     }

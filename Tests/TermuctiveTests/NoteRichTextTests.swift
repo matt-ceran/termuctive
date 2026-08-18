@@ -281,7 +281,16 @@ final class NoteRichTextTests: XCTestCase {
         let textView = NoteTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 300))
         textView.isRichText = true
         textView.importsGraphics = true
+        textView.allowsUndo = true
         textView.textContainerInset = NSSize(width: 20, height: 20)
+        let window = NSWindow(
+            contentRect: textView.bounds,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = textView
+        XCTAssertTrue(window.makeFirstResponder(textView))
         textView.textStorage?.setAttributedString(
             NSAttributedString(
                 string: "Alpha omega",
@@ -313,6 +322,8 @@ final class NoteRichTextTests: XCTestCase {
         )
         XCTAssertTrue(insertedAttachment.attachmentCell is NoteImageAttachmentCell)
 
+        let undoManager = try XCTUnwrap(textView.undoManager)
+        undoManager.removeAllActions()
         let movedIndex = try XCTUnwrap(
             textView.moveImageAttachment(
                 from: insertionIndex,
@@ -321,7 +332,21 @@ final class NoteRichTextTests: XCTestCase {
         )
         XCTAssertEqual(textView.string, "Alpha omega\u{FFFC}")
         XCTAssertEqual(movedIndex, textView.string.utf16.count - 1)
+        XCTAssertTrue(undoManager.canUndo)
+        undoManager.undo()
+        XCTAssertEqual(textView.string, "Alpha \u{FFFC}omega")
+        XCTAssertTrue(
+            textView.textStorage?.attribute(
+                .attachment,
+                at: insertionIndex,
+                effectiveRange: nil
+            ) is NSTextAttachment
+        )
+        XCTAssertTrue(undoManager.canRedo)
+        undoManager.redo()
+        XCTAssertEqual(textView.string, "Alpha omega\u{FFFC}")
 
+        undoManager.removeAllActions()
         XCTAssertTrue(
             textView.resizeImageAttachment(
                 at: movedIndex,
@@ -351,6 +376,37 @@ final class NoteRichTextTests: XCTestCase {
         XCTAssertNotNil(NoteImageAttachmentStorage.image(for: restoredAttachment))
         XCTAssertEqual(restoredAttachment.bounds.width, 240, accuracy: 0.01)
         XCTAssertEqual(restoredAttachment.bounds.height, 120, accuracy: 0.01)
+
+        XCTAssertTrue(undoManager.canUndo)
+        undoManager.undo()
+        let undoResizeAttachment = try XCTUnwrap(
+            textView.textStorage?.attribute(
+                .attachment,
+                at: movedIndex,
+                effectiveRange: nil
+            ) as? NSTextAttachment
+        )
+        XCTAssertEqual(
+            undoResizeAttachment.bounds.width,
+            insertedAttachment.bounds.width,
+            accuracy: 0.01
+        )
+        XCTAssertEqual(
+            undoResizeAttachment.bounds.height,
+            insertedAttachment.bounds.height,
+            accuracy: 0.01
+        )
+        XCTAssertTrue(undoManager.canRedo)
+        undoManager.redo()
+        let redoResizeAttachment = try XCTUnwrap(
+            textView.textStorage?.attribute(
+                .attachment,
+                at: movedIndex,
+                effectiveRange: nil
+            ) as? NSTextAttachment
+        )
+        XCTAssertEqual(redoResizeAttachment.bounds.width, 240, accuracy: 0.01)
+        XCTAssertEqual(redoResizeAttachment.bounds.height, 120, accuracy: 0.01)
     }
 
     func testImageLayoutKeepsAspectRatioWithinEditorBounds() {
