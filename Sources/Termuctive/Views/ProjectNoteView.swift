@@ -296,6 +296,7 @@ struct ProjectNoteView: View {
         }
         Button("Insert Bullet", action: richTextController.insertBullet)
         Button("Insert Numbered Item", action: richTextController.insertNumberedItem)
+        Button("Insert Image...", action: richTextController.chooseAndInsertImage)
         Divider()
         Button("Undo Text Edit", action: richTextController.undo)
             .disabled(!richTextController.canUndo)
@@ -447,6 +448,12 @@ struct ProjectNoteView: View {
             active: false,
             help: "Insert numbered item",
             action: richTextController.insertNumberedItem
+        )
+        formattingButton(
+            systemImage: "photo.badge.plus",
+            active: false,
+            help: "Insert image at cursor",
+            action: richTextController.chooseAndInsertImage
         )
     }
 

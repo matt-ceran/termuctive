@@ -149,23 +149,33 @@ enum NoteTextAlignment: String, CaseIterable, Identifiable {
 
 enum NoteRichTextArchive {
     static func attributedString(from data: Data) -> NSAttributedString {
-        guard !data.isEmpty,
-            let value = try? NSAttributedString(
-                data: data,
-                options: [.documentType: NSAttributedString.DocumentType.rtf],
-                documentAttributes: nil
-            )
-        else {
+        guard !data.isEmpty else {
             return NSAttributedString(string: "", attributes: defaultBodyAttributes)
         }
-        return value
+        if let value = NSAttributedString(rtfd: data, documentAttributes: nil) {
+            NoteImageAttachmentStorage.restoreMetadata(in: value)
+            return value
+        }
+        if let value = try? NSAttributedString(
+            data: data,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        ) {
+            return value
+        }
+        return NSAttributedString(string: "", attributes: defaultBodyAttributes)
     }
 
     static func data(from attributedString: NSAttributedString) throws -> Data {
-        try attributedString.data(
-            from: NSRange(location: 0, length: attributedString.length),
-            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
-        )
+        guard
+            let data = attributedString.rtfd(
+                from: NSRange(location: 0, length: attributedString.length),
+                documentAttributes: [:]
+            )
+        else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return data
     }
 
     static var defaultBodyAttributes: [NSAttributedString.Key: Any] {
@@ -712,7 +722,7 @@ struct NoteRichTextEditorView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let textView = NoteTextView(frame: .zero)
         textView.isRichText = true
-        textView.importsGraphics = false
+        textView.importsGraphics = true
         textView.allowsUndo = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -761,6 +771,7 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             to: textView,
             in: scrollView
         )
+        textView.prepareInlineImages()
         textView.setLogicalFocus(requestsFocus)
         return scrollView
     }
@@ -787,6 +798,7 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             return
         }
         coordinator.parent.controller.detach(from: textView)
+        coordinator.cancelDeferredWork()
         if textView.textStorage?.delegate === coordinator {
             textView.textStorage?.delegate = nil
         }
@@ -799,6 +811,8 @@ struct NoteRichTextEditorView: NSViewRepresentable {
         weak var textView: NSTextView?
         var lastKnownData = Data()
         private var appliedColorScheme: ColorScheme?
+        private var pendingPaletteRange: NSRange?
+        private var paletteRefreshTask: Task<Void, Never>?
 
         init(parent: NoteRichTextEditorView) {
             self.parent = parent
@@ -820,15 +834,30 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             else {
                 return
             }
-            applyTextPalette(
+            scheduleTextPalette(
                 colorScheme: parent.colorScheme,
                 to: textView,
                 requestedRange: editedRange
             )
+            (textView as? NoteTextView)?.prepareInlineImages(in: editedRange)
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             parent.controller.scheduleSelectionStateRefresh()
+        }
+
+        func textView(
+            _ view: NSTextView,
+            draggedCell cell: any NSTextAttachmentCellProtocol,
+            in rect: NSRect,
+            event: NSEvent,
+            at charIndex: Int
+        ) {
+            (view as? NoteTextView)?.trackImageAttachmentMove(
+                at: charIndex,
+                in: rect,
+                event: event
+            )
         }
 
         func publishCurrentContent() {
@@ -840,6 +869,12 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             }
             lastKnownData = data
             parent.onChange(data)
+        }
+
+        func cancelDeferredWork() {
+            paletteRefreshTask?.cancel()
+            paletteRefreshTask = nil
+            pendingPaletteRange = nil
         }
 
         func applyPalette(
@@ -903,12 +938,42 @@ struct NoteRichTextEditorView: NSViewRepresentable {
             )
             textView.needsDisplay = true
         }
+
+        private func scheduleTextPalette(
+            colorScheme: ColorScheme,
+            to textView: NSTextView,
+            requestedRange: NSRange
+        ) {
+            pendingPaletteRange =
+                pendingPaletteRange.map {
+                    NSUnionRange($0, requestedRange)
+                } ?? requestedRange
+            paletteRefreshTask?.cancel()
+            paletteRefreshTask = Task { @MainActor [weak self, weak textView] in
+                await Task.yield()
+                guard let self, let textView, !Task.isCancelled else {
+                    return
+                }
+                let range =
+                    pendingPaletteRange
+                    ?? NSRange(location: 0, length: textView.textStorage?.length ?? 0)
+                pendingPaletteRange = nil
+                paletteRefreshTask = nil
+                applyTextPalette(
+                    colorScheme: colorScheme,
+                    to: textView,
+                    requestedRange: range
+                )
+            }
+        }
     }
 }
 
 @MainActor
-private final class NoteTextView: NSTextView {
+final class NoteTextView: NSTextView {
     var focusHandler: (() -> Void)?
+    var imageDragPreview: NoteImageDragPreview?
+    var isPreparingInlineImages = false
     private var hasLogicalFocus = false
 
     func setLogicalFocus(_ isFocused: Bool) {
@@ -941,17 +1006,17 @@ private final class NoteTextView: NSTextView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard string.isEmpty else {
-            return
+        if string.isEmpty {
+            let placeholder = "Start writing, or choose a title style from the toolbar."
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 14),
+                .foregroundColor: NSColor.placeholderTextColor,
+            ]
+            placeholder.draw(
+                at: NSPoint(x: textContainerInset.width + 2, y: textContainerInset.height),
+                withAttributes: attributes
+            )
         }
-        let placeholder = "Start writing, or choose a title style from the toolbar."
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 14),
-            .foregroundColor: NSColor.placeholderTextColor,
-        ]
-        placeholder.draw(
-            at: NSPoint(x: textContainerInset.width + 2, y: textContainerInset.height),
-            withAttributes: attributes
-        )
+        drawImageDragPreview()
     }
 }

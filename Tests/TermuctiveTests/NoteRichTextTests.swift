@@ -273,4 +273,145 @@ final class NoteRichTextTests: XCTestCase {
         XCTAssertTrue(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
         XCTAssertEqual(font.pointSize, 18)
     }
+
+    func testInlineImageInsertionMoveResizeAndArchiveRoundTrip() throws {
+        let textView = NoteTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 300))
+        textView.isRichText = true
+        textView.importsGraphics = true
+        textView.textContainerInset = NSSize(width: 20, height: 20)
+        textView.textStorage?.setAttributedString(
+            NSAttributedString(
+                string: "Alpha omega",
+                attributes: NoteRichTextArchive.defaultBodyAttributes
+            )
+        )
+        textView.setSelectedRange(NSRange(location: "Alpha ".utf16.count, length: 0))
+        let controller = NoteRichTextController()
+        controller.attach(to: textView) {}
+        let image = testImage(size: NSSize(width: 1_000, height: 500))
+
+        XCTAssertTrue(controller.insertImage(image))
+
+        let insertionIndex = "Alpha ".utf16.count
+        XCTAssertEqual(textView.string, "Alpha \u{FFFC}omega")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: insertionIndex, length: 1))
+        let insertedAttachment = try XCTUnwrap(
+            textView.textStorage?.attribute(
+                .attachment,
+                at: insertionIndex,
+                effectiveRange: nil
+            ) as? NSTextAttachment
+        )
+        XCTAssertLessThanOrEqual(insertedAttachment.bounds.width, 460)
+        XCTAssertEqual(
+            insertedAttachment.bounds.width / insertedAttachment.bounds.height,
+            2,
+            accuracy: 0.01
+        )
+        XCTAssertTrue(insertedAttachment.attachmentCell is NoteImageAttachmentCell)
+
+        let movedIndex = try XCTUnwrap(
+            textView.moveImageAttachment(
+                from: insertionIndex,
+                to: textView.string.utf16.count
+            )
+        )
+        XCTAssertEqual(textView.string, "Alpha omega\u{FFFC}")
+        XCTAssertEqual(movedIndex, textView.string.utf16.count - 1)
+
+        XCTAssertTrue(
+            textView.resizeImageAttachment(
+                at: movedIndex,
+                to: NSSize(width: 240, height: 120)
+            )
+        )
+        let resizedAttachment = try XCTUnwrap(
+            textView.textStorage?.attribute(
+                .attachment,
+                at: movedIndex,
+                effectiveRange: nil
+            ) as? NSTextAttachment
+        )
+        XCTAssertEqual(resizedAttachment.bounds.width, 240, accuracy: 0.01)
+        XCTAssertEqual(resizedAttachment.bounds.height, 120, accuracy: 0.01)
+
+        let archive = try NoteRichTextArchive.data(from: textView.attributedString())
+        let restored = NoteRichTextArchive.attributedString(from: archive)
+        XCTAssertEqual(restored.string, textView.string)
+        let restoredAttachment = try XCTUnwrap(
+            restored.attribute(
+                .attachment,
+                at: movedIndex,
+                effectiveRange: nil
+            ) as? NSTextAttachment
+        )
+        XCTAssertNotNil(NoteImageAttachmentStorage.image(for: restoredAttachment))
+        XCTAssertEqual(restoredAttachment.bounds.width, 240, accuracy: 0.01)
+        XCTAssertEqual(restoredAttachment.bounds.height, 120, accuracy: 0.01)
+    }
+
+    func testImageLayoutKeepsAspectRatioWithinEditorBounds() {
+        XCTAssertEqual(
+            NoteImageLayout.fittedSize(
+                for: NSSize(width: 1_200, height: 800),
+                maximumWidth: 600
+            ),
+            NSSize(width: 600, height: 400)
+        )
+        XCTAssertEqual(
+            NoteImageLayout.resizedSize(
+                from: NSSize(width: 300, height: 200),
+                horizontalDelta: 150,
+                verticalDelta: 0,
+                maximumWidth: 400
+            ),
+            NSSize(width: 400, height: 400 / 1.5)
+        )
+        XCTAssertEqual(
+            NoteImageLayout.resizedSize(
+                from: NSSize(width: 300, height: 200),
+                horizontalDelta: -1_000,
+                verticalDelta: 0,
+                maximumWidth: 400
+            ),
+            NSSize(width: 48, height: 32)
+        )
+        XCTAssertEqual(
+            NoteImageLayout.fittedSize(
+                for: NSSize(width: 24, height: 12),
+                maximumWidth: 600
+            ),
+            NSSize(width: 24, height: 12)
+        )
+    }
+
+    func testArchiveStillReadsLegacyRTFNotes() throws {
+        let legacyText = NSAttributedString(
+            string: "A legacy note",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 17, weight: .semibold),
+                .foregroundColor: NSColor.systemPurple,
+            ]
+        )
+        let legacyRTF = try legacyText.data(
+            from: NSRange(location: 0, length: legacyText.length),
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+        )
+
+        let restored = NoteRichTextArchive.attributedString(from: legacyRTF)
+
+        XCTAssertEqual(restored.string, legacyText.string)
+        let font = try XCTUnwrap(restored.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        XCTAssertEqual(font.pointSize, 17, accuracy: 0.01)
+        XCTAssertTrue(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
+    }
+
+    private func testImage(size: NSSize) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        image.unlockFocus()
+        return image
+    }
 }

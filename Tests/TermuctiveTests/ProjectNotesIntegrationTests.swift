@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import XCTest
 
 @testable import Termuctive
@@ -84,6 +85,8 @@ final class ProjectNotesIntegrationTests: XCTestCase {
         }
         try await Task.sleep(nanoseconds: 20_000_000)
         let textView = try XCTUnwrap(firstSubview(of: NSTextView.self, in: hostingView))
+        XCTAssertTrue(textView.isRichText)
+        XCTAssertTrue(textView.importsGraphics)
         let textBackground = try XCTUnwrap(
             textView.backgroundColor.usingColorSpace(.deviceRGB)
         )
@@ -352,6 +355,107 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             try XCTUnwrap(storedColor.usingColorSpace(.deviceRGB)).redComponent,
             0.2
         )
+    }
+
+    func testInlineImagePlacementResizeAndPersistenceThroughTheRenderedNote() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "termuctive-inline-image-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let note = ProjectNote(name: "Inline image")
+        let noteStore = NoteFileStore(directoryURL: directory)
+        let session = NoteDocumentSession(noteID: note.id, persistence: noteStore)
+        let hostingView = NSHostingView(
+            rootView: ProjectNoteView(note: note, session: session)
+                .preferredColorScheme(.dark)
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 760, height: 480)
+        let window = NSWindow(
+            contentRect: hostingView.bounds,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+
+        let textView = try XCTUnwrap(firstSubview(of: NoteTextView.self, in: hostingView))
+        textView.insertText("Alpha omega", replacementRange: NSRange(location: 0, length: 0))
+        textView.setSelectedRange(NSRange(location: "Alpha ".utf16.count, length: 0))
+        let image = NSImage(size: NSSize(width: 900, height: 450))
+        image.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+        image.unlockFocus()
+        let imageData = try XCTUnwrap(
+            NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?
+                .representation(using: .png, properties: [:])
+        )
+
+        XCTAssertTrue(
+            textView.insertInlineImage(
+                image,
+                data: imageData,
+                contentType: UTType.png.identifier
+            )
+        )
+        let insertionIndex = "Alpha ".utf16.count
+        XCTAssertEqual(textView.string, "Alpha \u{FFFC}omega")
+        XCTAssertTrue(
+            textView.resizeImageAttachment(
+                at: insertionIndex,
+                to: NSSize(width: 300, height: 150)
+            )
+        )
+        let movedIndex = try XCTUnwrap(
+            textView.moveImageAttachment(
+                from: insertionIndex,
+                to: textView.string.utf16.count
+            )
+        )
+        XCTAssertEqual(textView.string, "Alpha omega\u{FFFC}")
+
+        try await waitUntil("the inline image edit to reach the note session") {
+            let attributedString = NoteRichTextArchive.attributedString(
+                from: session.document.richTextRTF
+            )
+            return attributedString.string == "Alpha omega\u{FFFC}"
+                && attributedString.attribute(
+                    .attachment,
+                    at: movedIndex,
+                    effectiveRange: nil
+                ) is NSTextAttachment
+        }
+        try await waitUntil("new note text to remain white in dark mode") {
+            (self.temporaryForegroundColor(in: textView)?
+                .usingColorSpace(.deviceRGB)?.redComponent ?? 0) > 0.9
+        }
+        try session.saveNow()
+        let savedDocument = try XCTUnwrap(noteStore.load(noteID: note.id))
+        let savedText = NoteRichTextArchive.attributedString(from: savedDocument.richTextRTF)
+        let savedAttachment = try XCTUnwrap(
+            savedText.attribute(
+                .attachment,
+                at: movedIndex,
+                effectiveRange: nil
+            ) as? NSTextAttachment
+        )
+        XCTAssertEqual(savedAttachment.bounds.width, 300, accuracy: 0.01)
+        XCTAssertEqual(savedAttachment.bounds.height, 150, accuracy: 0.01)
+        XCTAssertNotNil(NoteImageAttachmentStorage.image(for: savedAttachment))
+
+        let attachment = XCTAttachment(image: try renderedImage(of: hostingView))
+        attachment.name = "Dark note with inline image"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func renderedImage(of view: NSView) throws -> NSImage {
