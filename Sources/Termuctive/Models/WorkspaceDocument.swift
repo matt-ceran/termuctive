@@ -660,7 +660,7 @@ extension WorkspaceItem {
 }
 
 struct WorkspaceDocument: Codable, Equatable {
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
 
     var schemaVersion: Int
     var projects: [TerminalProject]
@@ -668,6 +668,7 @@ struct WorkspaceDocument: Codable, Equatable {
     var selectedItemID: UUID?
     var selectedSpaceID: UUID?
     var openTerminalSpaceIDs: [UUID]
+    var openNoteIDs: [UUID]
 
     init(
         schemaVersion: Int = currentSchemaVersion,
@@ -675,15 +676,26 @@ struct WorkspaceDocument: Codable, Equatable {
         selectedProjectID: UUID? = nil,
         selectedItemID: UUID? = nil,
         selectedSpaceID: UUID? = nil,
-        openTerminalSpaceIDs: [UUID]? = nil
+        openTerminalSpaceIDs: [UUID]? = nil,
+        openNoteIDs: [UUID]? = nil
     ) {
+        let resolvedSelectedItemID = selectedItemID ?? selectedSpaceID
         self.schemaVersion = schemaVersion
         self.projects = projects
         self.selectedProjectID = selectedProjectID
-        self.selectedItemID = selectedItemID ?? selectedSpaceID
+        self.selectedItemID = resolvedSelectedItemID
         self.selectedSpaceID = selectedSpaceID
         self.openTerminalSpaceIDs =
             openTerminalSpaceIDs ?? selectedSpaceID.map { [$0] } ?? []
+        if let openNoteIDs {
+            self.openNoteIDs = openNoteIDs
+        } else if let resolvedSelectedItemID,
+            projects.contains(where: { $0.note(withID: resolvedSelectedItemID) != nil })
+        {
+            self.openNoteIDs = [resolvedSelectedItemID]
+        } else {
+            self.openNoteIDs = []
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -693,6 +705,7 @@ struct WorkspaceDocument: Codable, Equatable {
         case selectedItemID
         case selectedSpaceID
         case openTerminalSpaceIDs
+        case openNoteIDs
     }
 
     init(from decoder: any Decoder) throws {
@@ -707,6 +720,18 @@ struct WorkspaceDocument: Codable, Equatable {
         openTerminalSpaceIDs =
             try container.decodeIfPresent([UUID].self, forKey: .openTerminalSpaceIDs)
             ?? selectedSpaceID.map { [$0] } ?? []
+        if let decodedOpenNoteIDs = try container.decodeIfPresent(
+            [UUID].self,
+            forKey: .openNoteIDs
+        ) {
+            openNoteIDs = decodedOpenNoteIDs
+        } else if let selectedItemID,
+            projects.contains(where: { $0.note(withID: selectedItemID) != nil })
+        {
+            openNoteIDs = [selectedItemID]
+        } else {
+            openNoteIDs = []
+        }
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -717,6 +742,7 @@ struct WorkspaceDocument: Codable, Equatable {
         try container.encodeIfPresent(selectedItemID, forKey: .selectedItemID)
         try container.encodeIfPresent(selectedSpaceID, forKey: .selectedSpaceID)
         try container.encode(openTerminalSpaceIDs, forKey: .openTerminalSpaceIDs)
+        try container.encode(openNoteIDs, forKey: .openNoteIDs)
     }
 
     var selectedProject: TerminalProject? {
@@ -783,6 +809,10 @@ struct WorkspaceDocument: Codable, Equatable {
 
     func project(containingSpaceWithID id: UUID) -> TerminalProject? {
         projects.first { $0.space(withID: id) != nil }
+    }
+
+    func project(containingNoteWithID id: UUID) -> TerminalProject? {
+        projects.first { $0.note(withID: id) != nil }
     }
 
     mutating func updateTerminal(

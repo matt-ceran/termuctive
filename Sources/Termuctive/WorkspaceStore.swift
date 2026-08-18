@@ -8,6 +8,14 @@ struct TerminalSpaceTabDescriptor: Equatable, Identifiable {
     let path: String
 }
 
+struct NoteSpaceTabDescriptor: Equatable, Identifiable {
+    let id: UUID
+    let projectID: UUID
+    let projectName: String
+    let noteName: String
+    let path: String
+}
+
 @MainActor
 final class WorkspaceStore: ObservableObject {
     @Published private(set) var document: WorkspaceDocument
@@ -66,6 +74,24 @@ final class WorkspaceStore: ObservableObject {
                 projectID: project.id,
                 projectName: project.name,
                 spaceName: space.name,
+                path: ([project.name] + itemPath).joined(separator: " / ")
+            )
+        }
+    }
+
+    var openNoteTabs: [NoteSpaceTabDescriptor] {
+        document.openNoteIDs.compactMap { noteID in
+            guard let project = document.project(containingNoteWithID: noteID),
+                let note = project.note(withID: noteID)
+            else {
+                return nil
+            }
+            let itemPath = project.namePath(forItemWithID: noteID) ?? [note.name]
+            return NoteSpaceTabDescriptor(
+                id: noteID,
+                projectID: project.id,
+                projectName: project.name,
+                noteName: note.name,
                 path: ([project.name] + itemPath).joined(separator: " / ")
             )
         }
@@ -361,6 +387,70 @@ final class WorkspaceStore: ObservableObject {
         selectAdjacentOpenTerminalSpaceTab(offset: -1)
     }
 
+    func selectNoteTab(withID id: UUID) {
+        guard
+            let projectIndex = document.projects.firstIndex(where: {
+                $0.note(withID: id) != nil
+            })
+        else {
+            return
+        }
+        let previousDocument = document
+        activateNote(inProjectAt: projectIndex, noteID: id)
+        if document != previousDocument {
+            save()
+        }
+    }
+
+    func closeNoteTab(withID id: UUID) {
+        guard let removedIndex = document.openNoteIDs.firstIndex(of: id) else {
+            return
+        }
+        let wasSelected = document.selectedNote?.id == id
+        document.openNoteIDs.remove(at: removedIndex)
+
+        if let owningProjectIndex = document.projects.firstIndex(where: {
+            $0.note(withID: id) != nil
+        }), document.projects[owningProjectIndex].lastSelectedItemID == id {
+            let project = document.projects[owningProjectIndex]
+            let fallbackItemID =
+                project.lastSelectedSpaceID.flatMap { project.space(withID: $0)?.id }
+                ?? document.openNoteIDs.first(where: { project.note(withID: $0) != nil })
+            document.projects[owningProjectIndex].lastSelectedItemID = fallbackItemID
+        }
+
+        guard wasSelected else {
+            save()
+            return
+        }
+        if !document.openNoteIDs.isEmpty {
+            let fallbackIndex = min(removedIndex, document.openNoteIDs.count - 1)
+            let fallbackID = document.openNoteIDs[fallbackIndex]
+            if let projectIndex = document.projects.firstIndex(where: {
+                $0.note(withID: fallbackID) != nil
+            }) {
+                activateNote(inProjectAt: projectIndex, noteID: fallbackID)
+            }
+        } else if let fallbackSpaceID = document.openTerminalSpaceIDs.first,
+            let projectIndex = document.projects.firstIndex(where: {
+                $0.space(withID: fallbackSpaceID) != nil
+            })
+        {
+            activateSpace(
+                inProjectAt: projectIndex,
+                spaceID: fallbackSpaceID,
+                ensureTabIsOpen: false
+            )
+        } else {
+            document.selectedItemID = nil
+            document.selectedSpaceID = nil
+            selectedFolderID = nil
+            focusedPaneID = nil
+            zoomedPaneID = nil
+        }
+        save()
+    }
+
     func selectNote(withID id: UUID, inProject projectID: UUID) {
         guard
             let projectIndex = document.projects.firstIndex(where: { $0.id == projectID }),
@@ -369,18 +459,7 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
-        rememberCurrentPaneState()
-        document.projects[projectIndex].lastSelectedItemID = id
-        document.selectedProjectID = projectID
-        document.selectedItemID = id
-        document.selectedSpaceID = nil
-        expandedProjectIDs.insert(projectID)
-        expandedFolderIDs.formUnion(
-            document.projects[projectIndex].ancestorFolderIDs(forItemWithID: id)
-        )
-        selectedFolderID = nil
-        focusedPaneID = nil
-        zoomedPaneID = nil
+        activateNote(inProjectAt: projectIndex, noteID: id)
         save()
     }
 
@@ -562,6 +641,7 @@ final class WorkspaceStore: ObservableObject {
         document.selectedProjectID = projectID
         document.selectedItemID = note.id
         document.selectedSpaceID = nil
+        ensureOpenNote(withID: note.id)
         expandedProjectIDs.insert(projectID)
         if let parentID {
             expandedFolderIDs.insert(parentID)
@@ -781,6 +861,7 @@ final class WorkspaceStore: ObservableObject {
         document.projects.remove(at: projectIndex)
         document.clearPaneNoteReferences(in: removedNoteIDs)
         normalizeOpenTerminalSpaces()
+        normalizeOpenNotes()
         expandedProjectIDs.formIntersection(document.projects.map(\.id))
         expandedFolderIDs.formIntersection(document.folderIDs)
 
@@ -834,6 +915,7 @@ final class WorkspaceStore: ObservableObject {
         let removedNoteIDs = removedItem.noteIDs
         document.clearPaneNoteReferences(in: removedNoteIDs)
         normalizeOpenTerminalSpaces()
+        normalizeOpenNotes()
 
         normalizeLastSelectedSpace(forProjectAt: projectIndex)
         normalizeLastSelectedItem(forProjectAt: projectIndex)
@@ -1234,6 +1316,26 @@ final class WorkspaceStore: ObservableObject {
         rememberCurrentPaneState()
     }
 
+    private func activateNote(inProjectAt projectIndex: Int, noteID: UUID) {
+        guard document.projects[projectIndex].note(withID: noteID) != nil else {
+            return
+        }
+        rememberCurrentPaneState()
+        let projectID = document.projects[projectIndex].id
+        document.projects[projectIndex].lastSelectedItemID = noteID
+        document.selectedProjectID = projectID
+        document.selectedItemID = noteID
+        document.selectedSpaceID = nil
+        ensureOpenNote(withID: noteID)
+        expandedProjectIDs.insert(projectID)
+        expandedFolderIDs.formUnion(
+            document.projects[projectIndex].ancestorFolderIDs(forItemWithID: noteID)
+        )
+        selectedFolderID = nil
+        focusedPaneID = nil
+        zoomedPaneID = nil
+    }
+
     @discardableResult
     private func ensureOpenTerminalSpace(withID id: UUID) -> Bool {
         guard document.space(withID: id) != nil,
@@ -1280,6 +1382,30 @@ final class WorkspaceStore: ObservableObject {
         }
         lastZoomedPaneIDBySpaceID = lastZoomedPaneIDBySpaceID.filter {
             validSpaceIDs.contains($0.key)
+        }
+    }
+
+    @discardableResult
+    private func ensureOpenNote(withID id: UUID) -> Bool {
+        guard document.note(withID: id) != nil,
+            !document.openNoteIDs.contains(id)
+        else {
+            return false
+        }
+        document.openNoteIDs.append(id)
+        return true
+    }
+
+    private func normalizeOpenNotes() {
+        let validNoteIDs = document.noteIDs
+        var seen: Set<UUID> = []
+        document.openNoteIDs = document.openNoteIDs.filter { id in
+            validNoteIDs.contains(id) && seen.insert(id).inserted
+        }
+        if let selectedItemID = document.selectedItemID,
+            validNoteIDs.contains(selectedItemID)
+        {
+            ensureOpenNote(withID: selectedItemID)
         }
     }
 
@@ -1356,6 +1482,9 @@ final class WorkspaceStore: ObservableObject {
 
         guard case .space(let space) = item else {
             document.selectedSpaceID = nil
+            if case .note(let note) = item {
+                ensureOpenNote(withID: note.id)
+            }
             focusedPaneID = nil
             return
         }
@@ -1487,6 +1616,7 @@ final class WorkspaceStore: ObservableObject {
 
     private func normalizeSelection() {
         normalizeOpenTerminalSpaces()
+        normalizeOpenNotes()
         for index in document.projects.indices {
             normalizeLastSelectedSpace(forProjectAt: index)
             normalizeLastSelectedItem(forProjectAt: index)
@@ -1516,11 +1646,7 @@ final class WorkspaceStore: ObservableObject {
                 $0.note(withID: selectedItemID) != nil
             })
         {
-            document.selectedProjectID = document.projects[owningProjectIndex].id
-            document.selectedItemID = selectedItemID
-            document.selectedSpaceID = nil
-            focusedPaneID = nil
-            zoomedPaneID = nil
+            activateNote(inProjectAt: owningProjectIndex, noteID: selectedItemID)
         } else if let firstOpenSpaceID = document.openTerminalSpaceIDs.first,
             let owningProjectIndex = document.projects.firstIndex(where: {
                 $0.space(withID: firstOpenSpaceID) != nil
@@ -1539,6 +1665,7 @@ final class WorkspaceStore: ObservableObject {
             zoomedPaneID = nil
         }
         normalizeOpenTerminalSpaces()
+        normalizeOpenNotes()
     }
 
     @discardableResult

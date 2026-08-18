@@ -189,6 +189,68 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.expandedFolderIDs.contains(folderID))
     }
 
+    func testNoteTabsStayOpenAcrossTerminalSelectionAndCloseWithoutDeletingNotes() throws {
+        let persistence = RecordingPersistence()
+        let store = WorkspaceStore(persistence: persistence)
+        store.addProject(at: URL(fileURLWithPath: "/tmp/project"))
+        let projectID = try XCTUnwrap(store.selectedProject?.id)
+        let spaceID = try XCTUnwrap(store.selectedSpace?.id)
+
+        store.addNote()
+        let firstNoteID = try XCTUnwrap(store.selectedNote?.id)
+        store.addNote()
+        let secondNoteID = try XCTUnwrap(store.selectedNote?.id)
+
+        XCTAssertEqual(store.document.openNoteIDs, [firstNoteID, secondNoteID])
+        XCTAssertEqual(store.openNoteTabs.map(\.id), [firstNoteID, secondNoteID])
+
+        store.selectSpace(withID: spaceID, inProject: projectID)
+
+        XCTAssertEqual(store.document.selectedSpaceID, spaceID)
+        XCTAssertEqual(store.document.openNoteIDs, [firstNoteID, secondNoteID])
+        XCTAssertEqual(store.openNoteTabs.map(\.id), [firstNoteID, secondNoteID])
+
+        store.closeNoteTab(withID: firstNoteID)
+
+        XCTAssertEqual(store.document.openNoteIDs, [secondNoteID])
+        XCTAssertNotNil(store.document.note(withID: firstNoteID))
+        XCTAssertEqual(store.document.selectedSpaceID, spaceID)
+
+        store.selectNoteTab(withID: secondNoteID)
+        store.closeNoteTab(withID: secondNoteID)
+
+        XCTAssertTrue(store.document.openNoteIDs.isEmpty)
+        XCTAssertEqual(store.document.selectedSpaceID, spaceID)
+        XCTAssertNotNil(store.document.note(withID: secondNoteID))
+        XCTAssertEqual(store.selectedProject?.notes.map(\.id), [firstNoteID, secondNoteID])
+        XCTAssertEqual(persistence.savedDocuments.last, store.document)
+    }
+
+    func testNoteTabsNormalizeStaleAndDuplicateReferencesOnLoad() {
+        let firstNote = ProjectNote(name: "First")
+        let secondNote = ProjectNote(name: "Second")
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.note(firstNote), .note(secondNote)],
+            lastSelectedItemID: secondNote.id
+        )
+        let persistence = RecordingPersistence()
+        persistence.loadedDocument = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedItemID: secondNote.id,
+            openNoteIDs: [UUID(), secondNote.id, secondNote.id, firstNote.id]
+        )
+
+        let store = WorkspaceStore(persistence: persistence)
+
+        XCTAssertEqual(store.document.openNoteIDs, [secondNote.id, firstNote.id])
+        XCTAssertEqual(store.openNoteTabs.map(\.id), [secondNote.id, firstNote.id])
+        XCTAssertEqual(store.document.selectedItemID, secondNote.id)
+        XCTAssertTrue(persistence.savedDocuments.isEmpty)
+    }
+
     func testAddingNotePaneCreatesSidebarNoteAndKeepsTerminalSpaceSelected() throws {
         let persistence = RecordingPersistence()
         let store = WorkspaceStore(persistence: persistence)
@@ -1038,6 +1100,38 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.document.selectedSpaceID, secondSpace.id)
         XCTAssertEqual(store.focusedPaneID, secondPane.id)
         XCTAssertTrue(persistence.savedDocuments.isEmpty)
+    }
+
+    func testTerminalTabDropPlacementUsesTheLeadingAndTrailingTargetHalves() {
+        let leadingID = UUID()
+        let trailingID = UUID()
+
+        XCTAssertEqual(
+            TerminalSpaceTabDropPlacement.anchorID(
+                leading: leadingID,
+                trailing: trailingID,
+                locationX: 20,
+                targetWidth: 100
+            ),
+            leadingID
+        )
+        XCTAssertEqual(
+            TerminalSpaceTabDropPlacement.anchorID(
+                leading: leadingID,
+                trailing: trailingID,
+                locationX: 80,
+                targetWidth: 100
+            ),
+            trailingID
+        )
+        XCTAssertNil(
+            TerminalSpaceTabDropPlacement.anchorID(
+                leading: leadingID,
+                trailing: nil,
+                locationX: 80,
+                targetWidth: 100
+            )
+        )
     }
 
     func testOpeningSelectingAndReorderingTerminalTabsSavesOnlyRealChanges() {

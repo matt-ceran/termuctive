@@ -310,7 +310,43 @@ final class WorkspaceFileStoreTests: XCTestCase {
         XCTAssertEqual(loaded.selectedSpaceID, space.id)
     }
 
-    func testSchemaFourRoundTripPreservesExplicitlyEmptyOpenTerminalTabs() throws {
+    func testSchemaFourWorkspaceSeedsItsSelectedNoteAsAnOpenNoteTab() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let note = ProjectNote(name: "Learning")
+        let project = TerminalProject(
+            name: "Project",
+            rootDirectory: "/project",
+            items: [.note(note)],
+            lastSelectedItemID: note.id
+        )
+        let document = WorkspaceDocument(
+            projects: [project],
+            selectedProjectID: project.id,
+            selectedItemID: note.id
+        )
+        let fileURL = directory.appendingPathComponent("workspace.json")
+        let persistence = WorkspaceFileStore(fileURL: fileURL)
+        try persistence.save(document)
+        let data = try Data(contentsOf: fileURL)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        json["schemaVersion"] = 4
+        json.removeValue(forKey: "openNoteIDs")
+        try JSONSerialization.data(withJSONObject: json).write(to: fileURL)
+
+        let loaded = try XCTUnwrap(persistence.load())
+
+        XCTAssertEqual(loaded.schemaVersion, WorkspaceDocument.currentSchemaVersion)
+        XCTAssertEqual(loaded.openNoteIDs, [note.id])
+        XCTAssertEqual(loaded.selectedItemID, note.id)
+    }
+
+    func testCurrentSchemaRoundTripPreservesExplicitlyEmptyTabLists() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer {
@@ -326,7 +362,8 @@ final class WorkspaceFileStoreTests: XCTestCase {
         let document = WorkspaceDocument(
             projects: [project],
             selectedProjectID: project.id,
-            openTerminalSpaceIDs: []
+            openTerminalSpaceIDs: [],
+            openNoteIDs: []
         )
         let persistence = WorkspaceFileStore(
             fileURL: directory.appendingPathComponent("workspace.json")
@@ -337,6 +374,7 @@ final class WorkspaceFileStoreTests: XCTestCase {
 
         XCTAssertEqual(loaded, document)
         XCTAssertTrue(loaded.openTerminalSpaceIDs.isEmpty)
+        XCTAssertTrue(loaded.openNoteIDs.isEmpty)
         XCTAssertNil(loaded.selectedSpaceID)
     }
 }

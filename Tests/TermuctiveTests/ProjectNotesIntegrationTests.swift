@@ -202,6 +202,21 @@ final class ProjectNotesIntegrationTests: XCTestCase {
 
         XCTAssertTrue(sessions.terminalView(for: pane) === terminalView)
         XCTAssertTrue(notes.retainedSession(forNoteID: note.id) === noteSession)
+        XCTAssertEqual(store.openNoteTabs.map(\.id), [note.id, secondNote.id])
+
+        let staticTabsAttachment = XCTAttachment(image: try renderedImage(of: hostingView))
+        staticTabsAttachment.name = "Static note tabs with terminal selected"
+        staticTabsAttachment.lifetime = .keepAlways
+        add(staticTabsAttachment)
+
+        store.selectNoteTab(withID: secondNote.id)
+        try await waitUntil("the static second note tab to restore its note") {
+            self.firstSubview(of: NSTextView.self, in: hostingView)?.string == "Separate note"
+        }
+        store.selectTerminalSpaceTab(withID: spaceID)
+        try await waitUntil("the terminal tab to restore after selecting a static note tab") {
+            terminalView.isDescendant(of: hostingView)
+        }
 
         noteSession.updateWorkspaceMode(.split)
         let notePaneID = try XCTUnwrap(
