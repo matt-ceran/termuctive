@@ -38,9 +38,12 @@ final class NoteRichTextTests: XCTestCase {
         XCTAssertEqual(NoteToolbarLayout.resolve(width: 900, mode: .split), .regular)
         XCTAssertEqual(NoteToolbarLayout.resolve(width: 520, mode: .split), .compact)
         XCTAssertEqual(NoteToolbarLayout.resolve(width: 320, mode: .split), .narrow)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 240, mode: .split), .narrow)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 220, mode: .split), .minimal)
         XCTAssertEqual(NoteToolbarLayout.resolve(width: 120, mode: .split), .minimal)
         XCTAssertEqual(NoteToolbarLayout.resolve(width: 920, mode: .text), .expanded)
         XCTAssertEqual(NoteToolbarLayout.resolve(width: 820, mode: .text), .regular)
+        XCTAssertEqual(NoteToolbarLayout.resolve(width: 180, mode: .text), .narrow)
     }
 
     func testArchiveRoundTripPreservesFontColorAndParagraphStyle() throws {

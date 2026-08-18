@@ -27,7 +27,8 @@ enum NoteToolbarLayout: Equatable {
         if width >= 410 {
             return .compact
         }
-        if width >= 180 {
+        let narrowMinimum: CGFloat = mode == .split ? 240 : 180
+        if width >= narrowMinimum {
             return .narrow
         }
         return .minimal
@@ -138,8 +139,6 @@ struct ProjectNoteView: View {
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onFocus)
     }
 
     @ViewBuilder
@@ -175,6 +174,8 @@ struct ProjectNoteView: View {
                 .menuStyle(.borderlessButton)
                 .frame(width: 30, height: 30)
                 .help("More text formatting")
+                .accessibilityLabel("More text formatting")
+                .accessibilityIdentifier("note-more-text-menu")
             }
             if showsDrawingEditor {
                 Menu {
@@ -185,6 +186,7 @@ struct ProjectNoteView: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
                 .help("Drawing tools")
+                .accessibilityIdentifier("note-drawing-menu")
             }
         }
     }
@@ -223,6 +225,7 @@ struct ProjectNoteView: View {
         .frame(width: 30, height: 30)
         .help("Note tools and layout")
         .accessibilityLabel("Note tools and layout")
+        .accessibilityIdentifier("note-tools-menu")
     }
 
     private func editorMenus(showsLabels: Bool) -> some View {
@@ -238,8 +241,10 @@ struct ProjectNoteView: View {
                     }
                 }
                 .menuStyle(.borderlessButton)
-                .frame(minWidth: showsLabels ? 72 : 30, minHeight: 30)
+                .frame(width: showsLabels ? 76 : 30, height: 30)
                 .help("Text formatting")
+                .accessibilityLabel("Text formatting")
+                .accessibilityIdentifier("note-format-menu")
             }
             if showsDrawingEditor {
                 Menu {
@@ -252,8 +257,10 @@ struct ProjectNoteView: View {
                     }
                 }
                 .menuStyle(.borderlessButton)
-                .frame(minWidth: showsLabels ? 62 : 30, minHeight: 30)
+                .frame(width: showsLabels ? 68 : 30, height: 30)
                 .help("Drawing tools")
+                .accessibilityLabel("Drawing tools")
+                .accessibilityIdentifier("note-drawing-menu")
             }
         }
     }

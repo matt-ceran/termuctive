@@ -445,6 +445,49 @@ final class ProjectNotesIntegrationTests: XCTestCase {
         XCTAssertTrue(textView.isDescendant(of: hostingView))
     }
 
+    func testSplitPaneToolbarRendersStableLayoutsAtNarrowWidths() async throws {
+        let note = ProjectNote(name: "Narrow toolbar")
+        let persistence = ThemeNotePersistence(
+            loadedDocument: NoteDocument(noteID: note.id, workspaceMode: .split)
+        )
+        let session = NoteDocumentSession(noteID: note.id, persistence: persistence)
+        let hostingView = NSHostingView(
+            rootView: ProjectNoteView(note: note, session: session)
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 220, height: 420)
+        let window = NSWindow(
+            contentRect: hostingView.bounds,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        XCTAssertNotNil(firstSubview(of: NoteTextView.self, in: hostingView))
+        XCTAssertNotNil(firstSubview(of: NoteDrawingCanvasNSView.self, in: hostingView))
+        let minimalImage = try renderedImage(of: hostingView)
+        XCTAssertEqual(minimalImage.size, hostingView.bounds.size)
+        let minimalAttachment = XCTAttachment(image: minimalImage)
+        minimalAttachment.name = "Minimal split note toolbar at 220 points"
+        minimalAttachment.lifetime = .keepAlways
+        add(minimalAttachment)
+
+        window.setContentSize(NSSize(width: 260, height: 420))
+        hostingView.layoutSubtreeIfNeeded()
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        XCTAssertNotNil(firstSubview(of: NoteTextView.self, in: hostingView))
+        XCTAssertNotNil(firstSubview(of: NoteDrawingCanvasNSView.self, in: hostingView))
+        let narrowImage = try renderedImage(of: hostingView)
+        XCTAssertEqual(narrowImage.size, hostingView.bounds.size)
+        let narrowAttachment = XCTAttachment(image: narrowImage)
+        narrowAttachment.name = "Narrow split note toolbar at 260 points"
+        narrowAttachment.lifetime = .keepAlways
+        add(narrowAttachment)
+    }
+
     func testInlineImagePlacementResizeAndPersistenceThroughTheRenderedNote() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "termuctive-inline-image-\(UUID().uuidString)",
