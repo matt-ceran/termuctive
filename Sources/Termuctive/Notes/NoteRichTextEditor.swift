@@ -85,10 +85,23 @@ enum NoteTextStyle: String, CaseIterable, Identifiable {
             9
         case .subheading:
             7
-        case .body, .quote, .code:
+        case .body:
+            0
+        case .quote, .code:
             5
         case .caption:
             3
+        }
+    }
+
+    fileprivate var lineSpacing: CGFloat {
+        switch self {
+        case .body:
+            0
+        case .code:
+            1
+        case .title, .heading, .subheading, .quote, .caption:
+            2
         }
     }
 }
@@ -157,7 +170,7 @@ enum NoteRichTextArchive {
 
     static var defaultBodyAttributes: [NSAttributedString.Key: Any] {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 2
+        paragraphStyle.lineSpacing = NoteTextStyle.body.lineSpacing
         paragraphStyle.paragraphSpacing = NoteTextStyle.body.paragraphSpacing
         return [
             .font: NSFont.systemFont(ofSize: NoteTextStyle.body.fontSize),
@@ -523,7 +536,7 @@ final class NoteRichTextController: ObservableObject {
         in textView: NSTextView
     ) {
         mutateParagraphs(in: range, textView: textView) { paragraphStyle in
-            paragraphStyle.lineSpacing = style == .code ? 1 : 2
+            paragraphStyle.lineSpacing = style.lineSpacing
             paragraphStyle.paragraphSpacing = style.paragraphSpacing
             paragraphStyle.headIndent = style == .quote ? 18 : 0
             paragraphStyle.firstLineHeadIndent = style == .quote ? 18 : 0

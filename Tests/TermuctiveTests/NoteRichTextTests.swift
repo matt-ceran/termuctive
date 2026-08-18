@@ -145,9 +145,33 @@ final class NoteRichTextTests: XCTestCase {
         XCTAssertTrue(NSFontManager.shared.traits(of: retainedTitleFont).contains(.boldFontMask))
         XCTAssertEqual(typingFont.pointSize, 14)
         XCTAssertFalse(NSFontManager.shared.traits(of: typingFont).contains(.boldFontMask))
-        XCTAssertEqual(typingParagraph.paragraphSpacing, 5)
+        XCTAssertEqual(typingParagraph.lineSpacing, 0)
+        XCTAssertEqual(typingParagraph.paragraphSpacing, 0)
         XCTAssertEqual(controller.selectedStyle, .body)
         XCTAssertEqual(controller.fontSize, 14)
+    }
+
+    func testBodyReturnCreatesOneNewlineWithoutExtraParagraphSpacing() throws {
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 300))
+        textView.isRichText = true
+        textView.typingAttributes = NoteRichTextArchive.defaultBodyAttributes
+
+        textView.insertText("First line", replacementRange: textView.selectedRange())
+        textView.insertNewline(nil)
+        textView.insertText("Second line", replacementRange: textView.selectedRange())
+
+        XCTAssertEqual(textView.string, "First line\nSecond line")
+        for characterIndex in [0, "First line\n".utf16.count] {
+            let paragraph = try XCTUnwrap(
+                textView.textStorage?.attribute(
+                    .paragraphStyle,
+                    at: characterIndex,
+                    effectiveRange: nil
+                ) as? NSParagraphStyle
+            )
+            XCTAssertEqual(paragraph.lineSpacing, 0)
+            XCTAssertEqual(paragraph.paragraphSpacing, 0)
+        }
     }
 
     func testTitleAndBodyKeepTheirStylesWhenChangingTheWholeDocumentFont() throws {
