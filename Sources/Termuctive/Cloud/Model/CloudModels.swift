@@ -167,6 +167,17 @@ struct CloudState: Codable, Equatable {
     func binding(forProjectID projectID: UUID) -> CloudProjectBinding? {
         bindings.first { $0.projectID == projectID }
     }
+
+    /// The cloud project whose server folder is `root`. A moved project keeps its path, so
+    /// this finds the cloud copy of a project on this Mac.
+    func binding(forRemoteRoot root: String) -> CloudProjectBinding? {
+        let wanted = Self.normalized(root)
+        return bindings.first { Self.normalized($0.remoteRoot) == wanted }
+    }
+
+    private static func normalized(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
+    }
 }
 
 enum CloudSlug {

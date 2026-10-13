@@ -117,6 +117,10 @@ struct MoveToCloudSheet: View {
                     cloud.presentedFlow = .setUpServer
                 }
             }
+        } else if let message = projectMove.alreadyMovedMessage {
+            Label(message, systemImage: "icloud")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         } else {
             Form {
                 Picker("Server", selection: $projectMove.hostID) {
@@ -275,7 +279,10 @@ struct MoveToCloudSheet: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(projectMove.host == nil || !CloudSlug.isValid(projectMove.slug))
+                .disabled(
+                    projectMove.host == nil || !CloudSlug.isValid(projectMove.slug)
+                        || projectMove.alreadyMovedMessage != nil
+                )
             case .review:
                 Button("Back") {
                     projectMove.step = .chooseServer

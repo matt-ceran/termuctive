@@ -55,6 +55,24 @@ final class ProjectMove: ObservableObject {
         hostID.flatMap { cloud.cloudStore.host(withID: $0) }
     }
 
+    /// Why this project can't be moved: it already has a cloud copy, and moving again would
+    /// copy this Mac's older files over work done there and delete its newer commits.
+    var alreadyMovedMessage: String? {
+        guard let project,
+            let copy = cloud.cloudStore.binding(forRemoteRoot: project.rootDirectory),
+            copy.projectID != projectID
+        else {
+            return nil
+        }
+        let copyName =
+            store.document.projects.first { $0.id == copy.projectID }?.name
+            ?? "\(project.name) (Cloud)"
+        let hostName = cloud.cloudStore.host(withID: copy.hostID)?.name ?? "a server"
+        return "\(project.name) is already in the cloud as \(copyName) on \(hostName). "
+            + "Moving it again would replace work done there with this Mac's older copy, "
+            + "so keep working in \(copyName)."
+    }
+
     var isWorking: Bool {
         switch step {
         case .scanning, .copying, .switching:
@@ -69,6 +87,10 @@ final class ProjectMove: ObservableObject {
     func scan() async {
         guard let project else {
             step = .failed("The project no longer exists.")
+            return
+        }
+        if let alreadyMovedMessage {
+            step = .failed(alreadyMovedMessage)
             return
         }
         step = .scanning("Starting")
@@ -126,6 +148,10 @@ final class ProjectMove: ObservableObject {
     /// The first, long copy. The project keeps working on this Mac meanwhile.
     func startCopy() async {
         guard let manifest, let host, CloudSlug.isValid(slug) else {
+            return
+        }
+        if let alreadyMovedMessage {
+            step = .failed(alreadyMovedMessage)
             return
         }
         await cloud.control.ensureMaster(alias: host.alias)

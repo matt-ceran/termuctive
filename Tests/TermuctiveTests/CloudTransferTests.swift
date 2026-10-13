@@ -371,6 +371,48 @@ final class ProjectDuplicationTests: XCTestCase {
 }
 
 @MainActor
+final class ProjectMoveTests: XCTestCase {
+    func testAProjectWithACloudCopyIsNotMovedAgain() async throws {
+        let store = WorkspaceStore(persistence: TransferTestWorkspacePersistence())
+        store.addProject(at: URL(fileURLWithPath: "/tmp", isDirectory: true))
+        let project = try XCTUnwrap(store.selectedProject)
+        let host = CloudHost(name: "Home Server", address: "s", adminUser: "a", memberUser: "m")
+        let (cloud, cloudStore) = makeTestCloud(store: store, state: CloudState(hosts: [host]))
+        let sessions = TerminalSessionPool(store: store)
+        defer {
+            sessions.terminateAll()
+        }
+        let move = ProjectMove(
+            projectID: project.id,
+            store: store,
+            sessions: sessions,
+            notes: NoteSessionPool(persistence: TransferTestNotePersistence()),
+            cloud: cloud
+        )
+        XCTAssertNil(move.alreadyMovedMessage)
+
+        let copy = try XCTUnwrap(
+            store.duplicateProject(withID: project.id, name: "\(project.name) (Cloud)")
+        )
+        cloudStore.bind(
+            CloudProjectBinding(
+                projectID: copy.projectID,
+                hostID: host.id,
+                slug: "tmp",
+                remoteRoot: project.rootDirectory + "/",
+                role: .owner
+            )
+        )
+
+        let message = try XCTUnwrap(move.alreadyMovedMessage)
+        XCTAssertTrue(message.contains("\(project.name) (Cloud) on Home Server"))
+        await move.scan()
+        XCTAssertEqual(move.step, .failed(message))
+        XCTAssertNil(move.manifest)
+    }
+}
+
+@MainActor
 final class CloudPortForwarderTests: XCTestCase {
     func testForwardsNewPortsAndCancelsOnesThatStop() async throws {
         let host = CloudHost(name: "S", address: "s", adminUser: "a", memberUser: "m")
