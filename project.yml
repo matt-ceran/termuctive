@@ -64,6 +64,9 @@ targets:
       - path: Resources/termuctive-learning-pdf
         buildPhase: resources
         type: folder
+      - path: Resources/termuctive-server
+        buildPhase: resources
+        type: folder
       - path: LICENSE
         buildPhase: resources
       - path: THIRD_PARTY_NOTICES.md

@@ -1,0 +1,14 @@
+#!/usr/bin/python3 -I
+"""Termuctive server toolkit launcher."""
+
+import os
+import sys
+
+sys.path.insert(
+    0,
+    os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"),
+)
+
+from tmc.cli import main  # noqa: E402
+
+sys.exit(main(sys.argv[1:]))

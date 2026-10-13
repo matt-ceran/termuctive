@@ -11,24 +11,37 @@ struct TermuctiveApp: App {
     @StateObject private var notes: NoteSessionPool
     @StateObject private var appearance: AppearanceSettings
     @StateObject private var agentActivity: AgentActivityRegistry
+    @StateObject private var cloudStore: CloudStore
+    @StateObject private var cloud: CloudSessionCoordinator
 
     @MainActor
     init() {
         let store = WorkspaceStore()
         let appearance = AppearanceSettings()
         let agentActivity = AgentActivityRegistry()
-        _store = StateObject(wrappedValue: store)
-        _sessions = StateObject(
-            wrappedValue: TerminalSessionPool(
-                store: store,
-                terminalTheme: appearance.terminalTheme,
-                agentActivityRegistry: agentActivity
-            )
+        let cloudStore = CloudStore()
+        let cloud = CloudSessionCoordinator(store: store, cloudStore: cloudStore)
+        let sessions = TerminalSessionPool(
+            store: store,
+            terminalTheme: appearance.terminalTheme,
+            launchResolver: { [weak cloud] pane in
+                cloud?.launchSpec(for: pane) ?? .localShell
+            },
+            agentActivityRegistry: agentActivity
         )
-        _editors = StateObject(wrappedValue: EditorSessionPool(store: store))
+        cloud.attach(sessions: sessions)
+        let editors = EditorSessionPool(store: store)
+        editors.isRemotePane = { [weak cloud] paneID in
+            cloud?.hostName(forPaneID: paneID) != nil
+        }
+        _store = StateObject(wrappedValue: store)
+        _sessions = StateObject(wrappedValue: sessions)
+        _editors = StateObject(wrappedValue: editors)
         _notes = StateObject(wrappedValue: NoteSessionPool())
         _appearance = StateObject(wrappedValue: appearance)
         _agentActivity = StateObject(wrappedValue: agentActivity)
+        _cloudStore = StateObject(wrappedValue: cloudStore)
+        _cloud = StateObject(wrappedValue: cloud)
     }
 
     var body: some Scene {
@@ -39,7 +52,9 @@ struct TermuctiveApp: App {
                 editors: editors,
                 notes: notes,
                 appearance: appearance,
-                agentActivity: agentActivity
+                agentActivity: agentActivity,
+                cloud: cloud,
+                cloudStore: cloudStore
             )
             .preferredColorScheme(appearance.appTheme.colorScheme)
             .onAppear {
@@ -260,6 +275,40 @@ struct TermuctiveApp: App {
                 .disabled(!canSaveFocusedDocument)
             }
 
+            CommandMenu("Cloud") {
+                Button("Set Up Server...") {
+                    cloud.presentedFlow = .setUpServer
+                }
+
+                Divider()
+
+                Button("Connect Project to Cloud Folder...") {
+                    guard let projectID = selectedLocalProjectID else {
+                        return
+                    }
+                    cloud.presentedFlow = .connectProject(projectID)
+                }
+                .disabled(selectedLocalProjectID == nil)
+
+                Button("Disconnect Project from Cloud") {
+                    guard let projectID = store.selectedProject?.id else {
+                        return
+                    }
+                    cloud.disconnect(projectID: projectID)
+                }
+                .disabled(
+                    store.selectedProject.map { cloudStore.binding(forProjectID: $0.id) == nil }
+                        ?? true
+                )
+
+                Divider()
+
+                Button("Reconnect Cloud Terminals") {
+                    cloud.reconnectAll()
+                }
+                .disabled(cloudStore.boundProjectIDs.isEmpty)
+            }
+
             CommandMenu("Appearance") {
                 Picker("App Appearance", selection: $appearance.appTheme) {
                     ForEach(AppTheme.allCases) { theme in
@@ -281,6 +330,16 @@ struct TermuctiveApp: App {
             AppearanceSettingsView(settings: appearance)
                 .preferredColorScheme(appearance.appTheme.colorScheme)
         }
+    }
+
+    private var selectedLocalProjectID: UUID? {
+        guard let project = store.selectedProject,
+            project.kind == .project,
+            cloudStore.binding(forProjectID: project.id) == nil
+        else {
+            return nil
+        }
+        return project.id
     }
 
     private func moveRecentPDF(_ placement: PDFPanePlacement) {

@@ -22,6 +22,8 @@ struct ProjectSidebar: View {
     @ObservedObject var editors: EditorSessionPool
     @ObservedObject var notes: NoteSessionPool
     let agentActivity: AgentActivityRegistry
+    let cloud: CloudSessionCoordinator
+    @ObservedObject var cloudStore: CloudStore
     let activityIndicatorsVisible: Bool
     let chooseProject: () -> Void
     let hideSidebar: () -> Void
@@ -137,7 +139,8 @@ struct ProjectSidebar: View {
                 entry: .project(id: project.id, name: project.name, kind: project.kind),
                 disclosureIcon: "chevron.right",
                 rotatesDisclosureIcon: isExpanded,
-                secondaryIcon: "folder",
+                secondaryIcon: cloudStore.binding(forProjectID: project.id) == nil
+                    ? "folder" : "cloud",
                 title: project.name,
                 depth: 0,
                 selected: store.document.selectedProjectID == project.id
@@ -379,6 +382,7 @@ struct ProjectSidebar: View {
         .contextMenu {
             creationActions(for: entry)
             paneActions(for: entry)
+            cloudActions(for: entry)
             if entry.canContainItems {
                 Divider()
             }
@@ -412,6 +416,23 @@ struct ProjectSidebar: View {
                 )
             }
             .disabled(!store.canAddPane(inProjectWithID: projectID))
+        }
+    }
+
+    @ViewBuilder
+    private func cloudActions(for entry: SidebarEntry) -> some View {
+        if case .project(let projectID, _, .project) = entry {
+            Divider()
+            if let binding = cloudStore.binding(forProjectID: projectID) {
+                Text("Runs on \(cloudStore.host(withID: binding.hostID)?.name ?? "a server")")
+                Button("Disconnect from Cloud") {
+                    cloud.disconnect(projectID: projectID)
+                }
+            } else {
+                Button("Connect to Cloud Folder...") {
+                    cloud.presentedFlow = .connectProject(projectID)
+                }
+            }
         }
     }
 

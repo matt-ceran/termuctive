@@ -4,11 +4,17 @@ protocol WorkspacePersisting {
     var prefersBackgroundSaves: Bool { get }
     func load() throws -> WorkspaceDocument?
     func save(_ document: WorkspaceDocument) throws
+    /// Copies a workspace that could not be loaded aside before it can be overwritten.
+    func preserveUnreadableWorkspace() -> URL?
 }
 
 extension WorkspacePersisting {
     var prefersBackgroundSaves: Bool {
         false
+    }
+
+    func preserveUnreadableWorkspace() -> URL? {
+        nil
     }
 }
 
@@ -60,6 +66,24 @@ struct WorkspaceFileStore: WorkspacePersisting {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(document).write(to: fileURL, options: .atomic)
+    }
+
+    func preserveUnreadableWorkspace() -> URL? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate, .withTime, .withTimeZone]
+        let timestamp = formatter.string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let backupURL = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("\(fileURL.lastPathComponent).unreadable-\(timestamp)")
+        do {
+            try FileManager.default.copyItem(at: fileURL, to: backupURL)
+            return backupURL
+        } catch {
+            return nil
+        }
     }
 }
 

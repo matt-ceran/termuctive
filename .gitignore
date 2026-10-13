@@ -4,3 +4,5 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 .termuctive-local/
+__pycache__/
+*.pyc

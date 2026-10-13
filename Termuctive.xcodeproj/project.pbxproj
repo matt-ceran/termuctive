@@ -24,16 +24,24 @@
 		254FD56E48913C15D84564A7 /* AppearanceSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA8DBD841EDCDC86C484C4D /* AppearanceSettingsTests.swift */; };
 		2B1BD699F66EE2910D871C19 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */; };
 		2CFCD8602C26E670DB86BBDC /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 9C0A6106B64EBFA9AD5852B9 /* SwiftTerm */; };
+		2E2CC7AEE75A4E6A043D23C2 /* CloudServerSetupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1107A7F7FFF77F043A885937 /* CloudServerSetupSheet.swift */; };
 		302A072D04C87EEA57B49B00 /* EditorFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */; };
+		348DAA7AA8E58DBDBBABCE01 /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C2D0236D0BD9A74109715DF /* ProcessRunner.swift */; };
 		35ECC5A499B3F066B1659687 /* AgentProcessShim.c in Sources */ = {isa = PBXBuildFile; fileRef = 438B301D69E1411F683C46EB /* AgentProcessShim.c */; };
+		39AB102EF318AF2123723F3E /* CloudTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E16490DA00705742365C468 /* CloudTests.swift */; };
+		3A61D3FA73245F79D3CC4F98 /* termuctive-server in Resources */ = {isa = PBXBuildFile; fileRef = BE7F6B53575FCFC2475AEDD9 /* termuctive-server */; };
 		3B0D7447219B91713523C96E /* ProjectNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD7C74070A6E0151094CE6FA /* ProjectNote.swift */; };
+		3B272DDFA322433334A215B0 /* CloudTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FB8EE4531EC2DA3B0BDABFC /* CloudTestSupport.swift */; };
 		4BDDB2D79E58973A36063AD2 /* TerminalAgentActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70432B30AD7F3376A89EC8B /* TerminalAgentActivityTests.swift */; };
 		4CE61662CADA79BBEC33A3C4 /* TerminalAgentActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCBCBC0526D862D530F8AEDE /* TerminalAgentActivityMonitor.swift */; };
 		4E14C04A360FFAC7566B8A48 /* EditorDocumentBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D0500E417D40684B01F061 /* EditorDocumentBuffer.swift */; };
+		4E541E163DBAB7788A6000FD /* CloudTerminalLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 313DA0BF36AB1BC0EAAE8B9B /* CloudTerminalLauncher.swift */; };
 		4F042792EDC288E707443E7D /* PDFDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */; };
 		4FA2A817A915D6D914CCE3C4 /* LearningPDF.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F22CF52B8769F1072F775FF /* LearningPDF.swift */; };
 		539A6B3DB6CE21EB7098D186 /* NoteFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B484F673E364FAC9B7D899B /* NoteFileStoreTests.swift */; };
 		55537C6EED8FAC9A59D679B8 /* TerminalLocalCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6328DE9953E850606960A464 /* TerminalLocalCommandTests.swift */; };
+		59CC9A9051655AAE1BB11A45 /* CloudModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4454A23060397C727233587 /* CloudModels.swift */; };
+		5E40E809A45A56A6A5BBB3C3 /* SSHKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1F8AF730F127D9EDFC48765 /* SSHKeyManager.swift */; };
 		6057584FA9BADB24B356BC77 /* PDFPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35EA800971A4F8606824C500 /* PDFPreview.swift */; };
 		6367DCA53C3632194454440A /* PaneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB732E6729E4ED88756FCF76 /* PaneLayout.swift */; };
 		680BE3962F965E6FE22F8540 /* NoteDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB240EEF85F9D81D1AEB1094 /* NoteDocument.swift */; };
@@ -45,33 +53,47 @@
 		7E48E74028469562F7000185 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 0AD4E51F30ECDFDC52C0703A /* main.c */; };
 		7FCC7165ADE500F646F4A760 /* SidebarDisclosureSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480CE99E8A7C5B82ED091513 /* SidebarDisclosureSection.swift */; };
 		87D4EAD283ABE12233E1272D /* EditorDocumentBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F54BD83B8719BDEC95D07B /* EditorDocumentBufferTests.swift */; };
+		8B77466AC511C5DC7EBE3BA9 /* SSHConfigRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5CA3814AE0D705119464E0 /* SSHConfigRenderer.swift */; };
 		8CEC8718F273FE81C7860197 /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 358682BFA64AD0D54823FF99 /* CodeEditorView.swift */; };
 		8D565FB0A8CADB805744D23F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F784C4BBAE43A7B6C7F23B1 /* Assets.xcassets */; };
 		914E943352FAAC4B438A59BD /* AgentActivityIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55131B04AF4130FD98E81FB4 /* AgentActivityIndicator.swift */; };
+		94774D482F6D6A868E5A2BA8 /* ShellQuoting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48130A229161958BC31C06AE /* ShellQuoting.swift */; };
 		9777AADC8A779CFFCFDA3E54 /* NoteRichTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DE01D8F964F7BC73D3C106 /* NoteRichTextEditor.swift */; };
+		996141D83167C7CFB5AD2D30 /* SSHPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFE858FDEF114C1BCA0D192 /* SSHPaths.swift */; };
 		9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */; };
 		A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */; };
 		AB094E7B3BB14654DDC4023A /* termuctive-learning-pdf in Resources */ = {isa = PBXBuildFile; fileRef = DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */; };
 		ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */; };
+		ADAD1B6C95E3413D811547AA /* CloudSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4373A4C2113674500A9127F9 /* CloudSessionCoordinator.swift */; };
 		AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */; };
 		B0FE1456E747245CEF613181 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = C35DC00077448A260ABFB4B1 /* SwiftTerm */; };
 		B4FDEAFEECFCE89EDCDB0F40 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 7420D65C7E04E4E5D0041305 /* LICENSE */; };
+		B5BDFB0ECB3BCF5BB08D5ACE /* TerminalReconnectPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62DD72A7F68882DA0DB5868 /* TerminalReconnectPolicy.swift */; };
 		BBA21448B4389AC07C0CA49E /* WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */; };
 		BEB1CE16AA3870EA44E435F0 /* InterfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */; };
 		BFF498023A8D1DE7A21A6FB9 /* PaneTreeRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 227D7BC89388CB5CC769553E /* PaneTreeRenderingTests.swift */; };
 		C197756371BCC22A73475C03 /* EditorSessionPoolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CA65A8586FB9E0FCE1486BB /* EditorSessionPoolTests.swift */; };
+		C68C2D6D8E20D74CE0A4EF45 /* SSHCommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E047767A4224A2CB512199E3 /* SSHCommandRunner.swift */; };
 		CBAFD73B55569F2EE40CB659 /* TerminalEngineIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */; };
 		CDC8DFA65A80E6E1E7175D13 /* ProjectNotesIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0FD1B1292DD9F1333C3EF4 /* ProjectNotesIntegrationTests.swift */; };
 		CF4FB8AF14F80D21DE3B295C /* RecentPDFLocatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C9D5660099146CB8487D7D /* RecentPDFLocatorTests.swift */; };
+		D3BE00246D7DC2D5FD0D0CF2 /* CloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D555F3BFE0FF66C74E6F465 /* CloudStore.swift */; };
+		D6D0D50AF84BB0F4CDBD0A56 /* CloudToolkitInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DD8351760A5262B452444A3 /* CloudToolkitInstaller.swift */; };
 		D7798E314A541B3AFDBE0723 /* NoteRichTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0223CBE6ED7BE1C14BF798D6 /* NoteRichTextTests.swift */; };
 		D9290A144CA7C09282CBF5EA /* NoteFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 016258586280540D1A00B3EC /* NoteFileStore.swift */; };
+		D996A4E3AA058F17EE7CE2A4 /* TerminalLaunchSpecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED487B1384313D38647E4C7 /* TerminalLaunchSpecTests.swift */; };
+		E262891FA49FAD8353048295 /* TMCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 921605C1F74882A9360A476B /* TMCClient.swift */; };
 		E8D378724F95E52BD2513B72 /* WorkspaceFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */; };
+		E942E734688EE459913B085F /* CloudControlConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD378D9D5BE3B760404B2D3 /* CloudControlConnection.swift */; };
+		EB036A759CE48CD4DEA9914F /* EmbeddedTerminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAC22CE747868F0624F9BF18 /* EmbeddedTerminal.swift */; };
+		EC10C6B193F0DC7CE32F1123 /* ConnectToCloudFolderSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D160D2A598B93445880929 /* ConnectToCloudFolderSheet.swift */; };
 		ECB825F1AAE4F033870CCB45 /* EditorFileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8831E1AFCA62E16522DAFF8E /* EditorFileSystemTests.swift */; };
 		F12E5BF6FB6A55FB13886CCA /* NoteDrawingCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37931F7BA5CC587684918890 /* NoteDrawingCanvas.swift */; };
 		F8565107E46D0225EEDFDFB4 /* NoteSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = F376E8D01414C1D731BF126C /* NoteSessionPool.swift */; };
 		F8F2AC2D67F2E56310D028F3 /* NoteDrawingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87462424D9EC045A563EE104 /* NoteDrawingTests.swift */; };
 		FE4CC8AE39B1C12D85162A87 /* ProjectNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9939468A2BF3818F1590520 /* ProjectNoteView.swift */; };
 		FF9638ED37ECEC3C3BBE4C19 /* AgentActivityRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF57F174EAFFD22084CF61FF /* AgentActivityRegistry.swift */; };
+		FFCCD27E9DB80474999430F5 /* CloudE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE92DA49792CACA23EEA33B6 /* CloudE2ETests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -106,6 +128,7 @@
 		0AD4E51F30ECDFDC52C0703A /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
 		0ADAD78CB82A0ECE335F34BE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDocument.swift; sourceTree = "<group>"; };
+		1107A7F7FFF77F043A885937 /* CloudServerSetupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudServerSetupSheet.swift; sourceTree = "<group>"; };
 		11DE01D8F964F7BC73D3C106 /* NoteRichTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRichTextEditor.swift; sourceTree = "<group>"; };
 		1B484F673E364FAC9B7D899B /* NoteFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteFileStoreTests.swift; sourceTree = "<group>"; };
 		1F22CF52B8769F1072F775FF /* LearningPDF.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningPDF.swift; sourceTree = "<group>"; };
@@ -113,56 +136,77 @@
 		227D7BC89388CB5CC769553E /* PaneTreeRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeRenderingTests.swift; sourceTree = "<group>"; };
 		235FCBD56ABAE515873A9965 /* SmoothSplitViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmoothSplitViewTests.swift; sourceTree = "<group>"; };
 		268474801E729AD15FCB6E04 /* ApplicationLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycle.swift; sourceTree = "<group>"; };
+		2D555F3BFE0FF66C74E6F465 /* CloudStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudStore.swift; sourceTree = "<group>"; };
+		2E16490DA00705742365C468 /* CloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTests.swift; sourceTree = "<group>"; };
 		30BA578C986DB04FBAB5C6C2 /* WorkspaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStoreTests.swift; sourceTree = "<group>"; };
+		313DA0BF36AB1BC0EAAE8B9B /* CloudTerminalLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTerminalLauncher.swift; sourceTree = "<group>"; };
 		358682BFA64AD0D54823FF99 /* CodeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeEditorView.swift; sourceTree = "<group>"; };
 		35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDocumentTests.swift; sourceTree = "<group>"; };
 		35EA800971A4F8606824C500 /* PDFPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPreview.swift; sourceTree = "<group>"; };
 		37931F7BA5CC587684918890 /* NoteDrawingCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDrawingCanvas.swift; sourceTree = "<group>"; };
 		37C9D5660099146CB8487D7D /* RecentPDFLocatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentPDFLocatorTests.swift; sourceTree = "<group>"; };
+		4373A4C2113674500A9127F9 /* CloudSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSessionCoordinator.swift; sourceTree = "<group>"; };
 		438B301D69E1411F683C46EB /* AgentProcessShim.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = AgentProcessShim.c; sourceTree = "<group>"; };
 		4720A7AE0AACC8B4CA21F73D /* PDFPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPaneView.swift; sourceTree = "<group>"; };
 		480CE99E8A7C5B82ED091513 /* SidebarDisclosureSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarDisclosureSection.swift; sourceTree = "<group>"; };
+		48130A229161958BC31C06AE /* ShellQuoting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellQuoting.swift; sourceTree = "<group>"; };
 		4834E43F03BD8B6F6BB68F82 /* InterfaceComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterfaceComponents.swift; sourceTree = "<group>"; };
 		48F54BD83B8719BDEC95D07B /* EditorDocumentBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDocumentBufferTests.swift; sourceTree = "<group>"; };
 		55131B04AF4130FD98E81FB4 /* AgentActivityIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityIndicator.swift; sourceTree = "<group>"; };
 		55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
+		5E5CA3814AE0D705119464E0 /* SSHConfigRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConfigRenderer.swift; sourceTree = "<group>"; };
 		613F71BE77F966E0EF32A9A0 /* PDFDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFDiscovery.swift; sourceTree = "<group>"; };
 		6328DE9953E850606960A464 /* TerminalLocalCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalLocalCommandTests.swift; sourceTree = "<group>"; };
+		6C2D0236D0BD9A74109715DF /* ProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunner.swift; sourceTree = "<group>"; };
 		6CA65A8586FB9E0FCE1486BB /* EditorSessionPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionPoolTests.swift; sourceTree = "<group>"; };
 		6E09168D4C22B0C86EB85EA2 /* Termuctive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Termuctive.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7420D65C7E04E4E5D0041305 /* LICENSE */ = {isa = PBXFileReference; path = LICENSE; sourceTree = "<group>"; };
+		78D160D2A598B93445880929 /* ConnectToCloudFolderSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectToCloudFolderSheet.swift; sourceTree = "<group>"; };
+		7ED487B1384313D38647E4C7 /* TerminalLaunchSpecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalLaunchSpecTests.swift; sourceTree = "<group>"; };
+		7FB8EE4531EC2DA3B0BDABFC /* CloudTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTestSupport.swift; sourceTree = "<group>"; };
 		7FC53FF9D028BF4F6C51916A /* NoteSessionPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteSessionPoolTests.swift; sourceTree = "<group>"; };
 		81D1C7B9D692A8C6CC67E621 /* TerminalAgentActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentActivity.swift; sourceTree = "<group>"; };
 		87462424D9EC045A563EE104 /* NoteDrawingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDrawingTests.swift; sourceTree = "<group>"; };
 		8831E1AFCA62E16522DAFF8E /* EditorFileSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystemTests.swift; sourceTree = "<group>"; };
 		8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystem.swift; sourceTree = "<group>"; };
 		8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayoutTests.swift; sourceTree = "<group>"; };
+		921605C1F74882A9360A476B /* TMCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMCClient.swift; sourceTree = "<group>"; };
 		9B195DC1835EF17E3FE412DD /* EditorPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPaneView.swift; sourceTree = "<group>"; };
 		9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSidebar.swift; sourceTree = "<group>"; };
+		9CD378D9D5BE3B760404B2D3 /* CloudControlConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudControlConnection.swift; sourceTree = "<group>"; };
 		9D301BCDD1ADB43606109EA0 /* TermuctiveWrapperFixture */ = {isa = PBXFileReference; includeInIndex = 0; path = TermuctiveWrapperFixture; sourceTree = BUILT_PRODUCTS_DIR; };
+		9DD8351760A5262B452444A3 /* CloudToolkitInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudToolkitInstaller.swift; sourceTree = "<group>"; };
 		A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSessionPool.swift; sourceTree = "<group>"; };
+		A62DD72A7F68882DA0DB5868 /* TerminalReconnectPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalReconnectPolicy.swift; sourceTree = "<group>"; };
 		A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStoreTests.swift; sourceTree = "<group>"; };
 		A70432B30AD7F3376A89EC8B /* TerminalAgentActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentActivityTests.swift; sourceTree = "<group>"; };
 		AB0FD1B1292DD9F1333C3EF4 /* ProjectNotesIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNotesIntegrationTests.swift; sourceTree = "<group>"; };
 		AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHostView.swift; sourceTree = "<group>"; };
 		AEAFFB65D7974634987D889C /* TerminalSpaceTabStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSpaceTabStrip.swift; sourceTree = "<group>"; };
 		B6E1A21021BE972DC78E104D /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
+		BE7F6B53575FCFC2475AEDD9 /* termuctive-server */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "termuctive-server"; path = "Resources/termuctive-server"; sourceTree = SOURCE_ROOT; };
 		C2AC0D63CFFAFA3D2810C3DD /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		C619C2D8D39C031484E264A4 /* AppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettings.swift; sourceTree = "<group>"; };
 		C98D32CBD48EA8A8EA283081 /* NoteImageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteImageAttachment.swift; sourceTree = "<group>"; };
+		CAC22CE747868F0624F9BF18 /* EmbeddedTerminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddedTerminal.swift; sourceTree = "<group>"; };
+		D1F8AF730F127D9EDFC48765 /* SSHKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHKeyManager.swift; sourceTree = "<group>"; };
 		D6D0500E417D40684B01F061 /* EditorDocumentBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDocumentBuffer.swift; sourceTree = "<group>"; };
 		D8941C04A9DCF2AC1E70D4BF /* WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileStore.swift; sourceTree = "<group>"; };
 		DB732E6729E4ED88756FCF76 /* PaneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayout.swift; sourceTree = "<group>"; };
 		DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "termuctive-learning-pdf"; path = "Resources/termuctive-learning-pdf"; sourceTree = SOURCE_ROOT; };
 		DCBCBC0526D862D530F8AEDE /* TerminalAgentActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentActivityMonitor.swift; sourceTree = "<group>"; };
+		DCFE858FDEF114C1BCA0D192 /* SSHPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHPaths.swift; sourceTree = "<group>"; };
 		DD7C74070A6E0151094CE6FA /* ProjectNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNote.swift; sourceTree = "<group>"; };
 		DDA25954BE817B9B05BBCF51 /* EditorSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionPool.swift; sourceTree = "<group>"; };
+		E047767A4224A2CB512199E3 /* SSHCommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHCommandRunner.swift; sourceTree = "<group>"; };
 		E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEngineIntegrationTests.swift; sourceTree = "<group>"; };
 		E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
 		E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermuctiveApp.swift; sourceTree = "<group>"; };
 		EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
+		EE92DA49792CACA23EEA33B6 /* CloudE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudE2ETests.swift; sourceTree = "<group>"; };
 		EEA8DBD841EDCDC86C484C4D /* AppearanceSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsTests.swift; sourceTree = "<group>"; };
 		F376E8D01414C1D731BF126C /* NoteSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteSessionPool.swift; sourceTree = "<group>"; };
+		F4454A23060397C727233587 /* CloudModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudModels.swift; sourceTree = "<group>"; };
 		F6820FE00DB58B21243F8AF9 /* TermuctiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TermuctiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F692EEE25A652CDE51CAA6B8 /* AgentProcessShim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentProcessShim.h; sourceTree = "<group>"; };
 		F9939468A2BF3818F1590520 /* ProjectNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNoteView.swift; sourceTree = "<group>"; };
@@ -212,6 +256,9 @@
 			isa = PBXGroup;
 			children = (
 				EEA8DBD841EDCDC86C484C4D /* AppearanceSettingsTests.swift */,
+				EE92DA49792CACA23EEA33B6 /* CloudE2ETests.swift */,
+				2E16490DA00705742365C468 /* CloudTests.swift */,
+				7FB8EE4531EC2DA3B0BDABFC /* CloudTestSupport.swift */,
 				48F54BD83B8719BDEC95D07B /* EditorDocumentBufferTests.swift */,
 				8831E1AFCA62E16522DAFF8E /* EditorFileSystemTests.swift */,
 				6CA65A8586FB9E0FCE1486BB /* EditorSessionPoolTests.swift */,
@@ -226,6 +273,7 @@
 				235FCBD56ABAE515873A9965 /* SmoothSplitViewTests.swift */,
 				A70432B30AD7F3376A89EC8B /* TerminalAgentActivityTests.swift */,
 				E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */,
+				7ED487B1384313D38647E4C7 /* TerminalLaunchSpecTests.swift */,
 				6328DE9953E850606960A464 /* TerminalLocalCommandTests.swift */,
 				35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */,
 				A6E94AE768241842F0D6FC9D /* WorkspaceFileStoreTests.swift */,
@@ -283,6 +331,7 @@
 				480CE99E8A7C5B82ED091513 /* SidebarDisclosureSection.swift */,
 				AEAFFB65D7974634987D889C /* TerminalSpaceTabStrip.swift */,
 				EC007AC78A0058B3C285D5DA /* WorkspaceView.swift */,
+				655FAF6571A053F00276064E /* Cloud */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -293,6 +342,16 @@
 				C7A8E0CD44EC188068DE0B53 /* Termuctive */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		655FAF6571A053F00276064E /* Cloud */ = {
+			isa = PBXGroup;
+			children = (
+				1107A7F7FFF77F043A885937 /* CloudServerSetupSheet.swift */,
+				78D160D2A598B93445880929 /* ConnectToCloudFolderSheet.swift */,
+				CAC22CE747868F0624F9BF18 /* EmbeddedTerminal.swift */,
+			);
+			path = Cloud;
 			sourceTree = "<group>";
 		};
 		74B40BC5273C7FA80A5E3083 /* Editor */ = {
@@ -324,12 +383,42 @@
 			path = Persistence;
 			sourceTree = "<group>";
 		};
+		922328B5B0CFDACB08194410 /* Model */ = {
+			isa = PBXGroup;
+			children = (
+				F4454A23060397C727233587 /* CloudModels.swift */,
+			);
+			path = Model;
+			sourceTree = "<group>";
+		};
+		9C833C0D2CEC53CA1063BCEA /* Terminal */ = {
+			isa = PBXGroup;
+			children = (
+				4373A4C2113674500A9127F9 /* CloudSessionCoordinator.swift */,
+				313DA0BF36AB1BC0EAAE8B9B /* CloudTerminalLauncher.swift */,
+			);
+			path = Terminal;
+			sourceTree = "<group>";
+		};
 		9E2D2DFE7C7482A7EBA2560E /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 				DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */,
+				BE7F6B53575FCFC2475AEDD9 /* termuctive-server */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		B953FCC9EBD2B0D7CEBF1018 /* Cloud */ = {
+			isa = PBXGroup;
+			children = (
+				2D555F3BFE0FF66C74E6F465 /* CloudStore.swift */,
+				922328B5B0CFDACB08194410 /* Model */,
+				DFFA913EB93BAD5D0F1F2F3E /* SSH */,
+				9C833C0D2CEC53CA1063BCEA /* Terminal */,
+				EE7055C98D87012A54CDC09E /* Toolkit */,
+			);
+			path = Cloud;
 			sourceTree = "<group>";
 		};
 		C7A8E0CD44EC188068DE0B53 /* Termuctive */ = {
@@ -345,6 +434,7 @@
 				0A79DDB24299CC213E7359B8 /* Termuctive-Bridging-Header.h */,
 				E44B7E67B7C380B60300CCD6 /* TermuctiveApp.swift */,
 				55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */,
+				B953FCC9EBD2B0D7CEBF1018 /* Cloud */,
 				74B40BC5273C7FA80A5E3083 /* Editor */,
 				008C604A09F300290B3DCF2A /* Models */,
 				384841870DD9B385C7E463B7 /* Notes */,
@@ -353,6 +443,20 @@
 				44542A5A519C481EFD92EA54 /* Views */,
 			);
 			path = Termuctive;
+			sourceTree = "<group>";
+		};
+		DFFA913EB93BAD5D0F1F2F3E /* SSH */ = {
+			isa = PBXGroup;
+			children = (
+				9CD378D9D5BE3B760404B2D3 /* CloudControlConnection.swift */,
+				6C2D0236D0BD9A74109715DF /* ProcessRunner.swift */,
+				48130A229161958BC31C06AE /* ShellQuoting.swift */,
+				E047767A4224A2CB512199E3 /* SSHCommandRunner.swift */,
+				5E5CA3814AE0D705119464E0 /* SSHConfigRenderer.swift */,
+				D1F8AF730F127D9EDFC48765 /* SSHKeyManager.swift */,
+				DCFE858FDEF114C1BCA0D192 /* SSHPaths.swift */,
+			);
+			path = SSH;
 			sourceTree = "<group>";
 		};
 		EBCF439F5CCBACDE55BCFFAC /* Terminal */ = {
@@ -364,9 +468,19 @@
 				81D1C7B9D692A8C6CC67E621 /* TerminalAgentActivity.swift */,
 				DCBCBC0526D862D530F8AEDE /* TerminalAgentActivityMonitor.swift */,
 				AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */,
+				A62DD72A7F68882DA0DB5868 /* TerminalReconnectPolicy.swift */,
 				A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */,
 			);
 			path = Terminal;
+			sourceTree = "<group>";
+		};
+		EE7055C98D87012A54CDC09E /* Toolkit */ = {
+			isa = PBXGroup;
+			children = (
+				9DD8351760A5262B452444A3 /* CloudToolkitInstaller.swift */,
+				921605C1F74882A9360A476B /* TMCClient.swift */,
+			);
+			path = Toolkit;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -476,10 +590,10 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				D5191C9E3A59CD6A3E9D4493 /* Termuctive */,
 				E7D57CF3148E67ABD55995DB /* TermuctiveAgentFixture */,
-				E9F6BFF730AFAD24C600097A /* TermuctiveTests */,
 				E73E2C7ED7A52CA3E55B88D9 /* TermuctiveWrapperFixture */,
+				D5191C9E3A59CD6A3E9D4493 /* Termuctive */,
+				E9F6BFF730AFAD24C600097A /* TermuctiveTests */,
 			);
 		};
 /* End PBXProject section */
@@ -493,6 +607,7 @@
 				B4FDEAFEECFCE89EDCDB0F40 /* LICENSE in Resources */,
 				2B1BD699F66EE2910D871C19 /* THIRD_PARTY_NOTICES.md in Resources */,
 				AB094E7B3BB14654DDC4023A /* termuctive-learning-pdf in Resources */,
+				3A61D3FA73245F79D3CC4F98 /* termuctive-server in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -509,11 +624,20 @@
 				6D3FB4E87F76EA91639B7154 /* AppearanceSettings.swift in Sources */,
 				1BBA8945F77B0783C4B3C55D /* AppearanceSettingsView.swift in Sources */,
 				756546AEC0833D5366B1FEFE /* ApplicationLifecycle.swift in Sources */,
+				E942E734688EE459913B085F /* CloudControlConnection.swift in Sources */,
+				59CC9A9051655AAE1BB11A45 /* CloudModels.swift in Sources */,
+				2E2CC7AEE75A4E6A043D23C2 /* CloudServerSetupSheet.swift in Sources */,
+				ADAD1B6C95E3413D811547AA /* CloudSessionCoordinator.swift in Sources */,
+				D3BE00246D7DC2D5FD0D0CF2 /* CloudStore.swift in Sources */,
+				4E541E163DBAB7788A6000FD /* CloudTerminalLauncher.swift in Sources */,
+				D6D0D50AF84BB0F4CDBD0A56 /* CloudToolkitInstaller.swift in Sources */,
 				8CEC8718F273FE81C7860197 /* CodeEditorView.swift in Sources */,
+				EC10C6B193F0DC7CE32F1123 /* ConnectToCloudFolderSheet.swift in Sources */,
 				4E14C04A360FFAC7566B8A48 /* EditorDocumentBuffer.swift in Sources */,
 				302A072D04C87EEA57B49B00 /* EditorFileSystem.swift in Sources */,
 				12D3E55E6022C1E6195A8901 /* EditorPaneView.swift in Sources */,
 				69720620AF7C6CAE0F0C7C9C /* EditorSessionPool.swift in Sources */,
+				EB036A759CE48CD4DEA9914F /* EmbeddedTerminal.swift in Sources */,
 				BEB1CE16AA3870EA44E435F0 /* InterfaceComponents.swift in Sources */,
 				4FA2A817A915D6D914CCE3C4 /* LearningPDF.swift in Sources */,
 				680BE3962F965E6FE22F8540 /* NoteDocument.swift in Sources */,
@@ -527,13 +651,21 @@
 				6057584FA9BADB24B356BC77 /* PDFPreview.swift in Sources */,
 				6367DCA53C3632194454440A /* PaneLayout.swift in Sources */,
 				1A9EE08C743BE519896C8649 /* PaneTreeView.swift in Sources */,
+				348DAA7AA8E58DBDBBABCE01 /* ProcessRunner.swift in Sources */,
 				3B0D7447219B91713523C96E /* ProjectNote.swift in Sources */,
 				FE4CC8AE39B1C12D85162A87 /* ProjectNoteView.swift in Sources */,
 				A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */,
+				C68C2D6D8E20D74CE0A4EF45 /* SSHCommandRunner.swift in Sources */,
+				8B77466AC511C5DC7EBE3BA9 /* SSHConfigRenderer.swift in Sources */,
+				5E40E809A45A56A6A5BBB3C3 /* SSHKeyManager.swift in Sources */,
+				996141D83167C7CFB5AD2D30 /* SSHPaths.swift in Sources */,
+				94774D482F6D6A868E5A2BA8 /* ShellQuoting.swift in Sources */,
 				7FCC7165ADE500F646F4A760 /* SidebarDisclosureSection.swift in Sources */,
+				E262891FA49FAD8353048295 /* TMCClient.swift in Sources */,
 				07A053EBAB97934575D8ADA2 /* TerminalAgentActivity.swift in Sources */,
 				4CE61662CADA79BBEC33A3C4 /* TerminalAgentActivityMonitor.swift in Sources */,
 				7B4B4C22F2ABFEAAF52AE48E /* TerminalHostView.swift in Sources */,
+				B5BDFB0ECB3BCF5BB08D5ACE /* TerminalReconnectPolicy.swift in Sources */,
 				70B35C0392C0A9E12418F603 /* TerminalSessionPool.swift in Sources */,
 				0A3FB0F180D5D70047B77E09 /* TerminalSpaceTabStrip.swift in Sources */,
 				1B001D4A34F6BB63CF00B0A7 /* TermuctiveApp.swift in Sources */,
@@ -557,6 +689,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				254FD56E48913C15D84564A7 /* AppearanceSettingsTests.swift in Sources */,
+				FFCCD27E9DB80474999430F5 /* CloudE2ETests.swift in Sources */,
+				3B272DDFA322433334A215B0 /* CloudTestSupport.swift in Sources */,
+				39AB102EF318AF2123723F3E /* CloudTests.swift in Sources */,
 				87D4EAD283ABE12233E1272D /* EditorDocumentBufferTests.swift in Sources */,
 				ECB825F1AAE4F033870CCB45 /* EditorFileSystemTests.swift in Sources */,
 				C197756371BCC22A73475C03 /* EditorSessionPoolTests.swift in Sources */,
@@ -571,6 +706,7 @@
 				25186387237B615DBEFC34E4 /* SmoothSplitViewTests.swift in Sources */,
 				4BDDB2D79E58973A36063AD2 /* TerminalAgentActivityTests.swift in Sources */,
 				CBAFD73B55569F2EE40CB659 /* TerminalEngineIntegrationTests.swift in Sources */,
+				D996A4E3AA058F17EE7CE2A4 /* TerminalLaunchSpecTests.swift in Sources */,
 				55537C6EED8FAC9A59D679B8 /* TerminalLocalCommandTests.swift in Sources */,
 				ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */,
 				E8D378724F95E52BD2513B72 /* WorkspaceFileStoreTests.swift in Sources */,

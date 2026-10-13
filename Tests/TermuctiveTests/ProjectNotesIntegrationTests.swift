@@ -53,13 +53,16 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             sessions.terminateAll()
         }
 
+        let (cloud, cloudStore) = makeTestCloud(store: store)
         let rootView = WorkspaceView(
             store: store,
             sessions: sessions,
             editors: editors,
             notes: notes,
             appearance: appearance,
-            agentActivity: sessions.agentActivityRegistry
+            agentActivity: sessions.agentActivityRegistry,
+            cloud: cloud,
+            cloudStore: cloudStore
         )
         .preferredColorScheme(.dark)
         let hostingView = NSHostingView(rootView: rootView)
@@ -571,6 +574,7 @@ final class ProjectNotesIntegrationTests: XCTestCase {
             sessions.terminateAll()
         }
 
+        let (cloud, cloudStore) = makeTestCloud(store: store)
         let hostingView = NSHostingView(
             rootView: WorkspaceView(
                 store: store,
@@ -578,7 +582,9 @@ final class ProjectNotesIntegrationTests: XCTestCase {
                 editors: editors,
                 notes: notes,
                 appearance: appearance,
-                agentActivity: sessions.agentActivityRegistry
+                agentActivity: sessions.agentActivityRegistry,
+                cloud: cloud,
+                cloudStore: cloudStore
             )
             .preferredColorScheme(.dark)
         )

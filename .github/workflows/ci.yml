@@ -65,6 +65,29 @@ jobs:
             -verify_arch '${{ matrix.architecture }}'
           test -f "$application/Contents/Resources/LICENSE"
           test -f "$application/Contents/Resources/THIRD_PARTY_NOTICES.md"
+          test -f "$application/Contents/Resources/termuctive-server/bootstrap.sh"
+
+  server-toolkit:
+    name: Server toolkit
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install tmux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tmux ncurses-term
+
+      - name: Test
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          LANG: C.UTF-8
+        run: |
+          python3 -m py_compile Resources/termuctive-server/lib/tmc/*.py
+          sh -n Resources/termuctive-server/bootstrap.sh
+          python3 -m unittest discover -s Tests/ServerToolkit -v
 
   universal-release-build:
     name: Universal Release build

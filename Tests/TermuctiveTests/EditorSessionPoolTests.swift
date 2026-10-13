@@ -99,13 +99,16 @@ final class EditorSessionPoolTests: XCTestCase {
         editors.presentEditor(inPaneID: secondPaneID)
         let firstSession = try XCTUnwrap(editors.session(forPaneID: firstPaneID))
         let secondSession = try XCTUnwrap(editors.session(forPaneID: secondPaneID))
+        let (cloud, cloudStore) = makeTestCloud(store: store)
         let workspace = WorkspaceView(
             store: store,
             sessions: sessions,
             editors: editors,
             notes: notes,
             appearance: AppearanceSettings(),
-            agentActivity: activity
+            agentActivity: activity,
+            cloud: cloud,
+            cloudStore: cloudStore
         )
 
         XCTAssertEqual(workspace.renderedEditorPaneIDs, [firstPaneID, secondPaneID])

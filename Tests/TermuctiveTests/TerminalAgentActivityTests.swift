@@ -700,11 +700,14 @@ final class TerminalAgentActivityTests: XCTestCase {
             registry.beginSession(paneID: pane.id, sessionID: sessionID)
             registry.setActivity(.active([.codex]), paneID: pane.id, sessionID: sessionID)
 
+            let (cloud, cloudStore) = makeTestCloud(store: store)
             let sidebar = ProjectSidebar(
                 store: store,
                 editors: EditorSessionPool(store: store),
                 notes: NoteSessionPool(persistence: EmptyAgentNotePersistence()),
                 agentActivity: registry,
+                cloud: cloud,
+                cloudStore: cloudStore,
                 activityIndicatorsVisible: true,
                 chooseProject: {},
                 hideSidebar: {}
