@@ -5,10 +5,25 @@ final class TermuctiveApplicationDelegate: NSObject, NSApplicationDelegate {
     weak var workspaceStore: WorkspaceStore?
     weak var editorSessions: EditorSessionPool?
     weak var noteSessions: NoteSessionPool?
+    weak var cloud: CloudSessionCoordinator?
 
     private var isSavingBeforeTermination = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if !isSavingBeforeTermination, cloud?.activeMove?.isWorking == true {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "A project is still moving to the cloud."
+            alert.informativeText =
+                "Quitting stops the copy. Choose Move Project to Cloud again later to "
+                + "continue where it left off."
+            alert.addButton(withTitle: "Keep Copying")
+            alert.addButton(withTitle: "Quit")
+            guard alert.runModal() == .alertSecondButtonReturn else {
+                return .terminateCancel
+            }
+            cloud?.activeMove?.cancel()
+        }
         let hasUnsavedContent =
             editorSessions?.hasUnsavedChanges == true
             || noteSessions?.hasUnsavedChanges == true

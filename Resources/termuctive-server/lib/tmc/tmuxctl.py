@@ -76,7 +76,18 @@ def session_environment(slug: str, pane: str) -> Dict[str, str]:
     return environment
 
 
-def attach(slug: str, pane: str, cwd: Optional[str], protocol: Optional[int], user: str) -> int:
+def attach(
+    slug: str,
+    pane: str,
+    cwd: Optional[str],
+    protocol: Optional[int],
+    user: str,
+    command: Optional[str] = None,
+) -> int:
+    """Attaches to the pane's session, creating it if needed.
+
+    `command` only runs when the session is created; the login shell takes over after it.
+    """
     if protocol is not None and protocol != PROTOCOL:
         print(
             f"This server runs Termuctive toolkit protocol {PROTOCOL}, "
@@ -99,10 +110,10 @@ def attach(slug: str, pane: str, cwd: Optional[str], protocol: Optional[int], us
     environment = session_environment(slug, pane)
     name = session_name(pane)
     if has_session(slug, user, pane):
-        command = tmux_command(slug, user, "attach-session", "-t", "=" + name)
+        arguments = tmux_command(slug, user, "attach-session", "-t", "=" + name)
     else:
         directory = starting_directory(slug, cwd)
-        command = tmux_command(
+        arguments = tmux_command(
             slug,
             user,
             "new-session",
@@ -116,7 +127,9 @@ def attach(slug: str, pane: str, cwd: Optional[str], protocol: Optional[int], us
             "-e",
             f"TMC_PROJECT={slug}",
         )
-    subprocess.call(command, env=environment)
+        if command:
+            arguments.append(f'{command}; exec "${{SHELL:-/bin/bash}}" -l')
+    subprocess.call(arguments, env=environment)
     return EXIT_DETACHED if has_session(slug, user, pane) else EXIT_SHELL_ENDED
 
 

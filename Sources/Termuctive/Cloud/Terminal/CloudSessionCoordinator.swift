@@ -6,6 +6,7 @@ import Network
 enum CloudFlow: Identifiable, Equatable {
     case setUpServer
     case connectProject(UUID)
+    case moveProject(UUID)
 
     var id: String {
         switch self {
@@ -13,6 +14,8 @@ enum CloudFlow: Identifiable, Equatable {
             "setUpServer"
         case .connectProject(let projectID):
             "connectProject-\(projectID.uuidString)"
+        case .moveProject(let projectID):
+            "moveProject-\(projectID.uuidString)"
         }
     }
 }
@@ -23,15 +26,20 @@ enum CloudFlow: Identifiable, Equatable {
 final class CloudSessionCoordinator: ObservableObject {
     @Published var presentedFlow: CloudFlow?
     @Published private(set) var errorMessage: String?
+    /// The move in progress, kept alive if its sheet closes so copying can continue.
+    @Published var activeMove: ProjectMove?
 
     let cloudStore: CloudStore
     let paths: SSHPaths
     let runner: any CloudCommandRunning
     let control: any CloudControlling
+    let ports: CloudPortForwarder
 
     private let store: WorkspaceStore
     private weak var sessions: TerminalSessionPool?
     private var cloudPaneProjects: [UUID: UUID] = [:]
+    /// Commands a new cloud pane runs when its server session is first created.
+    private var initialCommands: [UUID: String] = [:]
     private var cancellables: Set<AnyCancellable> = []
     private var wakeObserver: NSObjectProtocol?
     private var pathMonitor: NWPathMonitor?
@@ -51,7 +59,9 @@ final class CloudSessionCoordinator: ObservableObject {
         self.cloudStore = cloudStore
         self.paths = paths
         self.runner = runner ?? SSHCommandRunner(paths: paths)
-        self.control = control ?? CloudControlConnection(paths: paths)
+        let control = control ?? CloudControlConnection(paths: paths)
+        self.control = control
+        ports = CloudPortForwarder(cloudStore: cloudStore, runner: self.runner, control: control)
         self.observesSystemEvents = observesSystemEvents
         cloudPaneProjects = currentCloudPaneProjects()
 
@@ -64,6 +74,7 @@ final class CloudSessionCoordinator: ObservableObject {
             .store(in: &cancellables)
         if observesSystemEvents {
             observeSystemEvents()
+            ports.start()
         }
     }
 
@@ -85,8 +96,19 @@ final class CloudSessionCoordinator: ObservableObject {
             return .localShell
         }
         return .remote(
-            CloudTerminalLauncher.launch(host: host, binding: binding, pane: pane, paths: paths)
+            CloudTerminalLauncher.launch(
+                host: host,
+                binding: binding,
+                pane: pane,
+                paths: paths,
+                initialCommand: initialCommands.removeValue(forKey: pane.id)
+            )
         )
+    }
+
+    /// Runs `command` in a cloud pane the first time its server session starts.
+    func queueInitialCommand(_ command: String, forPaneID paneID: UUID) {
+        initialCommands[paneID] = command
     }
 
     func isCloudProject(_ projectID: UUID) -> Bool {
@@ -203,6 +225,7 @@ final class CloudSessionCoordinator: ObservableObject {
                 return
             }
             await control.resetAll(aliases: aliases)
+            self?.ports.connectionsReset()
             self?.sessions?.relaunchRemotePanes()
         }
     }

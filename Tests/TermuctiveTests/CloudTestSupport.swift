@@ -46,6 +46,8 @@ struct NoOpCloudControl: CloudControlling {
     func ensureMaster(alias: String) async {}
     func reset(alias: String) async {}
     func resetAll(aliases: [String]) async {}
+    func forward(port: Int, alias: String) async -> Bool { true }
+    func cancelForward(port: Int, alias: String) async {}
 }
 
 func makeTemporarySSHPaths() -> SSHPaths {

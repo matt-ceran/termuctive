@@ -61,6 +61,7 @@ struct TermuctiveApp: App {
                 applicationDelegate.workspaceStore = store
                 applicationDelegate.editorSessions = editors
                 applicationDelegate.noteSessions = notes
+                applicationDelegate.cloud = cloud
             }
             .onChange(of: appearance.terminalTheme) { _, theme in
                 sessions.setTerminalTheme(theme)
@@ -282,6 +283,14 @@ struct TermuctiveApp: App {
 
                 Divider()
 
+                Button("Move Project to Cloud...") {
+                    guard let projectID = selectedLocalProjectID else {
+                        return
+                    }
+                    cloud.presentedFlow = .moveProject(projectID)
+                }
+                .disabled(selectedLocalProjectID == nil)
+
                 Button("Connect Project to Cloud Folder...") {
                     guard let projectID = selectedLocalProjectID else {
                         return
@@ -307,6 +316,8 @@ struct TermuctiveApp: App {
                     cloud.reconnectAll()
                 }
                 .disabled(cloudStore.boundProjectIDs.isEmpty)
+
+                CloudPortsMenu(ports: cloud.ports)
             }
 
             CommandMenu("Appearance") {
@@ -450,5 +461,22 @@ enum FocusedDocumentSaveTarget: Equatable {
             return .note(selectedNoteID)
         }
         return .none
+    }
+}
+
+private struct CloudPortsMenu: View {
+    @ObservedObject var ports: CloudPortForwarder
+
+    var body: some View {
+        if !ports.forwards.isEmpty {
+            Divider()
+            ForEach(ports.forwards, id: \.self) { forward in
+                Button("Open localhost:\(forward.port) (\(forward.command))") {
+                    if let url = URL(string: "http://localhost:\(forward.port)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
+        }
     }
 }

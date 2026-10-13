@@ -112,6 +112,69 @@ enum ProcessRunner {
     }
 }
 
+extension ProcessRunner {
+    /// Runs a program, reporting its output as it arrives. Cancelling the calling task
+    /// terminates the program.
+    static func stream(
+        _ executable: String,
+        _ arguments: [String],
+        environment: [String: String]? = nil,
+        onOutput: @escaping @Sendable (String) -> Void
+    ) async throws -> ProcessResult {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        if let environment {
+            process.environment = environment
+        }
+        process.standardInput = FileHandle.nullDevice
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        let errors = DataCollector(errorPipe.fileHandleForReading)
+        let finished = DispatchGroup()
+        finished.enter()
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                finished.leave()
+            } else {
+                onOutput(String(decoding: data, as: UTF8.self))
+            }
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try process.run()
+                    } catch {
+                        outputPipe.fileHandleForReading.readabilityHandler = nil
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    process.waitUntilExit()
+                    finished.wait()
+                    continuation.resume(
+                        returning: ProcessResult(
+                            status: process.terminationStatus,
+                            output: Data(),
+                            error: errors.finish(),
+                            timedOut: false
+                        )
+                    )
+                }
+            }
+        } onCancel: {
+            if process.isRunning {
+                process.terminate()
+            }
+        }
+    }
+}
+
 private final class DataCollector: @unchecked Sendable {
     private let group = DispatchGroup()
     private var data = Data()

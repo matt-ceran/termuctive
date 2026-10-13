@@ -126,6 +126,30 @@ class TmuxSessionTests(support.TemporaryServerRoot):
         self.assertEqual(code, tmuxctl.EXIT_SHELL_ENDED)
         self.assertIn("REMEMBER-ME", output)
 
+    def test_a_first_command_runs_only_when_the_session_is_created(self) -> None:
+        marker = self.directory / "runs.txt"
+        arguments = self.attach_arguments() + [
+            "--command",
+            f"echo ran >> '{marker}'; echo FIRST-DONE",
+        ]
+
+        def detach(_descriptor):
+            subprocess.run(
+                tmuxctl.tmux_command(self.slug, self.user, "detach-client", "-s", "tmc-" + self.pane),
+                check=True,
+            )
+
+        code, _ = run_attached(arguments, self.environment, [("FIRST-DONE", detach)])
+        self.assertEqual(code, tmuxctl.EXIT_DETACHED)
+
+        code, _ = run_attached(
+            arguments,
+            self.environment,
+            [("FIRST-DONE", lambda fd: os.write(fd, b"exit\r"))],
+        )
+        self.assertEqual(code, tmuxctl.EXIT_SHELL_ENDED)
+        self.assertEqual(marker.read_text().splitlines(), ["ran"])
+
     def test_kill_ends_a_detached_session(self) -> None:
         subprocess.run(
             tmuxctl.tmux_command(

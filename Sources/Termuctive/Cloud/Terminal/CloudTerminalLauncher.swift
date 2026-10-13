@@ -6,12 +6,14 @@ enum CloudTerminalLauncher {
         host: CloudHost,
         binding: CloudProjectBinding,
         pane: TerminalPane,
-        paths: SSHPaths
+        paths: SSHPaths,
+        initialCommand: String? = nil
     ) -> RemoteTerminalLaunch {
         let remoteCommand = TMCClient.attachCommand(
             slug: binding.slug,
             paneID: pane.id,
-            workingDirectory: pane.workingDirectory
+            workingDirectory: pane.workingDirectory,
+            initialCommand: initialCommand
         )
         return RemoteTerminalLaunch(
             executable: "/usr/bin/ssh",
