@@ -150,7 +150,37 @@ def user_add(name: str, home: str, key: str) -> Dict[str, object]:
     write_sudoers(f"termuctive-member-{name}", member_sudoers_rule(name))
     if has_systemd() and shutil.which("loginctl"):
         proc.run(["loginctl", "enable-linger", name], check=False)
+    enable_dispatch(name)
     return {"user": name, "home": home, "created": created}
+
+
+DISPATCH_UNIT = "/etc/systemd/system/termuctive-dispatch@.service"
+
+
+def dispatch_unit() -> str:
+    return (
+        "[Unit]\n"
+        "Description=Termuctive task dispatcher for %i\n"
+        "After=network-online.target\n\n"
+        "[Service]\n"
+        "User=%i\n"
+        f"ExecStart={paths.stable_tmc()} dispatch --interval 3\n"
+        "Restart=always\n"
+        "RestartSec=5\n\n"
+        "[Install]\n"
+        "WantedBy=multi-user.target\n"
+    )
+
+
+def enable_dispatch(user: str) -> None:
+    """Delivers teammates' tasks to this member's sessions even when no Mac is connected."""
+    if not has_systemd():
+        return
+    unit = Path(DISPATCH_UNIT)
+    if not unit.exists() or unit.read_text() != dispatch_unit():
+        unit.write_text(dispatch_unit())
+        proc.run(["systemctl", "daemon-reload"], check=False)
+    proc.run(["systemctl", "enable", "--now", f"termuctive-dispatch@{user}.service"], check=False)
 
 
 def grant_admin(name: str) -> None:

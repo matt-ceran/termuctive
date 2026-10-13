@@ -323,12 +323,24 @@ struct TeamSheet: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var report: TeamReport?
+    @State private var tasks: [BoardTask] = []
+    @State private var autoRun = true
+    @State private var recipient = ""
+    @State private var taskTitle = ""
+    @State private var taskDetails = ""
+    @State private var isSending = false
     @State private var failure: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Team")
-                .font(.title2.weight(.semibold))
+            HStack {
+                Text("Team")
+                    .font(.title2.weight(.semibold))
+                Spacer()
+                Toggle("Run teammates' tasks automatically", isOn: autoRunBinding)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+            }
             if let report {
                 List {
                     ForEach(report.members, id: \.user) { member in
@@ -341,6 +353,18 @@ struct TeamSheet: View {
                                 sessionRow(session, member: member)
                             }
                         }
+                    }
+                    Section("Tasks") {
+                        if tasks.isEmpty {
+                            Text("No tasks yet. Agents hand work over with the termuctive tools.")
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(tasks.reversed()) { task in
+                            taskRow(task)
+                        }
+                    }
+                    Section("Send a task") {
+                        compose(report)
                     }
                 }
             } else if failure == nil {
@@ -365,7 +389,7 @@ struct TeamSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 560, height: 520)
+        .frame(width: 620, height: 640)
         .task {
             await load()
         }
@@ -405,12 +429,98 @@ struct TeamSheet: View {
         }
     }
 
+    private var autoRunBinding: Binding<Bool> {
+        Binding(
+            get: { autoRun },
+            set: { enabled in
+                autoRun = enabled
+                Task {
+                    try? await service.setAutoRun(enabled, projectID: projectID)
+                }
+            }
+        )
+    }
+
+    private var service: CollaborationService {
+        CollaborationService(cloud: cloud, store: store)
+    }
+
+    private func taskRow(_ task: BoardTask) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(task.title)
+                    .lineLimit(2)
+                Spacer()
+                Text(task.status.capitalized)
+                    .font(.caption)
+                    .foregroundStyle(task.isOpen ? Color.accentColor : .secondary)
+            }
+            Text("\(task.from) → \(task.assignee ?? (task.to == "*" ? "anyone" : task.to))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let result = task.result {
+                Text(result)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func compose(_ report: TeamReport) -> some View {
+        let others = report.members.filter { !$0.isYou }.map(\.user)
+        Picker("To", selection: $recipient) {
+            ForEach(others, id: \.self) { member in
+                Text(member).tag(member)
+            }
+            Text("Anyone").tag("*")
+        }
+        .onAppear {
+            if recipient.isEmpty {
+                recipient = others.first ?? "*"
+            }
+        }
+        TextField("Task", text: $taskTitle, prompt: Text("Add tests for the login retry logic"))
+        TextField("Details for the agent", text: $taskDetails, axis: .vertical)
+            .lineLimit(3...6)
+        HStack {
+            Spacer()
+            Button(isSending ? "Sending..." : "Send Task") {
+                Task {
+                    await send()
+                }
+            }
+            .disabled(isSending || taskTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+    }
+
+    private func send() async {
+        isSending = true
+        defer {
+            isSending = false
+        }
+        do {
+            try await service.postTask(
+                projectID: projectID,
+                to: recipient.isEmpty ? "*" : recipient,
+                title: taskTitle,
+                details: taskDetails
+            )
+            taskTitle = ""
+            taskDetails = ""
+            tasks = try await service.tasks(projectID: projectID)
+        } catch {
+            failure = error.localizedDescription
+        }
+    }
+
     private func load() async {
         failure = nil
         do {
-            report = try await CollaborationService(cloud: cloud, store: store).team(
-                projectID: projectID
-            )
+            report = try await service.team(projectID: projectID)
+            tasks = try await service.tasks(projectID: projectID)
+            autoRun = try await service.autoRun(projectID: projectID)
         } catch {
             failure = error.localizedDescription
         }

@@ -8,6 +8,7 @@ from . import (
     PROTOCOL,
     VERSION,
     admin,
+    board,
     checklist,
     claudecfg,
     collab,
@@ -15,6 +16,7 @@ from . import (
     finalize,
     hooks,
     hydrate,
+    mcp,
     memory,
     ports,
     proc,
@@ -100,6 +102,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     refs = commands.add_parser("import-refs", help="adopt branches a member pushed")
     refs.add_argument("--root", required=True)
+
+    commands.add_parser("mcp", help="Model Context Protocol server for Claude Code")
+
+    task = commands.add_parser("task", help="the team task board")
+    task.add_argument("action", choices=["post", "list", "update"])
+    task.add_argument("--slug", required=True)
+    task.add_argument("--to")
+    task.add_argument("--title")
+    task.add_argument("--details", default="")
+    task.add_argument("--message", action="store_true")
+    task.add_argument("--id")
+    task.add_argument("--status", choices=["started", "completed", "declined"])
+    task.add_argument("--result")
+
+    autorun = commands.add_parser("autorun", help="run teammates' tasks automatically")
+    autorun.add_argument("state", choices=["on", "off", "status"])
+    autorun.add_argument("--slug", required=True)
+
+    dispatcher = commands.add_parser("dispatch", help="deliver teammates' tasks to idle sessions")
+    dispatcher.add_argument("--slug")
+    dispatcher.add_argument("--once", action="store_true")
+    dispatcher.add_argument("--interval", type=float, default=3.0)
 
     server = commands.add_parser("setup", help="prepare this server (root)")
     server.add_argument("--admin-user", required=True)
@@ -240,6 +264,24 @@ def dispatch(arguments: argparse.Namespace) -> int:
     if command == "memory":
         emit(memory.merge_into_shared(arguments.slug, arguments.source, arguments.into))
         return 0
+    if command == "mcp":
+        return mcp.serve()
+    if command == "task":
+        return dispatch_task(arguments)
+    if command == "autorun":
+        slug = validate.slug(arguments.slug)
+        if arguments.state != "status":
+            board.set_auto_run(slug, proc.caller(), arguments.state == "on")
+        emit({"autoRun": board.auto_run(slug, proc.caller())})
+        return 0
+    if command == "dispatch":
+        user = proc.caller()
+        if arguments.once:
+            slugs = [validate.slug(arguments.slug)] if arguments.slug else board.projects_for(user)
+            emit({slug: board.dispatch_once(slug, user) for slug in slugs})
+            return 0
+        board.dispatch_forever(user, arguments.interval)
+        return 0
     if command == "import-refs":
         emit(collab.import_refs(arguments.root, proc.caller()))
         return 0
@@ -266,6 +308,29 @@ def dispatch(arguments: argparse.Namespace) -> int:
     if command == "admin":
         return dispatch_admin(arguments)
     raise AssertionError(f"unhandled command {command}")
+
+
+def dispatch_task(arguments: argparse.Namespace) -> int:
+    slug = validate.slug(arguments.slug)
+    user = proc.caller()
+    if arguments.action == "post":
+        emit(
+            board.post(
+                slug,
+                user,
+                arguments.to or "",
+                arguments.title or "",
+                arguments.details,
+                kind="message" if arguments.message else "task",
+            )
+        )
+    elif arguments.action == "list":
+        emit(board.tasks(slug))
+    else:
+        if not arguments.id or not arguments.status:
+            raise validate.ValidationError("update needs --id and --status")
+        emit(board.update(slug, user, arguments.id, arguments.status, result=arguments.result))
+    return 0
 
 
 def dispatch_admin(arguments: argparse.Namespace) -> int:

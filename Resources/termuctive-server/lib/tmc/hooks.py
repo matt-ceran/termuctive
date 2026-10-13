@@ -40,6 +40,11 @@ def read_event() -> Dict[str, object]:
     return value if isinstance(value, dict) else {}
 
 
+def emit_json(payload: Dict[str, object]) -> None:
+    sys.stdout.write(json.dumps(payload))
+    sys.stdout.flush()
+
+
 def handle(event_name: str) -> int:
     context = pane_context()
     if context is None:
@@ -57,10 +62,10 @@ def handle(event_name: str) -> int:
         claude["sessionId"] = event["session_id"]
 
     if event_name == "session-start":
-        claude.update({"state": "idle", "ended": False, "startedAt": time.time()})
+        claude.update({"state": "idle", "ended": False, "startedAt": time.time(), "chained": 0})
     elif event_name == "prompt":
         prompt = event.get("prompt")
-        claude.update({"state": "working", "ended": False, "promptAt": time.time()})
+        claude.update({"state": "working", "ended": False, "promptAt": time.time(), "chained": 0})
         if isinstance(prompt, str):
             claude["lastPrompt"] = " ".join(prompt.split())[:200]
     elif event_name == "notification":
@@ -78,7 +83,38 @@ def handle(event_name: str) -> int:
         claude.update({"state": "ended", "ended": True})
     changes["claude"] = claude
     sessionstate.update(slug, user, pane, changes)
+    respond_for_team(event_name, event, slug, user, pane)
     return 0
+
+
+def respond_for_team(
+    event_name: str, event: Dict[str, object], slug: str, user: str, pane: str
+) -> None:
+    """Connects the session to teammates: context at start, handed-over work at stops."""
+    from . import board, mcp
+
+    if event_name == "session-start":
+        text = mcp.team_context(slug, user)
+        if text:
+            emit_json(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "SessionStart",
+                        "additionalContext": text,
+                    }
+                }
+            )
+    elif event_name == "stop":
+        state = sessionstate.load(slug, user, pane) or {}
+        claude = state.get("claude") if isinstance(state.get("claude"), dict) else {}
+        chained = int(claude.get("chained", 0)) if event.get("stop_hook_active") else 0
+        if chained >= 3:
+            return
+        text = board.next_for_stop_hook(slug, user, pane)
+        if text:
+            claude = dict(claude, state="working", chained=chained + 1)
+            sessionstate.update(slug, user, pane, {"claude": claude})
+            emit_json({"decision": "block", "reason": text})
 
 
 # Installing the hooks into the member's Claude settings.
@@ -111,7 +147,18 @@ def is_termuctive_group(group: object) -> bool:
     )
 
 
+def register_mcp_server(config_path: Optional[Path] = None) -> None:
+    """Adds the termuctive tools to Claude Code for this account (user scope)."""
+    target = config_path or Path(os.path.expanduser("~/.claude.json"))
+    config = read_json(target, {}) or {}
+    servers = config.get("mcpServers") if isinstance(config.get("mcpServers"), dict) else {}
+    servers["termuctive"] = {"type": "stdio", "command": str(paths.stable_tmc()), "args": ["mcp"]}
+    config["mcpServers"] = servers
+    write_json_atomic(target, config, mode=0o600)
+
+
 def install(settings_path: Optional[Path] = None) -> Dict[str, object]:
+    register_mcp_server()
     target = settings_path or Path(os.path.expanduser("~/.claude/settings.json"))
     settings = read_json(target, {}) or {}
     hooks = settings.get("hooks") if isinstance(settings.get("hooks"), dict) else {}
