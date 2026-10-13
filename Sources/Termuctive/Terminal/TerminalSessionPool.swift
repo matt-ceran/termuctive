@@ -181,6 +181,10 @@ final class TerminalSessionPool: ObservableObject {
         guard !pdfSearchPaneIDs.contains(paneID) else {
             return
         }
+        if let session = sessions[paneID], let target = session.launch.remote?.uploadTarget {
+            moveRemotePDF(from: session, target: target, placement: placement)
+            return
+        }
 
         if let visiblePDF = sessions[paneID]?.mostRecentVisiblePDF() {
             rememberPDF(visiblePDF, forPaneID: paneID)
@@ -385,14 +389,60 @@ final class TerminalSessionPool: ObservableObject {
         }
     }
 
-    private func perform(_ command: TerminalLocalCommand, fromPaneID paneID: UUID) {
-        if sessions[paneID]?.launch.remote != nil {
-            store.presentError("PDF panes are not available for cloud terminals yet.")
-            return
+    /// Shows a PDF made on a cloud server: the one printed most recently in the pane, or
+    /// the newest one in its folders, downloaded to this Mac first.
+    private func moveRemotePDF(
+        from session: TerminalSession,
+        target: RemoteUploadTarget,
+        placement: PDFPanePlacement
+    ) {
+        let paneID = session.paneID
+        let visible = session.visiblePDFPaths()
+        let roots = store.pdfSearchRoots(forPaneID: paneID).map(\.path)
+        let since = session.startedAt.addingTimeInterval(-1)
+        pdfSearchPaneIDs.insert(paneID)
+        Task { [weak self] in
+            var downloaded: URL?
+            for path in visible.reversed() {
+                downloaded = await RemoteDownload.download(path, from: target)
+                if downloaded != nil {
+                    break
+                }
+            }
+            if downloaded == nil {
+                for root in roots {
+                    if let path = await RemoteDownload.newestPDF(
+                        under: root, since: since, on: target)
+                    {
+                        downloaded = await RemoteDownload.download(path, from: target)
+                        break
+                    }
+                }
+            }
+            guard let self else {
+                return
+            }
+            pdfSearchPaneIDs.remove(paneID)
+            guard let downloaded else {
+                store.presentError(
+                    "No PDF created during this terminal session was found on the server."
+                )
+                return
+            }
+            presentPDF(downloaded, fromPaneID: paneID, placement: placement)
         }
+    }
+
+    private func perform(_ command: TerminalLocalCommand, fromPaneID paneID: UUID) {
         switch command {
         case .makeLearningPDF:
             guard let session = sessions[paneID] else {
+                return
+            }
+            if session.launch.remote != nil {
+                session.submitApplicationLine(
+                    LearningPDFRequest.prompt(skillURL: CloudToolkit.serverLearningPDFSkillURL)
+                )
                 return
             }
             guard let skillURL = LearningPDFRequest.bundledSkillURL else {
@@ -1341,6 +1391,19 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         view.submitApplicationLine(line)
     }
 
+    /// PDF paths printed in this terminal, for panes whose files are on a server.
+    func visiblePDFPaths() -> [String] {
+        let output = String(
+            decoding: view.getTerminal().getBufferAsData(),
+            as: UTF8.self
+        )
+        return TerminalOutputPDFTracker.detectedURLs(
+            in: output,
+            workingDirectory: pane.workingDirectory,
+            requiresLocalFile: false
+        ).map(\.path)
+    }
+
     func mostRecentVisiblePDF() -> URL? {
         let output = String(
             decoding: view.getTerminal().getBufferAsData(),
@@ -1487,6 +1550,9 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     }
 
     private func trackPDFs(in bytes: ArraySlice<UInt8>) {
+        guard launch.remote == nil else {
+            return
+        }
         let urls = outputPDFTracker.consume(
             bytes,
             workingDirectory: pane.workingDirectory

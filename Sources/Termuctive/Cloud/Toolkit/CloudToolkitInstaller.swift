@@ -26,6 +26,15 @@ struct CloudToolkit: Equatable {
         return toolkit
     }
 
+    /// The learning PDF skill is installed with the toolkit so cloud panes can use /makepdf.
+    static let serverLearningPDFSkillURL = URL(
+        fileURLWithPath: "/opt/termuctive/current/termuctive-learning-pdf/SKILL.md"
+    )
+
+    var learningPDFDirectory: URL {
+        directory.deletingLastPathComponent().appendingPathComponent("termuctive-learning-pdf")
+    }
+
     var bootstrapURL: URL {
         directory.appendingPathComponent("bootstrap.sh")
     }

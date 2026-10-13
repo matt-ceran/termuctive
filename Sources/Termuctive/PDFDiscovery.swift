@@ -137,7 +137,8 @@ struct TerminalOutputPDFTracker {
 
     static func detectedURLs(
         in output: String,
-        workingDirectory: String
+        workingDirectory: String,
+        requiresLocalFile: Bool = true
     ) -> [URL] {
         let visibleOutput = removingANSISequences(from: output)
         let searchRange = NSRange(visibleOutput.startIndex..., in: visibleOutput)
@@ -164,7 +165,13 @@ struct TerminalOutputPDFTracker {
             guard !acceptedRanges.contains(where: { rangeContains($0, candidate.range) }) else {
                 continue
             }
-            guard let url = resolve(candidate.value, workingDirectory: workingDirectory) else {
+            guard
+                let url = resolve(
+                    candidate.value,
+                    workingDirectory: workingDirectory,
+                    requiresLocalFile: requiresLocalFile
+                )
+            else {
                 continue
             }
             acceptedRanges.append(candidate.range)
@@ -216,9 +223,12 @@ struct TerminalOutputPDFTracker {
         return nil
     }
 
+    /// Turns a path printed in a terminal into a PDF URL. Paths printed by programs on a
+    /// cloud server are taken as they are, since the file is not on this Mac.
     private static func resolve(
         _ candidate: String,
-        workingDirectory: String
+        workingDirectory: String,
+        requiresLocalFile: Bool = true
     ) -> URL? {
         let decoded = candidate.removingPercentEncoding ?? candidate
         let url: URL
@@ -238,6 +248,11 @@ struct TerminalOutputPDFTracker {
         }
 
         let standardizedURL = url.standardizedFileURL
+        guard requiresLocalFile else {
+            // Server homes mirror the Mac home folder, so `~/` resolves the same way.
+            return standardizedURL.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+                ? standardizedURL : nil
+        }
         var isDirectory: ObjCBool = false
         guard standardizedURL.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame,
             FileManager.default.fileExists(

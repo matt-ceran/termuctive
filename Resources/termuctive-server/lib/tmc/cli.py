@@ -14,6 +14,7 @@ from . import (
     collab,
     doctor,
     finalize,
+    fs,
     hooks,
     hydrate,
     mcp,
@@ -104,6 +105,13 @@ def build_parser() -> argparse.ArgumentParser:
     refs.add_argument("--root", required=True)
 
     commands.add_parser("mcp", help="Model Context Protocol server for Claude Code")
+
+    files = commands.add_parser("fs", help="file access for the editor and PDF panes")
+    files.add_argument("action", choices=["tree", "read", "write", "digests", "recent-pdf"])
+    files.add_argument("--root")
+    files.add_argument("--path")
+    files.add_argument("--expect")
+    files.add_argument("--since", type=float, default=0)
 
     task = commands.add_parser("task", help="the team task board")
     task.add_argument("action", choices=["post", "list", "update"])
@@ -266,6 +274,8 @@ def dispatch(arguments: argparse.Namespace) -> int:
         return 0
     if command == "mcp":
         return mcp.serve()
+    if command == "fs":
+        return dispatch_fs(arguments)
     if command == "task":
         return dispatch_task(arguments)
     if command == "autorun":
@@ -308,6 +318,23 @@ def dispatch(arguments: argparse.Namespace) -> int:
     if command == "admin":
         return dispatch_admin(arguments)
     raise AssertionError(f"unhandled command {command}")
+
+
+def dispatch_fs(arguments: argparse.Namespace) -> int:
+    action = arguments.action
+    if action == "tree":
+        emit(fs.tree(arguments.root or ""))
+    elif action == "read":
+        emit(fs.read(arguments.path or ""))
+    elif action == "write":
+        if not arguments.expect:
+            raise validate.ValidationError("write needs --expect (a digest, or absent)")
+        emit(fs.write(arguments.path or "", arguments.expect, fs.read_stdin_bytes()))
+    elif action == "digests":
+        emit(fs.digests([line for line in sys.stdin.read().splitlines() if line.strip()]))
+    else:
+        emit(fs.recent_pdf(arguments.root or "", arguments.since))
+    return 0
 
 
 def dispatch_task(arguments: argparse.Namespace) -> int:

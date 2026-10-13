@@ -4,6 +4,7 @@ import Foundation
 final class EditorPaneSession: ObservableObject, Identifiable {
     let id: UUID
     let rootURL: URL
+    let fileSystem: any EditorFileSystemProviding
 
     @Published private(set) var fileTree = EditorFileTreeSnapshot(
         nodes: [],
@@ -18,17 +19,28 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     @Published var pendingCloseBufferID: UUID?
 
     private var watcher: ProjectFileWatcher?
+    private var remoteTreeRefreshTask: Task<Void, Never>?
     private var eventRefreshTask: Task<Void, Never>?
     private var bufferRefreshTask: Task<Void, Never>?
     private var treeRefreshTask: Task<Void, Never>?
     private var treeRefreshGeneration = 0
     private var isPresented = true
 
-    init(paneID: UUID, rootURL: URL) {
+    init(
+        paneID: UUID,
+        rootURL: URL,
+        fileSystem: any EditorFileSystemProviding = LocalEditorFileSystem()
+    ) {
         id = paneID
         self.rootURL = rootURL.standardizedFileURL
+        self.fileSystem = fileSystem
         startWatching()
         refreshFileTree()
+    }
+
+    /// Files on a cloud server have no Finder location.
+    var isRemote: Bool {
+        fileSystem.isRemote
     }
 
     var selectedBuffer: EditorDocumentBuffer? {
@@ -43,7 +55,8 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     }
 
     var isFileActivityRunning: Bool {
-        watcher != nil || treeRefreshTask != nil || bufferRefreshTask != nil
+        watcher != nil || remoteTreeRefreshTask != nil || treeRefreshTask != nil
+            || bufferRefreshTask != nil
     }
 
     func openFile(_ url: URL, collapseNavigator: Bool = false) async {
@@ -61,7 +74,10 @@ final class EditorPaneSession: ObservableObject, Identifiable {
         }
 
         do {
-            let buffer = try await EditorDocumentBuffer.open(url: standardizedURL)
+            let buffer = try await EditorDocumentBuffer.open(
+                url: standardizedURL,
+                fileSystem: fileSystem
+            )
             buffers.append(buffer)
             startBufferRefreshPollingIfNeeded()
             selectedBufferID = buffer.id
@@ -151,18 +167,15 @@ final class EditorPaneSession: ObservableObject, Identifiable {
         treeRefreshGeneration &+= 1
         let generation = treeRefreshGeneration
         let projectRoot = rootURL
+        let fileSystem = fileSystem
         isRefreshingFileTree = true
         treeRefreshTask?.cancel()
         treeRefreshTask = Task { @MainActor [weak self] in
-            let scan = Task.detached(priority: .utility) {
-                Result {
-                    try EditorFileTreeBuilder.build(rootURL: projectRoot)
-                }
-            }
-            let result = await withTaskCancellationHandler {
-                await scan.value
-            } onCancel: {
-                scan.cancel()
+            let result: Result<EditorFileTreeSnapshot, any Error>
+            do {
+                result = .success(try await fileSystem.buildTree(rootURL: projectRoot))
+            } catch {
+                result = .failure(error)
             }
             guard let self,
                 !Task.isCancelled,
@@ -211,6 +224,8 @@ final class EditorPaneSession: ObservableObject, Identifiable {
         eventRefreshTask = nil
         bufferRefreshTask?.cancel()
         bufferRefreshTask = nil
+        remoteTreeRefreshTask?.cancel()
+        remoteTreeRefreshTask = nil
         watcher?.stop()
         watcher = nil
     }
@@ -237,8 +252,23 @@ final class EditorPaneSession: ObservableObject, Identifiable {
 
     private func startWatching() {
         guard isPresented,
-            watcher == nil
+            watcher == nil,
+            remoteTreeRefreshTask == nil
         else {
+            return
+        }
+        if fileSystem.isRemote {
+            // Server folders cannot be watched from here, so the navigator refreshes
+            // periodically while it is on screen.
+            remoteTreeRefreshTask = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 15_000_000_000)
+                    guard let self, !Task.isCancelled else {
+                        return
+                    }
+                    refreshFileTree()
+                }
+            }
             return
         }
         watcher = ProjectFileWatcher(rootURL: rootURL) { [weak self] _ in
@@ -275,9 +305,10 @@ final class EditorPaneSession: ObservableObject, Identifiable {
         else {
             return
         }
+        let interval: UInt64 = fileSystem.isRemote ? 2_000_000_000 : 1_000_000_000
         bufferRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                try? await Task.sleep(nanoseconds: interval)
                 guard let self, !Task.isCancelled else {
                     return
                 }
@@ -289,6 +320,11 @@ final class EditorPaneSession: ObservableObject, Identifiable {
     }
 
     private func isInsideRoot(_ url: URL) -> Bool {
+        guard !fileSystem.isRemote else {
+            let root = rootURL.standardizedFileURL.path
+            let candidate = url.standardizedFileURL.path
+            return candidate == root || candidate.hasPrefix(root + "/")
+        }
         let resolvedRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
         let resolvedCandidate = url.resolvingSymlinksInPath().standardizedFileURL.path
         return resolvedCandidate == resolvedRoot
@@ -305,8 +341,10 @@ final class EditorSessionPool: ObservableObject {
     private var sessions: [UUID: EditorPaneSession] = [:]
     private var visiblePaneIDs: Set<UUID>?
 
-    /// Reports panes whose files live on a cloud server, which the IDE cannot open yet.
-    var isRemotePane: (UUID) -> Bool = { _ in false }
+    /// Supplies the project folder and file access for panes whose files live on a server.
+    var remoteFileSystem: (UUID) -> (rootURL: URL, fileSystem: any EditorFileSystemProviding)? = {
+        _ in nil
+    }
 
     init(store: WorkspaceStore) {
         self.store = store
@@ -346,20 +384,21 @@ final class EditorSessionPool: ObservableObject {
     }
 
     func presentEditor(inPaneID paneID: UUID) {
-        guard !isRemotePane(paneID) else {
-            store.presentError("The IDE is not available for cloud terminals yet.")
-            return
-        }
-        guard let rootURL = store.projectRootURL(forPaneID: paneID) else {
+        let remote = remoteFileSystem(paneID)
+        guard let rootURL = remote?.rootURL ?? store.projectRootURL(forPaneID: paneID) else {
             store.presentError("Termuctive could not identify this pane's project directory.")
             return
         }
+        let fileSystem = remote?.fileSystem ?? LocalEditorFileSystem()
 
-        if sessions[paneID]?.rootURL != rootURL.standardizedFileURL {
+        if sessions[paneID]?.rootURL != rootURL.standardizedFileURL
+            || sessions[paneID]?.isRemote != fileSystem.isRemote
+        {
             sessions.removeValue(forKey: paneID)?.stop()
             sessions[paneID] = EditorPaneSession(
                 paneID: paneID,
-                rootURL: rootURL
+                rootURL: rootURL,
+                fileSystem: fileSystem
             )
         }
         presentedPaneIDs.insert(paneID)

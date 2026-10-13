@@ -36,6 +36,13 @@ Quit Termuctive before running the installer again.
 Each installation stores its workspace structure locally at `~/Library/Application Support/Termuctive/workspace.json` and note documents under `~/Library/Application Support/Termuctive/Notes/`.
 Cloning the repository does not copy another person's projects, terminal history, credentials, or command-line tool accounts.
 
+## Cloud projects
+
+Termuctive can run a project's terminals on an always-on Linux server, such as a spare PC running Ubuntu Server.
+Cloud sessions keep running when Termuctive quits or the Mac sleeps, and collaborators can work in the same project, watch each other's sessions, and let their Claude Code agents hand each other tasks.
+Use the Cloud menu to set up a server, move a project, and invite a collaborator.
+See [docs/CLOUD.md](docs/CLOUD.md) for the full guide.
+
 ## IDE panes
 
 Focus any pane and use its code button, the workspace toolbar, or Pane > Open IDE in Focused Pane to replace that pane with a project editor.
