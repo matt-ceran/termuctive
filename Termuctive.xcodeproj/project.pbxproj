@@ -48,15 +48,18 @@
 		566ED02C6E28AD94CE4E00C7 /* RsyncCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 372D555ED5331D00B9CD330A /* RsyncCommand.swift */; };
 		57F02DD8DCF108D733EEF4D5 /* CloudPortForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 493406CCE6E8BE4CF32028DB /* CloudPortForwarder.swift */; };
 		59CC9A9051655AAE1BB11A45 /* CloudModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4454A23060397C727233587 /* CloudModels.swift */; };
+		5D2D85D5AD10E044674818BB /* CloudActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB059FCF894AFD8B2C09A12 /* CloudActivityTests.swift */; };
 		5E40E809A45A56A6A5BBB3C3 /* SSHKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1F8AF730F127D9EDFC48765 /* SSHKeyManager.swift */; };
 		6057584FA9BADB24B356BC77 /* PDFPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35EA800971A4F8606824C500 /* PDFPreview.swift */; };
 		6367DCA53C3632194454440A /* PaneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB732E6729E4ED88756FCF76 /* PaneLayout.swift */; };
 		680BE3962F965E6FE22F8540 /* NoteDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB240EEF85F9D81D1AEB1094 /* NoteDocument.swift */; };
 		69720620AF7C6CAE0F0C7C9C /* EditorSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDA25954BE817B9B05BBCF51 /* EditorSessionPool.swift */; };
+		6D21DA1002EA2C1FD81A328B /* CloudActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5316428BA8BE5C12186F9B /* CloudActivityBridge.swift */; };
 		6D3FB4E87F76EA91639B7154 /* AppearanceSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C619C2D8D39C031484E264A4 /* AppearanceSettings.swift */; };
 		70B35C0392C0A9E12418F603 /* TerminalSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2096D519D4D18DF2FB81C41 /* TerminalSessionPool.swift */; };
 		756546AEC0833D5366B1FEFE /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268474801E729AD15FCB6E04 /* ApplicationLifecycle.swift */; };
 		7B4B4C22F2ABFEAAF52AE48E /* TerminalHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */; };
+		7C0CF49C71638D0A5CCE05C6 /* RemoteUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94C52C4D50AF06A60BFF1AA5 /* RemoteUpload.swift */; };
 		7E48E74028469562F7000185 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 0AD4E51F30ECDFDC52C0703A /* main.c */; };
 		7FCC7165ADE500F646F4A760 /* SidebarDisclosureSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480CE99E8A7C5B82ED091513 /* SidebarDisclosureSection.swift */; };
 		8066673786E235FF6CF12139 /* MoveToCloudSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1824D7B0C63E726C3711AB30 /* MoveToCloudSheet.swift */; };
@@ -73,6 +76,7 @@
 		9FFD7BD9006355C1A9106158 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F9922A1D0B381EB2421F6C /* WorkspaceStore.swift */; };
 		A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */; };
 		AB094E7B3BB14654DDC4023A /* termuctive-learning-pdf in Resources */ = {isa = PBXBuildFile; fileRef = DC30DF07322466FF56D69CF8 /* termuctive-learning-pdf */; };
+		AC4FA1D31CB23591C2FC2EFA /* CloudNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE0C7CEF4777A42AA2B6D915 /* CloudNotifications.swift */; };
 		ADA48252FE23F1E73DCF7650 /* WorkspaceDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BBC2115D4FA67D260A8F64 /* WorkspaceDocumentTests.swift */; };
 		ADAD1B6C95E3413D811547AA /* CloudSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4373A4C2113674500A9127F9 /* CloudSessionCoordinator.swift */; };
 		AF4C2D0E6E5DDE53EAE8C468 /* WorkspaceDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1060AE3E9453B74F3D74FB48 /* WorkspaceDocument.swift */; };
@@ -100,6 +104,7 @@
 		EC10C6B193F0DC7CE32F1123 /* ConnectToCloudFolderSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D160D2A598B93445880929 /* ConnectToCloudFolderSheet.swift */; };
 		ECB825F1AAE4F033870CCB45 /* EditorFileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8831E1AFCA62E16522DAFF8E /* EditorFileSystemTests.swift */; };
 		F12E5BF6FB6A55FB13886CCA /* NoteDrawingCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37931F7BA5CC587684918890 /* NoteDrawingCanvas.swift */; };
+		F1E41759BFD05FB2DC4AADF8 /* CloudServerStatusSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0381A15F2712C8D67E19F2F /* CloudServerStatusSheet.swift */; };
 		F8565107E46D0225EEDFDFB4 /* NoteSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = F376E8D01414C1D731BF126C /* NoteSessionPool.swift */; };
 		F8F2AC2D67F2E56310D028F3 /* NoteDrawingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87462424D9EC045A563EE104 /* NoteDrawingTests.swift */; };
 		FE4CC8AE39B1C12D85162A87 /* ProjectNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9939468A2BF3818F1590520 /* ProjectNoteView.swift */; };
@@ -190,7 +195,9 @@
 		8831E1AFCA62E16522DAFF8E /* EditorFileSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystemTests.swift; sourceTree = "<group>"; };
 		8AC18E4BDB5763141AF6945A /* EditorFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFileSystem.swift; sourceTree = "<group>"; };
 		8EAC91D81D5D818D2A2981CE /* PaneLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayoutTests.swift; sourceTree = "<group>"; };
+		8FB059FCF894AFD8B2C09A12 /* CloudActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudActivityTests.swift; sourceTree = "<group>"; };
 		921605C1F74882A9360A476B /* TMCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMCClient.swift; sourceTree = "<group>"; };
+		94C52C4D50AF06A60BFF1AA5 /* RemoteUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteUpload.swift; sourceTree = "<group>"; };
 		9B195DC1835EF17E3FE412DD /* EditorPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPaneView.swift; sourceTree = "<group>"; };
 		9B1FAC6497A398F45ED04207 /* ProjectSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSidebar.swift; sourceTree = "<group>"; };
 		9CD378D9D5BE3B760404B2D3 /* CloudControlConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudControlConnection.swift; sourceTree = "<group>"; };
@@ -203,9 +210,11 @@
 		AB0FD1B1292DD9F1333C3EF4 /* ProjectNotesIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNotesIntegrationTests.swift; sourceTree = "<group>"; };
 		AB1DF255E4B43283BC0E0F27 /* TerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHostView.swift; sourceTree = "<group>"; };
 		AEAFFB65D7974634987D889C /* TerminalSpaceTabStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSpaceTabStrip.swift; sourceTree = "<group>"; };
+		AF5316428BA8BE5C12186F9B /* CloudActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudActivityBridge.swift; sourceTree = "<group>"; };
 		B2C0DF5D454E038D1022F125 /* GitInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitInspector.swift; sourceTree = "<group>"; };
 		B6E1A21021BE972DC78E104D /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
 		BE7F6B53575FCFC2475AEDD9 /* termuctive-server */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "termuctive-server"; path = "Resources/termuctive-server"; sourceTree = SOURCE_ROOT; };
+		C0381A15F2712C8D67E19F2F /* CloudServerStatusSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudServerStatusSheet.swift; sourceTree = "<group>"; };
 		C2AC0D63CFFAFA3D2810C3DD /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		C619C2D8D39C031484E264A4 /* AppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettings.swift; sourceTree = "<group>"; };
 		C98D32CBD48EA8A8EA283081 /* NoteImageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteImageAttachment.swift; sourceTree = "<group>"; };
@@ -219,6 +228,7 @@
 		DCFE858FDEF114C1BCA0D192 /* SSHPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHPaths.swift; sourceTree = "<group>"; };
 		DD7C74070A6E0151094CE6FA /* ProjectNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNote.swift; sourceTree = "<group>"; };
 		DDA25954BE817B9B05BBCF51 /* EditorSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionPool.swift; sourceTree = "<group>"; };
+		DE0C7CEF4777A42AA2B6D915 /* CloudNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudNotifications.swift; sourceTree = "<group>"; };
 		E047767A4224A2CB512199E3 /* SSHCommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHCommandRunner.swift; sourceTree = "<group>"; };
 		E2CE11D9C8D9C4D23289C60F /* TerminalEngineIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEngineIntegrationTests.swift; sourceTree = "<group>"; };
 		E33B593F3EC1456EDEB8B0B5 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
@@ -278,6 +288,7 @@
 			isa = PBXGroup;
 			children = (
 				EEA8DBD841EDCDC86C484C4D /* AppearanceSettingsTests.swift */,
+				8FB059FCF894AFD8B2C09A12 /* CloudActivityTests.swift */,
 				EE92DA49792CACA23EEA33B6 /* CloudE2ETests.swift */,
 				2E16490DA00705742365C468 /* CloudTests.swift */,
 				7FB8EE4531EC2DA3B0BDABFC /* CloudTestSupport.swift */,
@@ -371,6 +382,7 @@
 			isa = PBXGroup;
 			children = (
 				1107A7F7FFF77F043A885937 /* CloudServerSetupSheet.swift */,
+				C0381A15F2712C8D67E19F2F /* CloudServerStatusSheet.swift */,
 				78D160D2A598B93445880929 /* ConnectToCloudFolderSheet.swift */,
 				CAC22CE747868F0624F9BF18 /* EmbeddedTerminal.swift */,
 				1824D7B0C63E726C3711AB30 /* MoveToCloudSheet.swift */,
@@ -386,6 +398,15 @@
 				DDA25954BE817B9B05BBCF51 /* EditorSessionPool.swift */,
 			);
 			path = Editor;
+			sourceTree = "<group>";
+		};
+		78053E5A2BBED1245EDDF4CD /* Activity */ = {
+			isa = PBXGroup;
+			children = (
+				AF5316428BA8BE5C12186F9B /* CloudActivityBridge.swift */,
+				DE0C7CEF4777A42AA2B6D915 /* CloudNotifications.swift */,
+			);
+			path = Activity;
 			sourceTree = "<group>";
 		};
 		8BBEF82D98EDDFA56D58E10B /* Products */ = {
@@ -420,6 +441,7 @@
 			children = (
 				4373A4C2113674500A9127F9 /* CloudSessionCoordinator.swift */,
 				313DA0BF36AB1BC0EAAE8B9B /* CloudTerminalLauncher.swift */,
+				94C52C4D50AF06A60BFF1AA5 /* RemoteUpload.swift */,
 			);
 			path = Terminal;
 			sourceTree = "<group>";
@@ -437,6 +459,7 @@
 			isa = PBXGroup;
 			children = (
 				2D555F3BFE0FF66C74E6F465 /* CloudStore.swift */,
+				78053E5A2BBED1245EDDF4CD /* Activity */,
 				922328B5B0CFDACB08194410 /* Model */,
 				BEC0E8F4CCFE1DD31D556614 /* Ports */,
 				DFFA913EB93BAD5D0F1F2F3E /* SSH */,
@@ -674,10 +697,13 @@
 				1BBA8945F77B0783C4B3C55D /* AppearanceSettingsView.swift in Sources */,
 				756546AEC0833D5366B1FEFE /* ApplicationLifecycle.swift in Sources */,
 				8A0385DED6299CBD3712CF3F /* ClaudeLocalData.swift in Sources */,
+				6D21DA1002EA2C1FD81A328B /* CloudActivityBridge.swift in Sources */,
 				E942E734688EE459913B085F /* CloudControlConnection.swift in Sources */,
 				59CC9A9051655AAE1BB11A45 /* CloudModels.swift in Sources */,
+				AC4FA1D31CB23591C2FC2EFA /* CloudNotifications.swift in Sources */,
 				57F02DD8DCF108D733EEF4D5 /* CloudPortForwarder.swift in Sources */,
 				2E2CC7AEE75A4E6A043D23C2 /* CloudServerSetupSheet.swift in Sources */,
+				F1E41759BFD05FB2DC4AADF8 /* CloudServerStatusSheet.swift in Sources */,
 				ADAD1B6C95E3413D811547AA /* CloudSessionCoordinator.swift in Sources */,
 				D3BE00246D7DC2D5FD0D0CF2 /* CloudStore.swift in Sources */,
 				4E541E163DBAB7788A6000FD /* CloudTerminalLauncher.swift in Sources */,
@@ -711,6 +737,7 @@
 				FE4CC8AE39B1C12D85162A87 /* ProjectNoteView.swift in Sources */,
 				4F9E900897C7EFF33F2FFEBA /* ProjectScanner.swift in Sources */,
 				A500871DAFCBBF9D3B21E568 /* ProjectSidebar.swift in Sources */,
+				7C0CF49C71638D0A5CCE05C6 /* RemoteUpload.swift in Sources */,
 				566ED02C6E28AD94CE4E00C7 /* RsyncCommand.swift in Sources */,
 				C68C2D6D8E20D74CE0A4EF45 /* SSHCommandRunner.swift in Sources */,
 				8B77466AC511C5DC7EBE3BA9 /* SSHConfigRenderer.swift in Sources */,
@@ -748,6 +775,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				254FD56E48913C15D84564A7 /* AppearanceSettingsTests.swift in Sources */,
+				5D2D85D5AD10E044674818BB /* CloudActivityTests.swift in Sources */,
 				FFCCD27E9DB80474999430F5 /* CloudE2ETests.swift in Sources */,
 				3B272DDFA322433334A215B0 /* CloudTestSupport.swift in Sources */,
 				39AB102EF318AF2123723F3E /* CloudTests.swift in Sources */,

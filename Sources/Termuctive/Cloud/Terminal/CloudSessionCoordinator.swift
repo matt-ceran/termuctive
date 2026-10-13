@@ -7,6 +7,7 @@ enum CloudFlow: Identifiable, Equatable {
     case setUpServer
     case connectProject(UUID)
     case moveProject(UUID)
+    case serverStatus(UUID)
 
     var id: String {
         switch self {
@@ -16,6 +17,8 @@ enum CloudFlow: Identifiable, Equatable {
             "connectProject-\(projectID.uuidString)"
         case .moveProject(let projectID):
             "moveProject-\(projectID.uuidString)"
+        case .serverStatus(let hostID):
+            "serverStatus-\(hostID.uuidString)"
         }
     }
 }
@@ -34,6 +37,7 @@ final class CloudSessionCoordinator: ObservableObject {
     let runner: any CloudCommandRunning
     let control: any CloudControlling
     let ports: CloudPortForwarder
+    let activity: CloudActivityBridge
 
     private let store: WorkspaceStore
     private weak var sessions: TerminalSessionPool?
@@ -62,6 +66,12 @@ final class CloudSessionCoordinator: ObservableObject {
         let control = control ?? CloudControlConnection(paths: paths)
         self.control = control
         ports = CloudPortForwarder(cloudStore: cloudStore, runner: self.runner, control: control)
+        activity = CloudActivityBridge(
+            store: store,
+            cloudStore: cloudStore,
+            runner: self.runner,
+            control: control
+        )
         self.observesSystemEvents = observesSystemEvents
         cloudPaneProjects = currentCloudPaneProjects()
 
@@ -75,11 +85,16 @@ final class CloudSessionCoordinator: ObservableObject {
         if observesSystemEvents {
             observeSystemEvents()
             ports.start()
+            activity.notify = { title, body in
+                CloudNotifications.post(title: title, body: body)
+            }
+            activity.start()
         }
     }
 
     func attach(sessions: TerminalSessionPool) {
         self.sessions = sessions
+        activity.registry = sessions.agentActivityRegistry
     }
 
     var client: TMCClient {

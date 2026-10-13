@@ -5,6 +5,15 @@ struct RemoteTerminalLaunch: Equatable {
     let arguments: [String]
     let hostLabel: String
     var reconnectPolicy = TerminalReconnectPolicy()
+    /// Where pasted images and dropped files are uploaded so remote programs can read them.
+    var uploadTarget: RemoteUploadTarget?
+}
+
+struct RemoteUploadTarget: Equatable {
+    let sshConfigPath: String
+    let alias: String
+    /// The folder on the server that receives uploads.
+    let directory: String
 }
 
 enum TerminalLaunchSpec: Equatable {

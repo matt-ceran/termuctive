@@ -64,6 +64,31 @@ final class CloudE2ETests: XCTestCase {
         let listed = try await cloud.client.listSessions(alias: host.alias, slug: "e2e")
         XCTAssertEqual(listed.map(\.pane), [paneID])
 
+        // A Claude Code hook running inside the pane reports state the bridge can read.
+        terminal.send(
+            txt: "echo '{\"session_id\": \"abc-123\", \"prompt\": \"hi\"}' "
+                + "| /opt/termuctive/bin/tmc hook prompt && echo HOOKED\r"
+        )
+        _ = try await output(of: terminal, containing: "HOOKED")
+        let reports = try await cloud.runner.decode(
+            [RemoteSessionReport].self,
+            CloudCommand(
+                alias: host.alias,
+                remote: .arguments([TMCClient.executable, "sessions", "--slug", "e2e"])
+            )
+        )
+        XCTAssertEqual(reports.map(\.pane), [paneID])
+        XCTAssertEqual(reports.first?.claude?.state, "working")
+        XCTAssertEqual(reports.first?.claude?.sessionId, "abc-123")
+
+        // Toolkit updates use the administrator's passwordless sudo.
+        let toolkit = try XCTUnwrap(
+            CloudToolkit.bundled(in: repository.appendingPathComponent("Resources"))
+        )
+        let installer = CloudToolkitInstaller(runner: cloud.runner, toolkit: toolkit)
+        try await installer.upload(toAlias: host.adminAlias)
+        try await installer.installUploadedToolkit(adminAlias: host.adminAlias)
+
         try await cloud.client.killSession(alias: host.alias, slug: "e2e", paneID: paneID)
         let afterKill = try await cloud.client.listSessions(alias: host.alias, slug: "e2e")
         XCTAssertTrue(afterKill.isEmpty)

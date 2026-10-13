@@ -281,6 +281,12 @@ struct TermuctiveApp: App {
                     cloud.presentedFlow = .setUpServer
                 }
 
+                ForEach(cloudStore.hosts) { host in
+                    Button("\(host.name) Status...") {
+                        cloud.presentedFlow = .serverStatus(host.id)
+                    }
+                }
+
                 Divider()
 
                 Button("Move Project to Cloud...") {

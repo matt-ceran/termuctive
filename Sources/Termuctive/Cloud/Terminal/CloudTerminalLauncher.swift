@@ -27,7 +27,12 @@ enum CloudTerminalLauncher {
                 "--",
                 ShellQuoting.command(remoteCommand),
             ],
-            hostLabel: host.name
+            hostLabel: host.name,
+            uploadTarget: RemoteUploadTarget(
+                sshConfigPath: paths.configURL.path,
+                alias: host.alias,
+                directory: NSHomeDirectory() + "/.cache/termuctive/uploads"
+            )
         )
     }
 }
