@@ -92,6 +92,10 @@ final class CloudStore: ObservableObject {
         state.binding(forProjectID: projectID)
     }
 
+    func binding(forRemoteRoot root: String) -> CloudProjectBinding? {
+        state.binding(forRemoteRoot: root)
+    }
+
     var boundProjectIDs: Set<UUID> {
         Set(state.bindings.map(\.projectID))
     }

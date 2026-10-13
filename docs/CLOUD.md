@@ -58,10 +58,14 @@ Right-click a project and choose **Move Project to Cloud...**.
    Dependency folders such as `node_modules` and `.venv` are rebuilt on the server instead
    of copied. Use **Only Worktrees Used This Week** to skip old worktrees.
 2. **Start Copying** copies everything while you keep working. Closing the window keeps
-   the copy going, and Termuctive asks before quitting during a copy. Running the move
-   again later only sends what changed.
+   the copy going, and Termuctive asks before quitting during a copy. If a copy stops
+   partway, starting it again sends only what's left.
 3. **Switch to Cloud** stops the project's terminals on this Mac, copies the last changes,
    and opens *project* (Cloud) beside the original. The original stays untouched.
+
+After the switch, the two copies are separate: changes in the cloud stay on the server,
+and code reaches this Mac through git as usual. Termuctive won't move the original again,
+because that would replace work done in the cloud with this Mac's older files.
 
 The cloud copy opens a **Cloud Setup** tab that installs dependencies for the project and
 recently used worktrees, then lists what still needs signing in:
