@@ -141,13 +141,22 @@ struct TMCClient {
         )
     }
 
-    static func attachCommand(slug: String, paneID: UUID, workingDirectory: String) -> [String] {
-        [
+    static func attachCommand(
+        slug: String,
+        paneID: UUID,
+        workingDirectory: String,
+        initialCommand: String? = nil
+    ) -> [String] {
+        var arguments = [
             executable, "attach",
             "--protocol", String(protocolVersion),
             "--slug", slug,
             "--pane", paneID.uuidString.lowercased(),
             "--cwd", workingDirectory,
         ]
+        if let initialCommand {
+            arguments += ["--command", initialCommand]
+        }
+        return arguments
     }
 }

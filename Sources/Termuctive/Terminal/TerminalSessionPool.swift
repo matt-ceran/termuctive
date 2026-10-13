@@ -161,7 +161,7 @@ final class TerminalSessionPool: ObservableObject {
 
     /// The name of the server a pane runs on, or nil for a terminal on this Mac.
     func remoteHostLabel(for pane: TerminalPane) -> String? {
-        launchResolver(pane).remote?.hostLabel
+        sessions[pane.id]?.launch.remote?.hostLabel
     }
 
     func previewURL(for paneID: UUID) -> URL? {
@@ -311,6 +311,18 @@ final class TerminalSessionPool: ObservableObject {
                 continue
             }
             relaunch(session, pane: pane)
+        }
+    }
+
+    /// Ends the processes of the given panes and leaves them exited, so nothing keeps
+    /// changing their files. The panes can be restarted later.
+    func stopPanes(withIDs paneIDs: Set<UUID>) {
+        for paneID in paneIDs {
+            guard let session = sessions[paneID] else {
+                continue
+            }
+            session.terminate()
+            statuses[paneID] = .exited(nil)
         }
     }
 

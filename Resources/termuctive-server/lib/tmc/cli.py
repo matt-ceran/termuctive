@@ -4,7 +4,22 @@ import argparse
 import sys
 from typing import List, Optional
 
-from . import PROTOCOL, VERSION, admin, doctor, proc, setup, status, tmuxctl, validate
+from . import (
+    PROTOCOL,
+    VERSION,
+    admin,
+    checklist,
+    claudecfg,
+    doctor,
+    finalize,
+    hydrate,
+    ports,
+    proc,
+    setup,
+    status,
+    tmuxctl,
+    validate,
+)
 from .jsonio import emit
 
 EXIT_USAGE = 2
@@ -21,6 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
     attach.add_argument("--pane", required=True)
     attach.add_argument("--cwd")
     attach.add_argument("--protocol", type=int)
+    attach.add_argument(
+        "--command", dest="initial_command", help="run when the session is first created"
+    )
 
     kill = commands.add_parser("kill", help="end a pane session")
     kill.add_argument("--slug", required=True)
@@ -33,6 +51,26 @@ def build_parser() -> argparse.ArgumentParser:
     state.add_argument("--slug")
 
     commands.add_parser("doctor", help="check the server")
+
+    finishing = commands.add_parser("finalize", help="fix a project copied from a Mac")
+    finishing.add_argument("--root", required=True)
+
+    commands.add_parser("mkdirs", help="create folders listed on standard input")
+
+    gitconfig = commands.add_parser("gitconfig", help="git settings copied from a Mac")
+    gitconfig.add_argument("action", choices=["import"])
+
+    claude = commands.add_parser("claude", help="Claude Code settings copied from a Mac")
+    claude.add_argument("action", choices=["import-settings", "import-config"])
+
+    commands.add_parser("ports", help="TCP ports your processes listen on")
+
+    check = commands.add_parser("checklist", help="sign-ins and setup still needed")
+    check.add_argument("--root")
+    check.add_argument("--json", action="store_true")
+
+    hydration = commands.add_parser("hydrate", help="install a checkout's dependencies")
+    hydration.add_argument("--root", required=True)
 
     server = commands.add_parser("setup", help="prepare this server (root)")
     server.add_argument("--admin-user", required=True)
@@ -78,6 +116,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     except proc.CommandError as error:
         print(f"tmc: {error}", file=sys.stderr)
         return 1
+    except ValueError as error:
+        print(f"tmc: {error}", file=sys.stderr)
+        return EXIT_USAGE
 
 
 def dispatch(arguments: argparse.Namespace) -> int:
@@ -97,6 +138,7 @@ def dispatch(arguments: argparse.Namespace) -> int:
             cwd,
             arguments.protocol,
             proc.caller(),
+            arguments.initial_command,
         )
     if command == "kill":
         return tmuxctl.kill(
@@ -112,6 +154,35 @@ def dispatch(arguments: argparse.Namespace) -> int:
         checks = doctor.run_checks()
         emit({"checks": checks, "ok": all(item["ok"] for item in checks)})
         return 0
+    if command == "finalize":
+        emit(finalize.finalize(arguments.root))
+        return 0
+    if command == "mkdirs":
+        paths = [line for line in sys.stdin.read().splitlines() if line.strip()]
+        emit({"created": finalize.make_directories(paths)})
+        return 0
+    if command == "gitconfig":
+        emit(finalize.sanitize_gitconfig(sys.stdin.read()))
+        return 0
+    if command == "claude":
+        payload = claudecfg.parse_json_input(sys.stdin.read())
+        if arguments.action == "import-settings":
+            emit(claudecfg.import_settings(payload))
+        else:
+            emit(claudecfg.import_global_config(payload))
+        return 0
+    if command == "ports":
+        emit(ports.own_listening_ports())
+        return 0
+    if command == "checklist":
+        items = checklist.collect(validate.absolute_path(arguments.root) if arguments.root else None)
+        if arguments.json:
+            emit(items)
+        else:
+            print(checklist.render(items))
+        return 0
+    if command == "hydrate":
+        return hydrate.hydrate(arguments.root)
     if command == "setup":
         setup.run_setup(
             setup.SetupOptions(

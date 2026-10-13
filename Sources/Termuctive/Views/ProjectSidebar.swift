@@ -429,6 +429,9 @@ struct ProjectSidebar: View {
                     cloud.disconnect(projectID: projectID)
                 }
             } else {
+                Button("Move Project to Cloud...") {
+                    cloud.presentedFlow = .moveProject(projectID)
+                }
                 Button("Connect to Cloud Folder...") {
                     cloud.presentedFlow = .connectProject(projectID)
                 }

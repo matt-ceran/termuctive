@@ -224,6 +224,91 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
+    /// Copies a project's folders, spaces, notes and pane layouts under new identifiers
+    /// and selects the copy. Note documents themselves are copied by the caller.
+    @discardableResult
+    func duplicateProject(withID id: UUID, name: String) -> ProjectDuplicate? {
+        guard let index = document.projects.firstIndex(where: { $0.id == id }) else {
+            return nil
+        }
+        let source = document.projects[index]
+        var noteIDs: [UUID: UUID] = [:]
+        for note in source.items.flatMap(\.notes) {
+            noteIDs[note.id] = UUID()
+        }
+        var itemIDs: [UUID: UUID] = [:]
+        var paneIDs: [UUID: UUID] = [:]
+
+        func copy(_ node: PaneNode) -> PaneNode {
+            switch node {
+            case .terminal(let pane):
+                let paneID = UUID()
+                paneIDs[pane.id] = paneID
+                var content = pane.content
+                if case .note(let noteID) = content {
+                    content = .note(noteIDs[noteID] ?? noteID)
+                }
+                return .terminal(
+                    TerminalPane(
+                        id: paneID,
+                        title: pane.title,
+                        workingDirectory: pane.workingDirectory,
+                        content: content
+                    )
+                )
+            case .split(let split):
+                return .split(
+                    PaneSplit(
+                        axis: split.axis,
+                        first: copy(split.first),
+                        second: copy(split.second),
+                        ratio: split.ratio
+                    )
+                )
+            }
+        }
+
+        func copy(_ item: WorkspaceItem) -> WorkspaceItem {
+            switch item {
+            case .folder(let folder):
+                let folderID = UUID()
+                itemIDs[folder.id] = folderID
+                return .folder(
+                    WorkspaceFolder(
+                        id: folderID,
+                        name: folder.name,
+                        children: folder.children.map(copy)
+                    )
+                )
+            case .note(let note):
+                let noteID = noteIDs[note.id] ?? UUID()
+                itemIDs[note.id] = noteID
+                return .note(ProjectNote(id: noteID, name: note.name))
+            case .space(let space):
+                let spaceID = UUID()
+                itemIDs[space.id] = spaceID
+                return .space(
+                    TerminalSpace(id: spaceID, name: space.name, layout: copy(space.layout))
+                )
+            }
+        }
+
+        let items = source.items.map(copy)
+        let project = TerminalProject(
+            name: uniqueName(base: name, existing: document.projects.map(\.name)),
+            rootDirectory: source.rootDirectory,
+            items: items,
+            lastSelectedItemID: source.lastSelectedItemID.flatMap { itemIDs[$0] },
+            lastSelectedSpaceID: source.lastSelectedSpaceID.flatMap { itemIDs[$0] }
+        )
+        rememberCurrentPaneState()
+        document.projects.insert(project, at: index + 1)
+        expandedProjectIDs.insert(project.id)
+        save()
+        selectProject(withID: project.id)
+        return ProjectDuplicate(projectID: project.id, paneIDs: paneIDs, noteIDs: noteIDs)
+    }
+
     func selectProject(withID id: UUID) {
         guard let projectIndex = document.projects.firstIndex(where: { $0.id == id }) else {
             return
@@ -1880,4 +1965,12 @@ private final class WorkspacePersistenceRequest: @unchecked Sendable {
 private enum WorkspacePersistenceOutcome: @unchecked Sendable {
     case success
     case failure(any Error)
+}
+
+struct ProjectDuplicate: Equatable {
+    let projectID: UUID
+    /// Original pane identifier to the copy's pane identifier.
+    let paneIDs: [UUID: UUID]
+    /// Original note identifier to the copy's note identifier.
+    let noteIDs: [UUID: UUID]
 }

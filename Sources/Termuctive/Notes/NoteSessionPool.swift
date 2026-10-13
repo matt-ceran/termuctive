@@ -167,6 +167,26 @@ final class NoteSessionPool: ObservableObject {
         }
     }
 
+    /// Saves open notes, then stores a copy of each note under its new identifier.
+    func duplicateNotes(_ identifiers: [UUID: UUID]) throws {
+        try saveAll()
+        for (source, copy) in identifiers {
+            guard let document = try persistence.load(noteID: source) else {
+                continue
+            }
+            try persistence.save(
+                NoteDocument(
+                    schemaVersion: document.schemaVersion,
+                    noteID: copy,
+                    richTextRTF: document.richTextRTF,
+                    drawing: document.drawing,
+                    workspaceMode: document.workspaceMode,
+                    updatedAt: document.updatedAt
+                )
+            )
+        }
+    }
+
     func saveAll() throws {
         var firstError: (any Error)?
         for noteID in sessions.keys.sorted(by: { $0.uuidString < $1.uuidString }) {

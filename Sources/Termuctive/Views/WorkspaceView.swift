@@ -70,6 +70,15 @@ struct WorkspaceView: View {
                     store: store,
                     projectID: projectID
                 )
+            case .moveProject(let projectID):
+                MoveToCloudSheet(
+                    cloud: cloud,
+                    cloudStore: cloudStore,
+                    projectID: projectID,
+                    store: store,
+                    sessions: sessions,
+                    notes: notes
+                )
             }
         }
         .onChange(of: store.document.noteIDs) { _, noteIDs in

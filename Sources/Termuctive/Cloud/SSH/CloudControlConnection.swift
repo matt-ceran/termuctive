@@ -4,6 +4,9 @@ protocol CloudControlling: Sendable {
     func ensureMaster(alias: String) async
     func reset(alias: String) async
     func resetAll(aliases: [String]) async
+    /// Forwards a port on this Mac to the same port on the server through the master.
+    func forward(port: Int, alias: String) async -> Bool
+    func cancelForward(port: Int, alias: String) async
 }
 
 /// Keeps one multiplexed ssh connection per host for quick control-plane commands.
@@ -59,6 +62,27 @@ actor CloudControlConnection: CloudControlling {
         for alias in aliases {
             await reset(alias: alias)
         }
+    }
+
+    func forward(port: Int, alias: String) async -> Bool {
+        let result = try? await ProcessRunner.run(
+            "/usr/bin/ssh",
+            ["-F", paths.configURL.path, "-O", "forward", "-L", Self.forwardSpec(port), alias],
+            timeout: 10
+        )
+        return result?.succeeded == true
+    }
+
+    func cancelForward(port: Int, alias: String) async {
+        _ = try? await ProcessRunner.run(
+            "/usr/bin/ssh",
+            ["-F", paths.configURL.path, "-O", "cancel", "-L", Self.forwardSpec(port), alias],
+            timeout: 10
+        )
+    }
+
+    static func forwardSpec(_ port: Int) -> String {
+        "127.0.0.1:\(port):127.0.0.1:\(port)"
     }
 
     private func isAlive(alias: String) async -> Bool {
