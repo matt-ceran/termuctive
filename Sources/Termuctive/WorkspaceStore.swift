@@ -40,7 +40,12 @@ final class WorkspaceStore: ObservableObject {
             document = try persistence.load() ?? WorkspaceDocument()
         } catch {
             document = WorkspaceDocument()
-            errorMessage = error.localizedDescription
+            if let backupURL = persistence.preserveUnreadableWorkspace() {
+                errorMessage =
+                    "\(error.localizedDescription) A copy was saved as \(backupURL.lastPathComponent)."
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
         normalizeSelection()
     }

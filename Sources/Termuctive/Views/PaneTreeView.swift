@@ -483,6 +483,13 @@ private struct TerminalPaneView: View {
                 Text(previewURL?.lastPathComponent ?? sessions.title(for: pane))
                     .lineLimit(1)
                 Spacer(minLength: 8)
+                if let remoteHost {
+                    Label(remoteHost, systemImage: "cloud")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help("This terminal runs on \(remoteHost)")
+                }
                 Text(displayedPath)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -527,18 +534,22 @@ private struct TerminalPaneView: View {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                     }
                     .buttonStyle(.plain)
-                    .help("Open IDE")
+                    .disabled(remoteHost != nil)
+                    .help(
+                        remoteHost == nil
+                            ? "Open IDE" : "The IDE is not available for cloud terminals yet"
+                    )
                     .accessibilityLabel("Open IDE")
 
-                    if case .exited = sessions.status(for: pane.id) {
+                    if let restartLabel = sessions.status(for: pane.id).restartLabel {
                         Button {
                             sessions.restart(pane: pane)
                         } label: {
                             Image(systemName: "arrow.clockwise")
                         }
                         .buttonStyle(.plain)
-                        .help("Restart Terminal")
-                        .accessibilityLabel("Restart terminal")
+                        .help(restartLabel)
+                        .accessibilityLabel(restartLabel)
                     }
                 }
 
@@ -570,6 +581,9 @@ private struct TerminalPaneView: View {
                     isFocused: store.focusedPaneID == pane.id,
                     sessions: sessions
                 )
+                .overlay(alignment: .top) {
+                    TerminalConnectionBanner(status: sessions.status(for: pane.id))
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -578,6 +592,10 @@ private struct TerminalPaneView: View {
 
     private var previewURL: URL? {
         sessions.previewURL(for: pane.id)
+    }
+
+    private var remoteHost: String? {
+        sessions.remoteHostLabel(for: pane)
     }
 
     private var displayedPath: String {
@@ -608,5 +626,52 @@ private struct TerminalPaneView: View {
             return path
         }
         return "~" + path.dropFirst(home.count)
+    }
+}
+
+private struct TerminalConnectionBanner: View {
+    let status: TerminalSessionStatus
+
+    var body: some View {
+        if let message {
+            HStack(spacing: 6) {
+                if case .reconnecting = status {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+                Text(message)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .padding(.top, 8)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var message: String? {
+        switch status {
+        case .reconnecting(let attempt):
+            attempt > 1 ? "Reconnecting (attempt \(attempt))..." : "Reconnecting..."
+        case .serverUpdateRequired:
+            "The server needs a Termuctive update"
+        case .running, .exited:
+            nil
+        }
+    }
+}
+
+extension TerminalSessionStatus {
+    fileprivate var restartLabel: String? {
+        switch self {
+        case .running:
+            nil
+        case .exited, .serverUpdateRequired:
+            "Restart Terminal"
+        case .reconnecting:
+            "Reconnect Now"
+        }
     }
 }

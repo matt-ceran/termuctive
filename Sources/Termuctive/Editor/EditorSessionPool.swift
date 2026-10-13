@@ -305,6 +305,9 @@ final class EditorSessionPool: ObservableObject {
     private var sessions: [UUID: EditorPaneSession] = [:]
     private var visiblePaneIDs: Set<UUID>?
 
+    /// Reports panes whose files live on a cloud server, which the IDE cannot open yet.
+    var isRemotePane: (UUID) -> Bool = { _ in false }
+
     init(store: WorkspaceStore) {
         self.store = store
     }
@@ -343,6 +346,10 @@ final class EditorSessionPool: ObservableObject {
     }
 
     func presentEditor(inPaneID paneID: UUID) {
+        guard !isRemotePane(paneID) else {
+            store.presentError("The IDE is not available for cloud terminals yet.")
+            return
+        }
         guard let rootURL = store.projectRootURL(forPaneID: paneID) else {
             store.presentError("Termuctive could not identify this pane's project directory.")
             return

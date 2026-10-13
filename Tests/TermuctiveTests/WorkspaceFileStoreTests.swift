@@ -377,4 +377,30 @@ final class WorkspaceFileStoreTests: XCTestCase {
         XCTAssertTrue(loaded.openNoteIDs.isEmpty)
         XCTAssertNil(loaded.selectedSpaceID)
     }
+
+    @MainActor
+    func testUnreadableWorkspaceIsCopiedAsideBeforeItCanBeOverwritten() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("workspace.json")
+        let unreadable = Data(#"{"schemaVersion": 99, "projects": []}"#.utf8)
+        try unreadable.write(to: fileURL)
+
+        let store = WorkspaceStore(persistence: WorkspaceFileStore(fileURL: fileURL))
+
+        let backups = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasPrefix("workspace.json.unreadable-") }
+        XCTAssertEqual(backups.count, 1)
+        let backup = try XCTUnwrap(backups.first)
+        XCTAssertEqual(
+            try Data(contentsOf: directory.appendingPathComponent(backup)),
+            unreadable
+        )
+        XCTAssertTrue(store.errorMessage?.contains(backup) ?? false)
+        XCTAssertTrue(store.document.projects.isEmpty)
+    }
 }

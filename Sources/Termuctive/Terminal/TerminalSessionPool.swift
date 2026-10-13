@@ -6,6 +6,8 @@ import SwiftTerm
 enum TerminalSessionStatus: Equatable {
     case running
     case exited(Int32?)
+    case reconnecting(attempt: Int)
+    case serverUpdateRequired
 }
 
 @MainActor
@@ -21,6 +23,8 @@ final class TerminalSessionPool: ObservableObject {
 
     private let store: WorkspaceStore
     private let shellConfiguration: TerminalShellConfiguration
+    private let launchResolver: @MainActor (TerminalPane) -> TerminalLaunchSpec
+    private let reconnectJitter: () -> Double
     private let agentProcessInspector: any AgentProcessInspecting
     private let agentActivityMonitor: TerminalAgentActivityMonitor
     private var agentActivityCommandTail: Task<Void, Never>?
@@ -32,6 +36,10 @@ final class TerminalSessionPool: ObservableObject {
         store: WorkspaceStore,
         terminalTheme: TerminalTheme = .light,
         shellConfiguration: TerminalShellConfiguration = .live,
+        launchResolver: @escaping @MainActor (TerminalPane) -> TerminalLaunchSpec = { _ in
+            .localShell
+        },
+        reconnectJitter: @escaping () -> Double = { Double.random(in: 0...1) },
         agentActivityRegistry: AgentActivityRegistry? = nil,
         agentProcessInspector: any AgentProcessInspecting = MacAgentProcessInspector()
     ) {
@@ -39,6 +47,8 @@ final class TerminalSessionPool: ObservableObject {
         self.store = store
         self.terminalTheme = terminalTheme
         self.shellConfiguration = shellConfiguration
+        self.launchResolver = launchResolver
+        self.reconnectJitter = reconnectJitter
         self.agentProcessInspector = agentProcessInspector
         self.agentActivityRegistry = activityRegistry
         agentActivityMonitor = TerminalAgentActivityMonitor(
@@ -59,6 +69,7 @@ final class TerminalSessionPool: ObservableObject {
 
         let session = TerminalSession(
             pane: pane,
+            launch: launchResolver(pane),
             fontSize: fontSize,
             theme: terminalTheme,
             shellConfiguration: shellConfiguration,
@@ -146,6 +157,11 @@ final class TerminalSessionPool: ObservableObject {
 
     func status(for paneID: UUID) -> TerminalSessionStatus {
         statuses[paneID] ?? .running
+    }
+
+    /// The name of the server a pane runs on, or nil for a terminal on this Mac.
+    func remoteHostLabel(for pane: TerminalPane) -> String? {
+        launchResolver(pane).remote?.hostLabel
     }
 
     func previewURL(for paneID: UUID) -> URL? {
@@ -278,8 +294,40 @@ final class TerminalSessionPool: ObservableObject {
             return
         }
         titles[pane.id] = pane.title
-        statuses[pane.id] = session.restart(pane: pane) ? .running : .exited(nil)
+        session.cancelPendingReconnect()
+        session.reconnectAttempt = 0
+        statuses[pane.id] =
+            session.restart(pane: pane, launch: launchResolver(pane)) ? .running : .exited(nil)
         focus(paneID: pane.id)
+    }
+
+    /// Restarts the given panes in place with their current launch settings, for example
+    /// after their project moved between this Mac and a cloud server.
+    func relaunchPanes(withIDs paneIDs: Set<UUID>) {
+        for paneID in paneIDs {
+            guard let session = sessions[paneID],
+                let pane = store.document.terminal(withID: paneID)
+            else {
+                continue
+            }
+            relaunch(session, pane: pane)
+        }
+    }
+
+    /// Restarts the connection process of remote panes in place, keeping each view.
+    ///
+    /// Used after the Mac wakes or the network changes, when existing connections are
+    /// likely dead even though their processes have not noticed yet.
+    func relaunchRemotePanes(withIDs paneIDs: Set<UUID>? = nil) {
+        for (paneID, session) in sessions {
+            guard session.launch.remote != nil,
+                paneIDs?.contains(paneID) ?? true,
+                let pane = store.document.terminal(withID: paneID)
+            else {
+                continue
+            }
+            relaunch(session, pane: pane)
+        }
     }
 
     func reconcile(validPaneIDs: Set<UUID>) {
@@ -326,6 +374,10 @@ final class TerminalSessionPool: ObservableObject {
     }
 
     private func perform(_ command: TerminalLocalCommand, fromPaneID paneID: UUID) {
+        if sessions[paneID]?.launch.remote != nil {
+            store.presentError("PDF panes are not available for cloud terminals yet.")
+            return
+        }
         switch command {
         case .makeLearningPDF:
             guard let session = sessions[paneID] else {
@@ -460,10 +512,67 @@ final class TerminalSessionPool: ObservableObject {
     }
 
     private func markExited(paneID: UUID, exitCode: Int32?) {
-        guard sessions[paneID] != nil else {
+        guard let session = sessions[paneID] else {
             return
         }
-        statuses[paneID] = .exited(exitCode)
+        guard let remote = session.launch.remote else {
+            statuses[paneID] = .exited(exitCode)
+            return
+        }
+
+        let policy = remote.reconnectPolicy
+        let attempt = policy.nextAttempt(
+            after: session.reconnectAttempt,
+            connectionDuration: Date().timeIntervalSince(session.startedAt)
+        )
+        session.reconnectAttempt = attempt
+        switch policy.decision(
+            for: TerminalProcessExit(waitStatus: exitCode),
+            attempt: attempt,
+            jitterFraction: reconnectJitter()
+        ) {
+        case .finished:
+            session.reconnectAttempt = 0
+            statuses[paneID] = .exited(exitCode)
+        case .serverUpdateRequired:
+            statuses[paneID] = .serverUpdateRequired
+        case .reconnect(let delay):
+            scheduleReconnect(session, attempt: attempt, after: delay)
+        }
+    }
+
+    private func scheduleReconnect(
+        _ session: TerminalSession,
+        attempt: Int,
+        after delay: TimeInterval
+    ) {
+        let paneID = session.paneID
+        let token = UUID()
+        session.pendingReconnect = token
+        statuses[paneID] = .reconnecting(attempt: attempt)
+        Task { @MainActor [weak self, weak session] in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard let self,
+                let session,
+                self.sessions[paneID] === session,
+                session.pendingReconnect == token,
+                let pane = self.store.document.terminal(withID: paneID)
+            else {
+                return
+            }
+            self.relaunch(session, pane: pane)
+        }
+    }
+
+    private func relaunch(_ session: TerminalSession, pane: TerminalPane) {
+        session.cancelPendingReconnect()
+        if session.relaunch(pane: pane, launch: launchResolver(pane)) {
+            statuses[pane.id] = .running
+        } else {
+            markExited(paneID: pane.id, exitCode: nil)
+        }
     }
 
     private func setFontSize(_ proposedSize: CGFloat) {
@@ -1047,6 +1156,9 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     let view: TermuctiveTerminalView
     private(set) var startedAt = Date()
     private(set) var activitySessionID: UUID?
+    private(set) var launch: TerminalLaunchSpec
+    var reconnectAttempt = 0
+    var pendingReconnect: UUID?
 
     private var pane: TerminalPane
     private let shellConfiguration: TerminalShellConfiguration
@@ -1072,6 +1184,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     init(
         pane: TerminalPane,
+        launch: TerminalLaunchSpec,
         fontSize: CGFloat,
         theme: TerminalTheme,
         shellConfiguration: TerminalShellConfiguration,
@@ -1095,6 +1208,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
     ) {
         paneID = pane.id
         self.pane = pane
+        self.launch = launch
         self.shellConfiguration = shellConfiguration
         self.onTitleChange = onTitleChange
         self.onDirectoryChange = onDirectoryChange
@@ -1138,16 +1252,38 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         start(pane: pane)
     }
 
-    func restart(pane: TerminalPane) -> Bool {
+    func restart(pane: TerminalPane, launch: TerminalLaunchSpec) -> Bool {
         self.pane = pane
         guard !view.process.running else {
             return true
         }
+        self.launch = launch
         endAgentActivitySession()
+        if launch.remote != nil {
+            // A dead connection can leave the alternate screen and input modes enabled.
+            view.getTerminal().resetToInitialState()
+        }
         return start(pane: pane)
     }
 
+    /// Replaces the running process with a fresh one in the same view.
+    func relaunch(pane: TerminalPane, launch: TerminalLaunchSpec) -> Bool {
+        self.pane = pane
+        self.launch = launch
+        endAgentActivitySession()
+        if view.process.running {
+            view.terminate()
+        }
+        view.getTerminal().resetToInitialState()
+        return start(pane: pane)
+    }
+
+    func cancelPendingReconnect() {
+        pendingReconnect = nil
+    }
+
     func terminate() {
+        pendingReconnect = nil
         endAgentActivitySession()
         view.cancelInteractivePaneResizes()
         if view.process.running {
@@ -1212,6 +1348,18 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         outputPDFTracker = TerminalOutputPDFTracker()
         outputActivityClassifier = TerminalOutputActivityClassifier()
         lastAgentOutputSignalTime = nil
+        if let remote = launch.remote {
+            // The working directory lives on the remote host, so it is neither validated
+            // nor replaced here, and local process inspection would only see the client.
+            view.startProcess(
+                executable: remote.executable,
+                args: remote.arguments,
+                environment: shellConfiguration.environment,
+                execName: nil,
+                currentDirectory: NSHomeDirectory()
+            )
+            return view.process.running
+        }
         let currentDirectory = Self.validDirectory(pane.workingDirectory)
         if currentDirectory != pane.workingDirectory {
             self.pane.workingDirectory = currentDirectory

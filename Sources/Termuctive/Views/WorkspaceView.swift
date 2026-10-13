@@ -8,6 +8,8 @@ struct WorkspaceView: View {
     @ObservedObject var notes: NoteSessionPool
     @ObservedObject var appearance: AppearanceSettings
     let agentActivity: AgentActivityRegistry
+    @ObservedObject var cloud: CloudSessionCoordinator
+    @ObservedObject var cloudStore: CloudStore
     @State private var activityTopology = WorkspaceActivityTopology()
 
     var body: some View {
@@ -18,6 +20,8 @@ struct WorkspaceView: View {
                     editors: editors,
                     notes: notes,
                     agentActivity: agentActivity,
+                    cloud: cloud,
+                    cloudStore: cloudStore,
                     activityIndicatorsVisible: store.isSidebarVisible,
                     chooseProject: chooseProject,
                     hideSidebar: { setSidebarVisible(false) }
@@ -44,14 +48,29 @@ struct WorkspaceView: View {
             sessions.reconcile(validPaneIDs: store.document.terminalIDs)
             editors.reconcile(validPaneIDs: store.document.terminalIDs)
             notes.reconcile(validNoteIDs: store.document.noteIDs)
+            cloud.workspaceTerminalsChanged()
             refreshVisibleEditorPanes()
             refreshActivityTopology()
         }
         .onChange(of: store.document.terminalIDs) { _, paneIDs in
             sessions.reconcile(validPaneIDs: paneIDs)
             editors.reconcile(validPaneIDs: paneIDs)
+            cloud.workspaceTerminalsChanged()
             refreshVisibleEditorPanes()
             refreshActivityTopology()
+        }
+        .sheet(item: $cloud.presentedFlow) { flow in
+            switch flow {
+            case .setUpServer:
+                CloudServerSetupSheet(cloud: cloud)
+            case .connectProject(let projectID):
+                ConnectToCloudFolderSheet(
+                    cloud: cloud,
+                    cloudStore: cloudStore,
+                    store: store,
+                    projectID: projectID
+                )
+            }
         }
         .onChange(of: store.document.noteIDs) { _, noteIDs in
             notes.reconcile(validNoteIDs: noteIDs)
@@ -70,21 +89,19 @@ struct WorkspaceView: View {
         .alert(
             "Termuctive",
             isPresented: Binding(
-                get: { store.errorMessage != nil || notes.errorMessage != nil },
+                get: { alertMessage != nil },
                 set: { presented in
                     if !presented {
-                        store.dismissError()
-                        notes.dismissError()
+                        dismissAlerts()
                     }
                 }
             )
         ) {
             Button("OK") {
-                store.dismissError()
-                notes.dismissError()
+                dismissAlerts()
             }
         } message: {
-            Text(store.errorMessage ?? notes.errorMessage ?? "")
+            Text(alertMessage ?? "")
         }
         .confirmationDialog(
             pendingPaneCloseTitle,
@@ -111,6 +128,17 @@ struct WorkspaceView: View {
         } message: {
             Text("One or more files in this editor have unsaved changes.")
         }
+    }
+
+    private var alertMessage: String? {
+        store.errorMessage ?? notes.errorMessage ?? cloud.errorMessage ?? cloudStore.errorMessage
+    }
+
+    private func dismissAlerts() {
+        store.dismissError()
+        notes.dismissError()
+        cloud.dismissError()
+        cloudStore.dismissError()
     }
 
     private func refreshActivityTopology() {
