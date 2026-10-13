@@ -71,3 +71,70 @@ enum RemoteUpload {
         return "\(stamp)-\(cleaned.isEmpty ? "file" : cleaned)"
     }
 }
+
+/// Fetches files from a server for panes that show them on this Mac, such as PDFs.
+enum RemoteDownload {
+    static var cacheDirectory: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Termuctive", isDirectory: true)
+            .appendingPathComponent("cloud", isDirectory: true)
+    }
+
+    /// Copies `path` from the server into the cache, keeping its folder structure.
+    static func download(_ path: String, from target: RemoteUploadTarget) async -> URL? {
+        let result = try? await ProcessRunner.run(
+            "/usr/bin/ssh",
+            [
+                "-F", target.sshConfigPath, "-T", "-o", "BatchMode=yes", target.alias, "--",
+                "cat " + ShellQuoting.quote(path),
+            ],
+            timeout: 300
+        )
+        guard let result, result.succeeded, !result.output.isEmpty else {
+            return nil
+        }
+        let base = cacheDirectory.appendingPathComponent(target.alias, isDirectory: true)
+            .standardizedFileURL
+        let destination = base.appendingPathComponent(String(path.drop(while: { $0 == "/" })))
+            .standardizedFileURL
+        // Paths come from terminal output, so never write outside the cache.
+        guard destination.path.hasPrefix(base.path + "/") else {
+            return nil
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try result.output.write(to: destination, options: .atomic)
+            return destination
+        } catch {
+            return nil
+        }
+    }
+
+    /// The newest PDF under `root` on the server changed after `since`.
+    static func newestPDF(
+        under root: String,
+        since: Date,
+        on target: RemoteUploadTarget
+    ) async -> String? {
+        let result = try? await ProcessRunner.run(
+            "/usr/bin/ssh",
+            [
+                "-F", target.sshConfigPath, "-T", "-o", "BatchMode=yes", target.alias, "--",
+                ShellQuoting.command([
+                    TMCClient.executable, "fs", "recent-pdf", "--root", root,
+                    "--since", String(since.timeIntervalSince1970),
+                ]),
+            ],
+            timeout: 60
+        )
+        guard let result, result.succeeded,
+            let object = try? JSONSerialization.jsonObject(with: result.output) as? [String: Any]
+        else {
+            return nil
+        }
+        return object["path"] as? String
+    }
+}

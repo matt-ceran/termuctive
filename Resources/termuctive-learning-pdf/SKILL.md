@@ -44,14 +44,14 @@ python3 <skill-directory>/scripts/render_learning_pdf.py \
   --output <absolute-output-pdf>
 ```
 
-The renderer embeds Times New Roman and uses a compact grayscale book layout.
+The renderer embeds Times New Roman (Liberation Serif, its metric-compatible equivalent, on Linux servers without it) and uses a compact grayscale book layout.
 If ReportLab is unavailable, create a task-local virtual environment under `tmp/pdfs/`, install only ReportLab there, and rerun the renderer with that Python executable.
 Do not install or relaunch Termuctive as part of PDF creation.
 
 ### 5. Verify every page
 
 Use `pdfinfo` to confirm the file is a valid Letter-sized PDF with the expected page count.
-Use `pdffonts` to confirm Times New Roman is embedded.
+Use `pdffonts` to confirm Times New Roman or Liberation Serif is embedded.
 Use `pdftotext` to confirm the title, takeaway, and evidence are extractable.
 Render every page to PNG with `pdftoppm` under `tmp/pdfs/` and inspect every rendered page.
 Check for clipped text, overlapping elements, tiny type, broken arrows, awkward page breaks, excess dead space, or missing sections.

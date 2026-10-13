@@ -510,6 +510,70 @@ final class CloudE2ETests: XCTestCase {
         XCTAssertEqual(waiting.last?.status, "proposed")
     }
 
+    func testRemoteEditorAndPDFsWorkOnServerFiles() async throws {
+        let (_, cloud, host) = try await prepareServer()
+        let root = NSHomeDirectory() + "/termuctive-e2e editor"
+        _ = try await remote(
+            cloud,
+            host,
+            "mkdir -p \(ShellQuoting.quote(root + "/src")) && printf 'first\\n' > "
+                + ShellQuoting.quote(root + "/src/app.py")
+                + " && printf '%%PDF-1.4 e2e' > " + ShellQuoting.quote(root + "/lesson.pdf")
+        )
+        let files = RemoteEditorFileSystem(runner: cloud.runner, alias: host.alias)
+        let session = EditorPaneSession(
+            paneID: UUID(),
+            rootURL: URL(fileURLWithPath: root, isDirectory: true),
+            fileSystem: files
+        )
+        defer {
+            session.stop()
+        }
+        try await waitUntil(timeout: 20) { session.fileTree.nodes.map(\.name).contains("src") }
+        XCTAssertTrue(session.isRemote)
+
+        let fileURL = URL(fileURLWithPath: root + "/src/app.py")
+        await session.openFile(fileURL)
+        let buffer = try XCTUnwrap(session.selectedBuffer)
+        XCTAssertEqual(buffer.text, "first\n")
+
+        buffer.updateText("second\n")
+        try await buffer.save()
+        let saved = try await remote(cloud, host, "cat " + ShellQuoting.quote(root + "/src/app.py"))
+        XCTAssertEqual(saved, "second\n")
+
+        // Someone else changes the file; saving over it must be refused.
+        _ = try await remote(
+            cloud,
+            host,
+            "printf 'theirs\\n' > " + ShellQuoting.quote(root + "/src/app.py")
+        )
+        buffer.updateText("mine\n")
+        do {
+            try await buffer.save()
+            XCTFail("Saving over a newer server version must be refused")
+        } catch EditorDocumentError.changedOnDisk(let current) {
+            XCTAssertEqual(current?.text, "theirs\n")
+        }
+        let current = try await files.read(fileURL)
+        XCTAssertEqual(buffer.externalChange, .modified(current))
+
+        let target = RemoteUploadTarget(
+            sshConfigPath: cloud.paths.configURL.path,
+            alias: host.alias,
+            directory: NSHomeDirectory() + "/.cache/termuctive/uploads"
+        )
+        let newest = await RemoteDownload.newestPDF(under: root, since: .distantPast, on: target)
+        XCTAssertEqual(newest, root + "/lesson.pdf")
+        let downloaded = await RemoteDownload.download(root + "/lesson.pdf", from: target)
+        let local = try XCTUnwrap(downloaded)
+        XCTAssertEqual(try Data(contentsOf: local), Data("%PDF-1.4 e2e".utf8))
+        // A printed path that climbs out of the cache folder is never written.
+        let escaping = "/" + String(repeating: "../", count: 20) + "tmp/termuctive-escape.pdf"
+        let escaped = await RemoteDownload.download(escaping, from: target)
+        XCTAssertNil(escaped)
+    }
+
     private func remote(
         _ cloud: CloudSessionCoordinator,
         _ host: CloudHost,

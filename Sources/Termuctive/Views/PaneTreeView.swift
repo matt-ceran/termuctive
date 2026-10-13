@@ -534,11 +534,7 @@ private struct TerminalPaneView: View {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                     }
                     .buttonStyle(.plain)
-                    .disabled(remoteHost != nil)
-                    .help(
-                        remoteHost == nil
-                            ? "Open IDE" : "The IDE is not available for cloud terminals yet"
-                    )
+                    .help("Open IDE")
                     .accessibilityLabel("Open IDE")
 
                     if let restartLabel = sessions.status(for: pane.id).restartLabel {

@@ -36,8 +36,11 @@ BASE_PACKAGES = [
 FULL_PACKAGES = [
     "build-essential",
     "ffmpeg",
+    "fonts-liberation",
     "htop",
+    "poppler-utils",
     "python3-pip",
+    "python3-reportlab",
     "unattended-upgrades",
 ]
 

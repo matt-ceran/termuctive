@@ -97,14 +97,16 @@ private struct EditorPaneHeaderView: View {
             .help("Save File")
             .accessibilityLabel("Save file")
 
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([buffer.url])
-            } label: {
-                Image(systemName: "folder")
+            if !session.isRemote {
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([buffer.url])
+                } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.plain)
+                .help("Reveal File in Finder")
+                .accessibilityLabel("Reveal file in Finder")
             }
-            .buttonStyle(.plain)
-            .help("Reveal File in Finder")
-            .accessibilityLabel("Reveal file in Finder")
 
             returnToTerminalButton
             closePaneButton

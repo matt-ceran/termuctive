@@ -31,8 +31,8 @@ struct TermuctiveApp: App {
         )
         cloud.attach(sessions: sessions)
         let editors = EditorSessionPool(store: store)
-        editors.isRemotePane = { [weak cloud] paneID in
-            cloud?.hostName(forPaneID: paneID) != nil
+        editors.remoteFileSystem = { [weak cloud] paneID in
+            cloud?.editorFileSystem(forPaneID: paneID)
         }
         _store = StateObject(wrappedValue: store)
         _sessions = StateObject(wrappedValue: sessions)

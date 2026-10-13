@@ -145,6 +145,22 @@ final class CloudSessionCoordinator: ObservableObject {
         }
     }
 
+    /// File access for the IDE in a cloud pane: the project folder on the server.
+    func editorFileSystem(
+        forPaneID paneID: UUID
+    ) -> (rootURL: URL, fileSystem: any EditorFileSystemProviding)? {
+        guard let project = store.document.project(containingTerminalWithID: paneID),
+            let binding = cloudStore.binding(forProjectID: project.id),
+            let host = cloudStore.host(withID: binding.hostID)
+        else {
+            return nil
+        }
+        return (
+            URL(fileURLWithPath: binding.remoteRoot, isDirectory: true),
+            RemoteEditorFileSystem(runner: runner, alias: host.alias)
+        )
+    }
+
     func hostName(forPaneID paneID: UUID) -> String? {
         store.document.project(containingTerminalWithID: paneID)
             .flatMap { host(forProjectID: $0.id) }?

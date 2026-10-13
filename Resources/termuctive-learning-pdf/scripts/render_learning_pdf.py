@@ -53,23 +53,51 @@ PANEL = colors.HexColor("#F1F1F1")
 PAPER = colors.HexColor("#F8F8F8")
 WHITE = colors.white
 
-FONT_PATHS = {
-    "TermuctiveTimes": "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-    "TermuctiveTimes-Bold": "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
-    "TermuctiveTimes-Italic": "/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf",
-    "TermuctiveTimes-BoldItalic": (
-        "/System/Library/Fonts/Supplemental/Times New Roman Bold Italic.ttf"
+FONT_NAMES = (
+    "TermuctiveTimes",
+    "TermuctiveTimes-Bold",
+    "TermuctiveTimes-Italic",
+    "TermuctiveTimes-BoldItalic",
+)
+# Times New Roman on macOS, then on Linux; Liberation Serif shares its metrics, so
+# cloud servers without Microsoft's fonts produce the same layout.
+FONT_CANDIDATES = (
+    (
+        "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+        "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf",
+        "/System/Library/Fonts/Supplemental/Times New Roman Bold Italic.ttf",
     ),
-}
+    (
+        "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman_Bold.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman_Italic.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman_Bold_Italic.ttf",
+    ),
+    (
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf",
+    ),
+)
+
+
+def font_paths() -> dict[str, str] | None:
+    for candidate in FONT_CANDIDATES:
+        if all(Path(path).is_file() for path in candidate):
+            return dict(zip(FONT_NAMES, candidate))
+    return None
 
 
 def register_fonts() -> None:
-    missing = [path for path in FONT_PATHS.values() if not Path(path).is_file()]
-    if missing:
-        joined = ", ".join(missing)
-        raise SystemExit(f"Times New Roman font files were not found: {joined}")
+    paths = font_paths()
+    if paths is None:
+        raise SystemExit(
+            "Times New Roman (or Liberation Serif on Linux) font files were not found."
+        )
 
-    for name, path in FONT_PATHS.items():
+    for name, path in paths.items():
         pdfmetrics.registerFont(TTFont(name, path))
     pdfmetrics.registerFontFamily(
         "TermuctiveTimes",

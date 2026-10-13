@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 enum EditorTextEncoding: String, Equatable, Sendable {
@@ -52,6 +53,26 @@ struct EditorDiskSnapshot: Equatable, Sendable {
     let text: String
     let encoding: EditorTextEncoding
     let lineEnding: EditorLineEnding
+    /// SHA-256 of the file's bytes, used by remote saves to detect concurrent changes.
+    var contentDigest: String?
+
+    init(
+        text: String,
+        encoding: EditorTextEncoding,
+        lineEnding: EditorLineEnding,
+        contentDigest: String? = nil
+    ) {
+        self.text = text
+        self.encoding = encoding
+        self.lineEnding = lineEnding
+        self.contentDigest = contentDigest
+    }
+
+    static func == (left: Self, right: Self) -> Bool {
+        left.text == right.text
+            && left.encoding == right.encoding
+            && left.lineEnding == right.lineEnding
+    }
 }
 
 enum EditorExternalChange: Equatable, Sendable {
@@ -100,13 +121,37 @@ enum EditorDiskIO {
         }
 
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        return try snapshot(from: data)
+    }
+
+    /// Decodes file bytes the way the editor shows them.
+    static func snapshot(from data: Data) throws -> EditorDiskSnapshot {
         let decoded = try decode(data)
         let lineEnding = preferredLineEnding(in: decoded.text)
         return EditorDiskSnapshot(
             text: normalizeLineEndings(in: decoded.text),
             encoding: decoded.encoding,
-            lineEnding: lineEnding
+            lineEnding: lineEnding,
+            contentDigest: digest(of: data)
         )
+    }
+
+    /// Encodes editor text back into file bytes.
+    static func renderedData(
+        text: String,
+        encoding: EditorTextEncoding,
+        lineEnding: EditorLineEnding
+    ) throws -> Data {
+        let normalizedText = normalizeLineEndings(in: text)
+        let renderedText =
+            lineEnding == .lineFeed
+            ? normalizedText
+            : normalizedText.replacingOccurrences(of: "\n", with: lineEnding.sequence)
+        return try encodedData(for: renderedText, encoding: encoding)
+    }
+
+    static func digest(of data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     static func readIfExists(from url: URL) throws -> EditorDiskSnapshot? {
@@ -169,7 +214,8 @@ enum EditorDiskIO {
         return EditorDiskSnapshot(
             text: normalizeLineEndings(in: renderedText),
             encoding: encoding,
-            lineEnding: lineEnding
+            lineEnding: lineEnding,
+            contentDigest: digest(of: data)
         )
     }
 
@@ -294,23 +340,34 @@ final class EditorDocumentBuffer: ObservableObject, Identifiable {
     @Published private(set) var errorMessage: String?
 
     private var baselineSnapshot: EditorDiskSnapshot?
+    private let fileSystem: any EditorFileSystemProviding
     private var currentSaveTask: Task<Void, Error>?
     private var saveGeneration = 0
     private var refreshGeneration = 0
     private var statusGeneration = 0
 
-    private init(url: URL, snapshot: EditorDiskSnapshot) {
+    private init(
+        url: URL,
+        snapshot: EditorDiskSnapshot,
+        fileSystem: any EditorFileSystemProviding
+    ) {
         self.url = url.standardizedFileURL
         text = snapshot.text
         baselineSnapshot = snapshot
+        self.fileSystem = fileSystem
     }
 
-    static func open(url: URL) async throws -> EditorDocumentBuffer {
+    static func open(
+        url: URL,
+        fileSystem: any EditorFileSystemProviding = LocalEditorFileSystem()
+    ) async throws -> EditorDocumentBuffer {
         let standardizedURL = url.standardizedFileURL
-        let snapshot = try await Task.detached(priority: .userInitiated) {
-            try EditorDiskIO.read(from: standardizedURL)
-        }.value
-        return EditorDocumentBuffer(url: standardizedURL, snapshot: snapshot)
+        let snapshot = try await fileSystem.read(standardizedURL)
+        return EditorDocumentBuffer(
+            url: standardizedURL,
+            snapshot: snapshot,
+            fileSystem: fileSystem
+        )
     }
 
     var isDirty: Bool {
@@ -355,12 +412,12 @@ final class EditorDocumentBuffer: ObservableObject, Identifiable {
     func refreshFromDisk() async {
         refreshGeneration &+= 1
         let generation = refreshGeneration
-        let fileURL = url
-        let result = await Task.detached(priority: .utility) {
-            Result {
-                try EditorDiskIO.readIfExists(from: fileURL)
-            }
-        }.value
+        let result: Result<EditorDiskSnapshot?, any Error>
+        do {
+            result = .success(try await fileSystem.readIfExists(url))
+        } catch {
+            result = .failure(error)
+        }
         guard refreshGeneration == generation else {
             return
         }
@@ -418,15 +475,13 @@ final class EditorDocumentBuffer: ObservableObject, Identifiable {
         let encoding = baselineSnapshot?.encoding ?? .utf8
         let lineEnding = baselineSnapshot?.lineEnding ?? .lineFeed
         do {
-            let savedSnapshot = try await Task.detached(priority: .userInitiated) {
-                try EditorDiskIO.write(
-                    text: localText,
-                    to: fileURL,
-                    encoding: encoding,
-                    lineEnding: lineEnding,
-                    expectedSnapshot: expectedSnapshot
-                )
-            }.value
+            let savedSnapshot = try await fileSystem.write(
+                text: localText,
+                to: fileURL,
+                encoding: encoding,
+                lineEnding: lineEnding,
+                expectedSnapshot: expectedSnapshot
+            )
             baselineSnapshot = savedSnapshot
             if text == localText {
                 text = savedSnapshot.text
