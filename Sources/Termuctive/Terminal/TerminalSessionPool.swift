@@ -885,7 +885,33 @@ final class TermuctiveTerminalView: LocalProcessTerminalView {
         super.insertText(string, replacementRange: replacementRange)
     }
 
+    /// Handles pasted images and dropped files for terminals on another machine.
+    /// Returns true when it took over the pasteboard contents.
+    var remotePasteboardHandler: ((NSPasteboard) -> Bool)?
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard remotePasteboardHandler != nil,
+            sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: nil)
+        else {
+            return super.draggingEntered(sender)
+        }
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if let remotePasteboardHandler, remotePasteboardHandler(sender.draggingPasteboard) {
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
+
     override func paste(_ sender: Any) {
+        if NSPasteboard.general.string(forType: .string) == nil,
+            let remotePasteboardHandler,
+            remotePasteboardHandler(NSPasteboard.general)
+        {
+            return
+        }
         if let text = NSPasteboard.general.string(forType: .string) {
             localCommandTracker.insert(text)
         } else {
@@ -1360,6 +1386,7 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         outputPDFTracker = TerminalOutputPDFTracker()
         outputActivityClassifier = TerminalOutputActivityClassifier()
         lastAgentOutputSignalTime = nil
+        configureRemoteUploads(launch.remote?.uploadTarget)
         if let remote = launch.remote {
             // The working directory lives on the remote host, so it is neither validated
             // nor replaced here, and local process inspection would only see the client.
@@ -1394,6 +1421,29 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
         activitySessionID = sessionID
         onAgentActivityStarted(paneID, shellPID, shellIdentity, sessionID)
         return true
+    }
+
+    private func configureRemoteUploads(_ target: RemoteUploadTarget?) {
+        guard let target else {
+            view.remotePasteboardHandler = nil
+            view.unregisterDraggedTypes()
+            return
+        }
+        view.registerForDraggedTypes([.fileURL])
+        view.remotePasteboardHandler = { [weak view] pasteboard in
+            guard let items = RemoteUpload.items(from: pasteboard), !items.isEmpty else {
+                return false
+            }
+            Task { @MainActor in
+                let paths = await RemoteUpload.upload(items, to: target)
+                guard !paths.isEmpty else {
+                    NSSound.beep()
+                    return
+                }
+                view?.send(txt: paths.map(ShellQuoting.quote).joined(separator: " ") + " ")
+            }
+            return true
+        }
     }
 
     private func trackOutput(_ bytes: ArraySlice<UInt8>) {

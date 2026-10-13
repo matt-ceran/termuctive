@@ -6,7 +6,7 @@ import subprocess
 import sys
 from typing import Dict, List, Optional
 
-from . import PROTOCOL, paths, validate
+from . import PROTOCOL, paths, sessionstate, validate
 from .jsonio import read_json
 
 # Exit codes understood by Termuctive's reconnect policy.
@@ -112,7 +112,12 @@ def attach(
     if has_session(slug, user, pane):
         arguments = tmux_command(slug, user, "attach-session", "-t", "=" + name)
     else:
-        directory = starting_directory(slug, cwd)
+        # A pane whose session vanished (the server restarted) comes back where it was,
+        # resuming its Claude conversation.
+        previous = sessionstate.load(slug, user, pane)
+        directory = starting_directory(slug, sessionstate.resume_directory(previous) or cwd)
+        command = command or sessionstate.resume_command(previous)
+        sessionstate.update(slug, user, pane, {"cwd": directory, "created": _now()})
         arguments = tmux_command(
             slug,
             user,
@@ -130,7 +135,10 @@ def attach(
         if command:
             arguments.append(f'{command}; exec "${{SHELL:-/bin/bash}}" -l')
     subprocess.call(arguments, env=environment)
-    return EXIT_DETACHED if has_session(slug, user, pane) else EXIT_SHELL_ENDED
+    if has_session(slug, user, pane):
+        return EXIT_DETACHED
+    sessionstate.remove(slug, user, pane)
+    return EXIT_SHELL_ENDED
 
 
 def kill(slug: str, pane: str, user: str) -> int:
@@ -140,7 +148,27 @@ def kill(slug: str, pane: str, user: str) -> int:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+    sessionstate.remove(slug, user, pane)
     return 0
+
+
+def report(slug: str, user: str) -> List[Dict[str, object]]:
+    """Live sessions with their agent state and processes, for Termuctive's activity view."""
+    sessions = list_sessions(slug, user)
+    states = sessionstate.all_states(slug, user)
+    children = sessionstate.children_map() if sessions else {}
+    for session in sessions:
+        state = states.get(str(session["pane"])) or {}
+        claude = state.get("claude") if isinstance(state.get("claude"), dict) else None
+        session["claude"] = claude
+        session["processes"] = sessionstate.process_tree(int(session["pid"]), children)
+    return sessions
+
+
+def _now() -> float:
+    import time
+
+    return time.time()
 
 
 LIST_FORMAT = "\t".join(

@@ -70,6 +70,13 @@ struct WorkspaceView: View {
                     store: store,
                     projectID: projectID
                 )
+            case .serverStatus(let hostID):
+                CloudServerStatusSheet(
+                    cloud: cloud,
+                    cloudStore: cloudStore,
+                    store: store,
+                    hostID: hostID
+                )
             case .moveProject(let projectID):
                 MoveToCloudSheet(
                     cloud: cloud,

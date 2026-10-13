@@ -417,6 +417,14 @@ def run_setup(options: SetupOptions) -> SetupResult:
         except proc.CommandError as error:
             result.warnings.append(f"Claude Code was not installed: {error}")
 
+    if options.member:
+        proc.step("Connecting Claude Code to Termuctive")
+        install = admin.run_as(
+            options.member, [str(paths.stable_tmc()), "claude", "install-hooks"]
+        )
+        if install.returncode != 0:
+            result.warnings.append("Termuctive could not add its Claude Code hooks.")
+
     if Path("/var/run/reboot-required").exists():
         result.reboot_required = True
 

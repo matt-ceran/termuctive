@@ -91,7 +91,7 @@ def import_settings(mac_settings: Dict[str, object]) -> Dict[str, object]:
             for group in groups
             if isinstance(group, dict)
             and any(
-                isinstance(entry, dict) and "/opt/termuctive/" in str(entry.get("command", ""))
+                isinstance(entry, dict) and "/bin/tmc hook " in str(entry.get("command", ""))
                 for entry in group.get("hooks", [])
             )
         ]

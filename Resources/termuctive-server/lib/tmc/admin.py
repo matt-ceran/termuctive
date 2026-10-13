@@ -170,18 +170,31 @@ def install_claude(user: str) -> Dict[str, object]:
     if binary.exists():
         return {"user": user, "installed": False, "path": str(binary)}
     proc.run(
-        [
-            "runuser",
-            "-u",
-            user,
-            "--",
-            "bash",
-            "-lc",
-            "curl -fsSL https://claude.ai/install.sh | bash",
-        ],
+        user_command(user, ["bash", "-lc", "curl -fsSL https://claude.ai/install.sh | bash"]),
         capture=False,
     )
     return {"user": user, "installed": binary.exists(), "path": str(binary)}
+
+
+def user_command(user: str, command: List[str]) -> List[str]:
+    """Runs `command` as `user` with that user's own home and identity.
+
+    `runuser -u` keeps the caller's environment, so HOME would otherwise still point
+    at root's home and files would land there.
+    """
+    entry = pwd.getpwnam(user)
+    return [
+        "runuser",
+        "-u",
+        user,
+        "--",
+        "env",
+        f"HOME={entry.pw_dir}",
+        f"USER={user}",
+        f"LOGNAME={user}",
+        f"SHELL={entry.pw_shell or '/bin/bash'}",
+        *command,
+    ]
 
 
 # Projects
@@ -239,7 +252,7 @@ def project_create(slug: str, root: str, owner: str) -> Dict[str, object]:
         chown_group(run_directory, "root", group, 0o2770)
 
         if not Path(root).exists():
-            proc.run(["runuser", "-u", owner, "--", "mkdir", "-p", root])
+            proc.run(user_command(owner, ["mkdir", "-p", root]))
 
         paths.projects_dir().mkdir(mode=0o755, parents=True, exist_ok=True)
         link = paths.projects_dir() / slug
@@ -278,4 +291,4 @@ def project_list(user: Optional[str] = None) -> List[Dict[str, object]]:
 
 
 def run_as(user: str, command: List[str]) -> subprocess.CompletedProcess:
-    return proc.run(["runuser", "-u", user, "--", *command], check=False)
+    return proc.run(user_command(user, command), check=False)

@@ -12,6 +12,7 @@ from . import (
     claudecfg,
     doctor,
     finalize,
+    hooks,
     hydrate,
     ports,
     proc,
@@ -47,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
     listing = commands.add_parser("list", help="list pane sessions")
     listing.add_argument("--slug", required=True)
 
+    report = commands.add_parser("sessions", help="pane sessions with agent state")
+    report.add_argument("--slug", required=True)
+
+    hook = commands.add_parser("hook", help="Claude Code hook (reads the event on stdin)")
+    hook.add_argument("event", choices=sorted(hooks.EVENTS))
+
     state = commands.add_parser("status", help="server status as JSON")
     state.add_argument("--slug")
 
@@ -61,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     gitconfig.add_argument("action", choices=["import"])
 
     claude = commands.add_parser("claude", help="Claude Code settings copied from a Mac")
-    claude.add_argument("action", choices=["import-settings", "import-config"])
+    claude.add_argument("action", choices=["import-settings", "import-config", "install-hooks"])
 
     commands.add_parser("ports", help="TCP ports your processes listen on")
 
@@ -147,6 +154,14 @@ def dispatch(arguments: argparse.Namespace) -> int:
     if command == "list":
         emit(tmuxctl.list_sessions(validate.slug(arguments.slug), proc.caller()))
         return 0
+    if command == "sessions":
+        emit(tmuxctl.report(validate.slug(arguments.slug), proc.caller()))
+        return 0
+    if command == "hook":
+        try:
+            return hooks.handle(arguments.event)
+        except Exception:  # noqa: BLE001 - a failing hook must never disturb Claude Code
+            return 0
     if command == "status":
         emit(status.collect(validate.slug(arguments.slug) if arguments.slug else None))
         return 0
@@ -163,6 +178,9 @@ def dispatch(arguments: argparse.Namespace) -> int:
         return 0
     if command == "gitconfig":
         emit(finalize.sanitize_gitconfig(sys.stdin.read()))
+        return 0
+    if command == "claude" and arguments.action == "install-hooks":
+        emit(hooks.install())
         return 0
     if command == "claude":
         payload = claudecfg.parse_json_input(sys.stdin.read())
