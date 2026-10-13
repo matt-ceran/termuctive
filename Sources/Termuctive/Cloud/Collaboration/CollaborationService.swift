@@ -30,6 +30,27 @@ struct TeamReport: Decodable, Equatable {
     let members: [Member]
 }
 
+struct BoardTask: Decodable, Equatable, Identifiable {
+    let id: String
+    let kind: String
+    let from: String
+    let to: String
+    let title: String
+    let details: String?
+    let status: String
+    let assignee: String?
+    let result: String?
+    let createdAt: Double
+
+    var isOpen: Bool {
+        ["proposed", "queued", "delivered", "started"].contains(status)
+    }
+}
+
+private struct AutoRunState: Decodable {
+    let autoRun: Bool
+}
+
 /// What a Watch window shows: another member's session, read-only.
 struct CloudWatchTarget: Codable, Hashable, Identifiable {
     let configPath: String
@@ -221,6 +242,55 @@ struct CollaborationService {
                 alias: host.alias,
                 remote: .arguments([TMCClient.executable, "team", "--slug", binding.slug])
             )
+        )
+    }
+
+    func tasks(projectID: UUID) async throws -> [BoardTask] {
+        try await run(projectID, [TMCClient.executable, "task", "list"], as: [BoardTask].self)
+    }
+
+    func postTask(projectID: UUID, to member: String, title: String, details: String) async throws {
+        _ = try await run(
+            projectID,
+            [
+                TMCClient.executable, "task", "post", "--to", member, "--title", title,
+                "--details", details,
+            ],
+            as: BoardTask.self
+        )
+    }
+
+    func autoRun(projectID: UUID) async throws -> Bool {
+        try await run(
+            projectID, [TMCClient.executable, "autorun", "status"], as: AutoRunState.self
+        )
+        .autoRun
+    }
+
+    func setAutoRun(_ enabled: Bool, projectID: UUID) async throws {
+        _ = try await run(
+            projectID,
+            [TMCClient.executable, "autorun", enabled ? "on" : "off"],
+            as: AutoRunState.self
+        )
+    }
+
+    /// Runs a toolkit command for the project's slug, which is appended as `--slug`.
+    private func run<Value: Decodable>(
+        _ projectID: UUID,
+        _ arguments: [String],
+        as type: Value.Type
+    ) async throws -> Value {
+        guard let binding = cloud.cloudStore.binding(forProjectID: projectID),
+            let host = cloud.cloudStore.host(withID: binding.hostID)
+        else {
+            throw CloudCommandError.invalidResponse("This project is not in the cloud.")
+        }
+        await cloud.control.ensureMaster(alias: host.alias)
+        return try await cloud.runner.decode(
+            type,
+            CloudCommand(
+                alias: host.alias, remote: .arguments(arguments + ["--slug", binding.slug]))
         )
     }
 

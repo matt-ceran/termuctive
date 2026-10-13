@@ -107,6 +107,7 @@ def invite(slug: str, name: str, home: str, invite_key: str, share_paths: List[s
         admin.write_sudoers(f"termuctive-member-{name}", admin.member_sudoers_rule(name))
         if admin.has_systemd():
             proc.run(["loginctl", "enable-linger", name], check=False)
+        admin.enable_dispatch(name)
 
         member_directory = paths.member_dir(slug, name)
         member_directory.mkdir(parents=True, exist_ok=True)

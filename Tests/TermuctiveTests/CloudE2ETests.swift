@@ -420,6 +420,96 @@ final class CloudE2ETests: XCTestCase {
         )
     }
 
+    func testAgentsHandTasksToEachOther() async throws {
+        let (mattStore, mattCloud, host) = try await prepareServer()
+        let root = NSHomeDirectory() + "/termuctive-e2e handoff"
+        let projectID = mattStore.addCloudProject(name: "handoff (Cloud)", rootDirectory: root)
+        try await mattCloud.connect(
+            projectID: projectID, host: host, slug: "handoff", remoteRoot: root)
+        let mattService = CollaborationService(cloud: mattCloud, store: mattStore)
+        let invite = try await mattService.invite(
+            projectID: projectID,
+            partner: "sam",
+            partnerHome: "/Users/sam"
+        )
+
+        let samStore = WorkspaceStore(persistence: E2EWorkspacePersistence())
+        let samCloudStore = CloudStore(persistence: InMemoryCloudPersistence())
+        let samCloud = CloudSessionCoordinator(
+            store: samStore,
+            cloudStore: samCloudStore,
+            paths: makeTemporarySSHPaths(),
+            observesSystemEvents: false
+        )
+        let samService = CollaborationService(cloud: samCloud, store: samStore)
+        let samProjectID = try await samService.join(invite)
+        let samHost = try XCTUnwrap(samCloudStore.hosts.first)
+
+        // Sam has a session waiting for input.
+        let sessions = TerminalSessionPool(
+            store: samStore,
+            launchResolver: { [weak samCloud] pane in
+                samCloud?.launchSpec(for: pane) ?? .localShell
+            }
+        )
+        samCloud.attach(sessions: sessions)
+        defer {
+            sessions.terminateAll()
+        }
+        let pane = try XCTUnwrap(
+            samStore.selectedSpace.flatMap {
+                $0.layout.terminal(withID: $0.layout.firstTerminalID)
+            }
+        )
+        let terminal = sessions.terminalView(for: pane)
+        terminal.frame = NSRect(x: 0, y: 0, width: 900, height: 480)
+        _ = try await output(of: terminal, containing: "$ ", timeout: 60)
+        terminal.send(
+            txt: "echo '{\"session_id\": \"n1\"}' | /opt/termuctive/bin/tmc hook session-start; "
+                + "echo READY\r"
+        )
+        _ = try await output(of: terminal, containing: "READY")
+
+        // Matt hands Sam a task; Sam's dispatcher runs it in the idle session.
+        try await mattService.postTask(
+            projectID: projectID,
+            to: "sam",
+            title: "Add retry tests",
+            details: "Cover the login retry path."
+        )
+        let dispatched = try await remote(
+            samCloud,
+            samHost,
+            "/opt/termuctive/bin/tmc dispatch --once --slug handoff"
+        )
+        XCTAssertTrue(dispatched.contains("delivered"), dispatched)
+        _ = try await output(of: terminal, containing: "Add retry tests")
+        let delivered = try await samService.tasks(projectID: samProjectID)
+        XCTAssertEqual(delivered.map(\.status), ["delivered"])
+
+        _ = try await remote(
+            samCloud,
+            samHost,
+            "/opt/termuctive/bin/tmc task update --slug handoff --id \(delivered[0].id) "
+                + "--status completed --result 'Added 3 tests'"
+        )
+        let finished = try await mattService.tasks(projectID: projectID)
+        XCTAssertEqual(finished.first?.status, "completed")
+        XCTAssertEqual(finished.first?.result, "Added 3 tests")
+        XCTAssertEqual(finished.first?.assignee, "sam")
+
+        // With auto-run paused, new work waits for Sam.
+        try await samService.setAutoRun(false, projectID: samProjectID)
+        let paused = try await samService.autoRun(projectID: samProjectID)
+        XCTAssertFalse(paused)
+        try await mattService.postTask(
+            projectID: projectID, to: "sam", title: "Later", details: "")
+        _ = try await remote(
+            samCloud, samHost, "/opt/termuctive/bin/tmc dispatch --once --slug handoff")
+        let waiting = try await mattService.tasks(projectID: projectID)
+        XCTAssertEqual(waiting.last?.status, "proposed")
+    }
+
     private func remote(
         _ cloud: CloudSessionCoordinator,
         _ host: CloudHost,
