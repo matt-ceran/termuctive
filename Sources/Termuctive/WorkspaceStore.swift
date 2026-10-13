@@ -224,6 +224,26 @@ final class WorkspaceStore: ObservableObject {
         save()
     }
 
+    /// Adds a project whose folder lives on a server rather than this Mac, and selects it.
+    @discardableResult
+    func addCloudProject(name: String, rootDirectory: String) -> UUID {
+        let pane = TerminalPane(title: "Terminal", workingDirectory: rootDirectory)
+        let space = TerminalSpace(name: "Terminal", layout: .terminal(pane))
+        let project = TerminalProject(
+            name: uniqueName(base: name, existing: document.projects.map(\.name)),
+            rootDirectory: rootDirectory,
+            items: [.space(space)],
+            lastSelectedItemID: space.id,
+            lastSelectedSpaceID: space.id
+        )
+        rememberCurrentPaneState()
+        document.projects.append(project)
+        expandedProjectIDs.insert(project.id)
+        save()
+        selectProject(withID: project.id)
+        return project.id
+    }
+
     /// Copies a project's folders, spaces, notes and pane layouts under new identifiers
     /// and selects the copy. Note documents themselves are copied by the caller.
     @discardableResult

@@ -32,6 +32,8 @@ final class TransferEngine: ObservableObject {
     let manifest: TransferManifest
     let host: CloudHost
     let slug: String
+    /// Collaborators copying their own settings neither create nor finalize the project.
+    var preparesProject = true
 
     private let runner: any CloudCommandRunning
     private let paths: SSHPaths
@@ -83,7 +85,7 @@ final class TransferEngine: ObservableObject {
         }
 
         do {
-            if pass == .initial {
+            if pass == .initial, preparesProject {
                 currentTitle = "Preparing the server"
                 _ = try await TMCClient(runner: runner).createProject(
                     alias: host.alias,
@@ -106,8 +108,13 @@ final class TransferEngine: ObservableObject {
                 completedBytes = finishedBytes
             }
 
-            currentTitle = "Finishing on the server"
             currentFile = nil
+            guard preparesProject else {
+                completedBytes = totalBytes
+                state = .finished
+                return true
+            }
+            currentTitle = "Finishing on the server"
             let report = try await runner.decode(
                 FinalizeReport.self,
                 CloudCommand(
@@ -174,13 +181,14 @@ final class TransferEngine: ObservableObject {
         }
     }
 
-    private func rsync(
+    func rsync(
         source: String,
         destination: String,
         isDirectory: Bool,
         excludes: [String],
         mirrorsDeletions: Bool,
         filesFrom: String? = nil,
+        comparesContents: Bool = false,
         progress: @escaping @MainActor (Int64) -> Void
     ) async throws {
         let command = RsyncCommand(configPath: paths.configURL.path, alias: host.alias)
@@ -193,7 +201,8 @@ final class TransferEngine: ObservableObject {
                 isDirectory: isDirectory,
                 excludes: excludes,
                 mirrorsDeletions: mirrorsDeletions,
-                filesFrom: filesFrom
+                filesFrom: filesFrom,
+                comparesContents: comparesContents
             )
         ) { [weak self] text in
             let snapshot = parser.consume(text)

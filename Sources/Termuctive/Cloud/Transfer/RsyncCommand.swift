@@ -19,9 +19,15 @@ struct RsyncCommand: Equatable {
         isDirectory: Bool,
         excludes: [String],
         mirrorsDeletions: Bool,
-        filesFrom: String? = nil
+        filesFrom: String? = nil,
+        comparesContents: Bool = false
     ) -> [String] {
         var arguments = ["-rlptz", "--partial", "--progress"]
+        if comparesContents {
+            // Checkouts recreated on the server have new timestamps; compare contents so
+            // unchanged files are not sent again.
+            arguments.append("--checksum")
+        }
         if mirrorsDeletions {
             arguments.append("--delete")
         }

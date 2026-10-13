@@ -17,12 +17,14 @@ enum SSHConfigRenderer {
                 user: host.memberUser,
                 identity: paths.memberKeyURL
             )
-            lines += hostBlock(
-                alias: host.adminAlias,
-                host: host,
-                user: host.adminUser,
-                identity: paths.adminKeyURL
-            )
+            if host.hasAdminAccess {
+                lines += hostBlock(
+                    alias: host.adminAlias,
+                    host: host,
+                    user: host.adminUser,
+                    identity: paths.adminKeyURL
+                )
+            }
         }
         lines += [
             "Host tmc-*",

@@ -109,20 +109,18 @@ def attach(
 
     environment = session_environment(slug, pane)
     name = session_name(pane)
-    if has_session(slug, user, pane):
-        arguments = tmux_command(slug, user, "attach-session", "-t", "=" + name)
-    else:
+    if not has_session(slug, user, pane):
         # A pane whose session vanished (the server restarted) comes back where it was,
         # resuming its Claude conversation.
         previous = sessionstate.load(slug, user, pane)
         directory = starting_directory(slug, sessionstate.resume_directory(previous) or cwd)
         command = command or sessionstate.resume_command(previous)
         sessionstate.update(slug, user, pane, {"cwd": directory, "created": _now()})
-        arguments = tmux_command(
+        create = tmux_command(
             slug,
             user,
             "new-session",
-            "-A",
+            "-d",
             "-s",
             name,
             "-c",
@@ -133,12 +131,36 @@ def attach(
             f"TMC_PROJECT={slug}",
         )
         if command:
-            arguments.append(f'{command}; exec "${{SHELL:-/bin/bash}}" -l')
+            create.append(f'{command}; exec "${{SHELL:-/bin/bash}}" -l')
+        subprocess.run(create, env=environment, stdout=subprocess.DEVNULL)
+    grant_watchers(slug, user)
+    arguments = tmux_command(slug, user, "attach-session", "-t", "=" + name)
     subprocess.call(arguments, env=environment)
     if has_session(slug, user, pane):
         return EXIT_DETACHED
     sessionstate.remove(slug, user, pane)
     return EXIT_SHELL_ENDED
+
+
+def grant_watchers(slug: str, user: str) -> None:
+    """Lets the other project members watch this member's sessions read-only."""
+    from . import admin
+
+    socket = paths.tmux_socket(slug, user)
+    if not socket.exists():
+        return
+    try:
+        os.chmod(socket, 0o660)
+    except OSError:
+        return
+    project = admin.load_project(slug) or {}
+    for member in admin.project_members(project):
+        if member != user:
+            subprocess.run(
+                tmux_command(slug, user, "server-access", "-ar", member),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
 
 def kill(slug: str, pane: str, user: str) -> int:

@@ -70,6 +70,12 @@ struct WorkspaceView: View {
                     store: store,
                     projectID: projectID
                 )
+            case .inviteCollaborator(let projectID):
+                InviteCollaboratorSheet(cloud: cloud, store: store, projectID: projectID)
+            case .joinProject:
+                JoinCloudProjectSheet(cloud: cloud, store: store)
+            case .team(let projectID):
+                TeamSheet(cloud: cloud, store: store, projectID: projectID)
             case .serverStatus(let hostID):
                 CloudServerStatusSheet(
                     cloud: cloud,

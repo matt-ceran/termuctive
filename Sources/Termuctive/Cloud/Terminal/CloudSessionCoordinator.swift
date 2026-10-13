@@ -8,6 +8,9 @@ enum CloudFlow: Identifiable, Equatable {
     case connectProject(UUID)
     case moveProject(UUID)
     case serverStatus(UUID)
+    case inviteCollaborator(UUID)
+    case joinProject
+    case team(UUID)
 
     var id: String {
         switch self {
@@ -19,6 +22,12 @@ enum CloudFlow: Identifiable, Equatable {
             "moveProject-\(projectID.uuidString)"
         case .serverStatus(let hostID):
             "serverStatus-\(hostID.uuidString)"
+        case .inviteCollaborator(let projectID):
+            "invite-\(projectID.uuidString)"
+        case .joinProject:
+            "joinProject"
+        case .team(let projectID):
+            "team-\(projectID.uuidString)"
         }
     }
 }

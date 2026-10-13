@@ -194,7 +194,10 @@ final class ProjectMove: ObservableObject {
                 hostID: host.id,
                 slug: slug,
                 remoteRoot: manifest.projectRoot,
-                role: .owner
+                role: .owner,
+                sharedPaths: manifest.selectedItems
+                    .filter { $0.kind == .relatedFolder }
+                    .map(\.remotePath)
             )
         )
         cloud.workspaceTerminalsChanged()

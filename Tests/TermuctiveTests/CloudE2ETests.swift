@@ -181,6 +181,245 @@ final class CloudE2ETests: XCTestCase {
         XCTAssertTrue(worktrees.contains("worktree \(worktree)"))
     }
 
+    func testCollaboratorJoinsSharesWatchesAndBringsTheirWork() async throws {
+        let (mattStore, mattCloud, host) = try await prepareServer()
+        let base = NSHomeDirectory() + "/.termuctive-e2e"
+        let fixture = base + "/team project"
+        let related = NSHomeDirectory() + "/termuctive-e2e-related"
+        try? FileManager.default.removeItem(atPath: base)
+        try? FileManager.default.removeItem(atPath: related)
+        defer {
+            try? FileManager.default.removeItem(atPath: base)
+            try? FileManager.default.removeItem(atPath: related)
+        }
+        try makeFixture(at: fixture, related: related)
+
+        // Matt moves the project and already has a Claude memory for it.
+        var manifest = try await ProjectScanner(
+            claude: ClaudeLocalData(homeDirectory: URL(fileURLWithPath: base + "/no-claude"))
+        ).scan(projectID: UUID(), projectName: "team", root: fixture, paneDirectories: [])
+        for index in manifest.items.indices
+        where [.personalFile, .personalFolder, .claudeConfiguration].contains(
+            manifest.items[index].kind
+        ) {
+            manifest.items[index].selected = false
+        }
+        let moved = await TransferEngine(
+            manifest: manifest,
+            host: host,
+            slug: "team",
+            runner: mattCloud.runner,
+            paths: mattCloud.paths
+        ).run(.initial)
+        XCTAssertTrue(moved)
+        let projectID = mattStore.addCloudProject(name: "team (Cloud)", rootDirectory: fixture)
+        mattCloud.cloudStore.bind(
+            CloudProjectBinding(
+                projectID: projectID,
+                hostID: host.id,
+                slug: "team",
+                remoteRoot: fixture,
+                role: .owner,
+                sharedPaths: [related]
+            )
+        )
+        let key = ClaudeLocalData.projectKey(for: fixture)
+        _ = try await remote(
+            mattCloud,
+            host,
+            "mkdir -p ~/.claude/projects/\(key)/memory && echo owner-memory > "
+                + "~/.claude/projects/\(key)/memory/owner.md"
+        )
+
+        // Matt invites Sam; Sam joins on his own Mac.
+        let invite = try await CollaborationService(cloud: mattCloud, store: mattStore).invite(
+            projectID: projectID,
+            partner: "sam",
+            partnerHome: "/Users/sam"
+        )
+        XCTAssertFalse(invite.hostKeys.isEmpty)
+        let samStore = WorkspaceStore(persistence: E2EWorkspacePersistence())
+        let samCloudStore = CloudStore(persistence: InMemoryCloudPersistence())
+        let samCloud = CloudSessionCoordinator(
+            store: samStore,
+            cloudStore: samCloudStore,
+            paths: makeTemporarySSHPaths(),
+            observesSystemEvents: false
+        )
+        let samProjectID = try await CollaborationService(cloud: samCloud, store: samStore)
+            .join(try InviteCode.decode(try invite.encoded()))
+        let samHost = try XCTUnwrap(samCloudStore.hosts.first)
+        let samBinding = try XCTUnwrap(samCloudStore.binding(forProjectID: samProjectID))
+        XCTAssertEqual(samBinding.role, .member)
+
+        let replayStore = WorkspaceStore(persistence: E2EWorkspacePersistence())
+        let replay = CloudSessionCoordinator(
+            store: replayStore,
+            cloudStore: CloudStore(persistence: InMemoryCloudPersistence()),
+            paths: makeTemporarySSHPaths(),
+            observesSystemEvents: false
+        )
+        do {
+            _ = try await CollaborationService(cloud: replay, store: replayStore).join(invite)
+            XCTFail("An invite must only work once")
+        } catch {}
+
+        // Sam shares the project files, .env files, related folders and memories.
+        let shared = try await remote(
+            samCloud,
+            samHost,
+            [
+                "cat \(ShellQuoting.quote(fixture + "/app.py"))",
+                "cat \(ShellQuoting.quote(fixture + "/.env"))",
+                "cat \(ShellQuoting.quote(related + "/notes.txt"))",
+                "cat ~/.claude/projects/\(key)/memory/owner.md",
+                "echo sam-memory > ~/.claude/projects/\(key)/memory/sam.md",
+            ].joined(separator: " && ")
+        )
+        XCTAssertEqual(
+            shared.split(separator: "\n").map(String.init),
+            ["print('hello')", "SECRET=1", "related data", "owner-memory"]
+        )
+        let seenByMatt = try await remote(
+            mattCloud,
+            host,
+            "cat ~/.claude/projects/\(key)/memory/sam.md"
+        )
+        XCTAssertEqual(seenByMatt, "sam-memory\n")
+
+        // Sam watches Matt's live session, read-only.
+        let sessions = TerminalSessionPool(
+            store: mattStore,
+            launchResolver: { [weak mattCloud] pane in
+                mattCloud?.launchSpec(for: pane) ?? .localShell
+            }
+        )
+        mattCloud.attach(sessions: sessions)
+        defer {
+            sessions.terminateAll()
+        }
+        let pane = try XCTUnwrap(
+            mattStore.selectedSpace.flatMap {
+                $0.layout.terminal(withID: $0.layout.firstTerminalID)
+            }
+        )
+        let terminal = sessions.terminalView(for: pane)
+        terminal.frame = NSRect(x: 0, y: 0, width: 800, height: 480)
+        _ = try await output(of: terminal, containing: "$ ")
+        terminal.send(txt: "echo WATCH-ME-$((2*21))\r")
+        _ = try await output(of: terminal, containing: "WATCH-ME-42")
+
+        let target = try XCTUnwrap(
+            CollaborationService(cloud: samCloud, store: samStore).watchTarget(
+                projectID: samProjectID,
+                member: host.memberUser,
+                paneID: pane.id,
+                title: "Matt"
+            )
+        )
+        let watcher = TermuctiveTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 480))
+        watcher.startProcess(
+            executable: "/usr/bin/ssh",
+            args: target.arguments,
+            environment: TerminalShellConfiguration.live.environment,
+            execName: nil,
+            currentDirectory: NSHomeDirectory()
+        )
+        _ = try await output(of: watcher, containing: "WATCH-ME-42")
+        watcher.send(txt: "echo TYPED-BY-WATCHER\r")
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        let mattScreen = String(decoding: terminal.getTerminal().getBufferAsData(), as: UTF8.self)
+        XCTAssertFalse(mattScreen.contains("TYPED-BY-WATCHER"))
+        watcher.terminate()
+
+        let team = try await CollaborationService(cloud: samCloud, store: samStore).team(
+            projectID: samProjectID
+        )
+        XCTAssertEqual(Set(team.members.map(\.user)), [host.memberUser, "sam"])
+        XCTAssertTrue(
+            team.members.first { $0.user == host.memberUser }?.sessions.contains {
+                $0.pane == pane.id
+            }
+                ?? false
+        )
+
+        // Sam brings his own local copy of the project.
+        let samLocal = base + "/sam copy"
+        XCTAssertEqual(try ProcessRunnerSync.git(["clone", "-q", fixture, samLocal]), 0)
+        for arguments in [
+            ["config", "user.email", "sam@example.com"], ["config", "user.name", "Sam"],
+            ["checkout", "-q", "-b", "sam-feature"],
+        ] {
+            XCTAssertEqual(try ProcessRunnerSync.git(["-C", samLocal] + arguments), 0)
+        }
+        try "print('sam committed')\n".write(
+            toFile: samLocal + "/sam.py",
+            atomically: true,
+            encoding: .utf8
+        )
+        XCTAssertEqual(try ProcessRunnerSync.git(["-C", samLocal, "add", "sam.py"]), 0)
+        XCTAssertEqual(
+            try ProcessRunnerSync.git(["-C", samLocal, "commit", "-q", "-m", "sam"]),
+            0
+        )
+        try "print('sam in progress')\n".write(
+            toFile: samLocal + "/app.py",
+            atomically: true,
+            encoding: .utf8
+        )
+        try "SECRET=sam\n".write(toFile: samLocal + "/.env", atomically: true, encoding: .utf8)
+        let samClaude = ClaudeLocalData(homeDirectory: URL(fileURLWithPath: base + "/sam-home"))
+        let history = samClaude.projectsDirectory
+            .appendingPathComponent(ClaudeLocalData.projectKey(for: samLocal))
+        try FileManager.default.createDirectory(
+            at: history.appendingPathComponent("memory"),
+            withIntermediateDirectories: true
+        )
+        try "sam's own memory\n".write(
+            to: history.appendingPathComponent("memory/from-sams-mac.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "{\"cwd\": \"\(samLocal)\"}\n".write(
+            to: history.appendingPathComponent("a.jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let importer = PartnerImport(
+            localRoot: samLocal,
+            binding: samBinding,
+            host: samHost,
+            cloud: samCloud,
+            claude: samClaude
+        )
+        importer.includesSettings = false
+        await importer.run()
+        XCTAssertEqual(importer.state, .finished, "\(importer.notes)")
+
+        let worktree = fixture + "/.worktrees/sam-sam-feature"
+        XCTAssertEqual(importer.createdWorktrees, [worktree])
+        let imported = try await remote(
+            samCloud,
+            samHost,
+            [
+                "cat \(ShellQuoting.quote(worktree + "/app.py"))",
+                "cat \(ShellQuoting.quote(worktree + "/sam.py"))",
+                "cat \(ShellQuoting.quote(worktree + "/.env"))",
+                "git -C \(ShellQuoting.quote(worktree)) rev-parse --abbrev-ref HEAD",
+                "cat ~/.claude/projects/\(key)/memory/from-sams-mac.md",
+                "test -e ~/.claude/projects/\(key)/a.jsonl && echo history",
+            ].joined(separator: " && ")
+        )
+        XCTAssertEqual(
+            imported.split(separator: "\n").map(String.init),
+            [
+                "print('sam in progress')", "print('sam committed')", "SECRET=sam",
+                "sam-feature", "sam's own memory", "history",
+            ]
+        )
+    }
+
     private func remote(
         _ cloud: CloudSessionCoordinator,
         _ host: CloudHost,
