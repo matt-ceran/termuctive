@@ -141,5 +141,6 @@ Choose **Bring My Local Work...** to add your own copy of the project:
 
 `Scripts/cloud-test-server.sh up` starts a disposable Ubuntu server in Docker on
 `127.0.0.1:2222`. With it running, set `TERMUCTIVE_CLOUD_E2E=1` to run the end-to-end
-tests in `CloudE2ETests`. The server toolkit's own tests run with
-`python3 -m unittest discover -s Tests/ServerToolkit`.
+tests in `CloudE2ETests`. With `xcodebuild`, pass it as `TEST_RUNNER_TERMUCTIVE_CLOUD_E2E=1`,
+and add `TEST_RUNNER_PATH="$PATH"` when `docker` is outside the system paths. The server
+toolkit's own tests run with `python3 -m unittest discover -s Tests/ServerToolkit`.
