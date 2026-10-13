@@ -8,7 +8,7 @@ struct CloudServerSetupSheet: View {
     @State private var name = "Home Server"
     @State private var address = ""
     @State private var port = "22"
-    @State private var adminUser = "admin"
+    @State private var adminUser = ""
     @State private var memberUser = CloudServerSetupSheet.defaultMemberUser
     @State private var tailscaleName = "termuctive"
     @State private var installsDocker = false
@@ -143,7 +143,7 @@ struct CloudServerSetupSheet: View {
             TextField("Server name", text: $name)
             TextField("Address", text: $address, prompt: Text("192.168.1.50"))
             TextField("SSH port", text: $port)
-            TextField("Administrator account", text: $adminUser)
+            TextField("Administrator account", text: $adminUser, prompt: Text("serveradmin"))
             TextField("Your account on the server", text: $memberUser)
             TextField("Tailscale machine name", text: $tailscaleName)
             Toggle("Install Claude Code", isOn: $installsClaude)

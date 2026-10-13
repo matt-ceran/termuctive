@@ -19,9 +19,13 @@ subscription.
 ## Prepare the server (once)
 
 1. Install Ubuntu 24.04 Server. Enable OpenSSH during installation and create an
-   administrator account, for example `admin`.
+   administrator account, for example `serveradmin` (Ubuntu reserves `admin`). Leave
+   "Set up this disk as an LVM group" unchecked so the system gets the whole disk.
 2. In the computer's firmware settings, set it to power on after a power loss.
-3. Note its address on your network, for example `192.168.1.50`.
+3. Note its address on your network, for example `192.168.1.50`. If this Mac can't
+   reach that address, as on many apartment and campus networks, install Tailscale on
+   the server first (`curl -fsSL https://tailscale.com/install.sh | sh`, then
+   `sudo tailscale up --qr`) and use its Tailscale name as the address.
 
 ## Set up the server from Termuctive
 
