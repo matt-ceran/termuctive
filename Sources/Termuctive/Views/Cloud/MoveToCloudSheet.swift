@@ -3,7 +3,7 @@ import SwiftUI
 struct MoveToCloudSheet: View {
     @ObservedObject var cloud: CloudSessionCoordinator
     @ObservedObject var cloudStore: CloudStore
-    @StateObject private var move: ProjectMove
+    @StateObject private var projectMove: ProjectMove
     @Environment(\.dismiss) private var dismiss
     @State private var serverFreeBytes: Int64?
 
@@ -18,7 +18,7 @@ struct MoveToCloudSheet: View {
         self.cloud = cloud
         self.cloudStore = cloudStore
         let existing = cloud.activeMove.flatMap { $0.projectID == projectID ? $0 : nil }
-        _move = StateObject(
+        _projectMove = StateObject(
             wrappedValue: existing
                 ?? ProjectMove(
                     projectID: projectID,
@@ -47,11 +47,11 @@ struct MoveToCloudSheet: View {
     }
 
     private var projectName: String {
-        move.project?.name ?? "Project"
+        projectMove.project?.name ?? "Project"
     }
 
     private var subtitle: String {
-        switch move.step {
+        switch projectMove.step {
         case .chooseServer:
             "Termuctive copies the project, its worktrees and .env files, related folders, "
                 + "Claude history and your settings. The copy on this Mac stays as it is."
@@ -68,7 +68,7 @@ struct MoveToCloudSheet: View {
         case .switching:
             "Switching to the cloud..."
         case .done:
-            "\(projectName) (Cloud) is ready and runs on \(move.host?.name ?? "the server")."
+            "\(projectName) (Cloud) is ready and runs on \(projectMove.host?.name ?? "the server")."
         case .failed:
             "The move stopped."
         }
@@ -78,7 +78,7 @@ struct MoveToCloudSheet: View {
 
     @ViewBuilder
     private var content: some View {
-        switch move.step {
+        switch projectMove.step {
         case .chooseServer:
             chooseServer
             Spacer(minLength: 0)
@@ -93,7 +93,7 @@ struct MoveToCloudSheet: View {
         case .review:
             review
         case .copying, .readyToSwitch:
-            if let engine = move.engine {
+            if let engine = projectMove.engine {
                 TransferProgressView(engine: engine)
             }
             Spacer(minLength: 0)
@@ -119,13 +119,13 @@ struct MoveToCloudSheet: View {
             }
         } else {
             Form {
-                Picker("Server", selection: $move.hostID) {
+                Picker("Server", selection: $projectMove.hostID) {
                     ForEach(cloudStore.hosts) { host in
                         Text(host.name).tag(Optional(host.id))
                     }
                 }
-                TextField("Project name on the server", text: $move.slug)
-                if let project = move.project {
+                TextField("Project name on the server", text: $projectMove.slug)
+                if let project = projectMove.project {
                     LabeledContent("Folder on the server", value: project.rootDirectory)
                 }
             }
@@ -135,7 +135,7 @@ struct MoveToCloudSheet: View {
 
     @ViewBuilder
     private var review: some View {
-        if let manifest = move.manifest {
+        if let manifest = projectMove.manifest {
             List {
                 ForEach(TransferItem.Group.allCases, id: \.self) { group in
                     let items = sorted(manifest.items(in: group))
@@ -161,18 +161,18 @@ struct MoveToCloudSheet: View {
             Spacer()
             if group == .project {
                 Button("Only Worktrees Used This Week") {
-                    move.selectWorktrees(usedWithin: 7 * 24 * 60 * 60)
+                    projectMove.selectWorktrees(usedWithin: 7 * 24 * 60 * 60)
                 }
                 .buttonStyle(.link)
                 .font(.caption)
                 Button("All Worktrees") {
-                    move.selectWorktrees(usedWithin: .infinity)
+                    projectMove.selectWorktrees(usedWithin: .infinity)
                 }
                 .buttonStyle(.link)
                 .font(.caption)
             } else {
                 Button(items.allSatisfy(\.selected) ? "Deselect All" : "Select All") {
-                    move.setSelected(!items.allSatisfy(\.selected), forGroup: group)
+                    projectMove.setSelected(!items.allSatisfy(\.selected), forGroup: group)
                 }
                 .buttonStyle(.link)
                 .font(.caption)
@@ -184,7 +184,7 @@ struct MoveToCloudSheet: View {
         Toggle(
             isOn: Binding(
                 get: { item.selected },
-                set: { move.setSelected($0, forItemID: item.id) }
+                set: { projectMove.setSelected($0, forItemID: item.id) }
             )
         ) {
             HStack(alignment: .firstTextBaseline) {
@@ -222,7 +222,7 @@ struct MoveToCloudSheet: View {
         }
         .font(.callout)
         .task {
-            guard serverFreeBytes == nil, let host = move.host else {
+            guard serverFreeBytes == nil, let host = projectMove.host else {
                 return
             }
             serverFreeBytes = try? await cloud.client.status(alias: host.alias).disk.freeBytes
@@ -246,7 +246,7 @@ struct MoveToCloudSheet: View {
                     + "restarted any time.",
                 systemImage: "laptopcomputer"
             )
-            if let engine = move.engine, !engine.notes.isEmpty {
+            if let engine = projectMove.engine, !engine.notes.isEmpty {
                 Divider()
                 ForEach(engine.notes, id: \.self) { note in
                     Text(note)
@@ -263,7 +263,7 @@ struct MoveToCloudSheet: View {
     private var footer: some View {
         HStack {
             Spacer()
-            switch move.step {
+            switch projectMove.step {
             case .chooseServer:
                 Button("Cancel", role: .cancel) {
                     dismiss()
@@ -271,24 +271,24 @@ struct MoveToCloudSheet: View {
                 .keyboardShortcut(.cancelAction)
                 Button("Scan Project") {
                     Task {
-                        await move.scan()
+                        await projectMove.scan()
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(move.host == nil || !CloudSlug.isValid(move.slug))
+                .disabled(projectMove.host == nil || !CloudSlug.isValid(projectMove.slug))
             case .review:
                 Button("Back") {
-                    move.step = .chooseServer
+                    projectMove.step = .chooseServer
                 }
                 Button("Start Copying") {
                     Task {
-                        await move.startCopy()
+                        await projectMove.startCopy()
                     }
                 }
                 .keyboardShortcut(.defaultAction)
             case .copying:
                 Button("Stop Copying", role: .destructive) {
-                    move.cancel()
+                    projectMove.cancel()
                 }
                 Button("Hide") {
                     dismiss()
@@ -300,7 +300,7 @@ struct MoveToCloudSheet: View {
                 }
                 Button("Switch to Cloud") {
                     Task {
-                        await move.switchToCloud()
+                        await projectMove.switchToCloud()
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -316,7 +316,7 @@ struct MoveToCloudSheet: View {
                     dismiss()
                 }
                 Button("Try Again") {
-                    move.step = move.manifest == nil ? .chooseServer : .review
+                    projectMove.step = projectMove.manifest == nil ? .chooseServer : .review
                 }
                 .keyboardShortcut(.defaultAction)
             }
