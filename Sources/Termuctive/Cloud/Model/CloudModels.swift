@@ -45,6 +45,11 @@ struct CloudHost: Codable, Equatable, Identifiable {
         alias + "-admin"
     }
 
+    /// Collaborators reach a server through their own account only.
+    var hasAdminAccess: Bool {
+        !adminUser.isEmpty
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -83,6 +88,8 @@ struct CloudProjectBinding: Codable, Equatable {
     var slug: String
     var remoteRoot: String
     var role: CloudProjectRole
+    /// Folders outside the project that moved with it and are shared with collaborators.
+    var sharedPaths: [String]
 
     private enum CodingKeys: String, CodingKey {
         case projectID
@@ -90,6 +97,7 @@ struct CloudProjectBinding: Codable, Equatable {
         case slug
         case remoteRoot
         case role
+        case sharedPaths
     }
 
     init(
@@ -97,13 +105,15 @@ struct CloudProjectBinding: Codable, Equatable {
         hostID: UUID,
         slug: String,
         remoteRoot: String,
-        role: CloudProjectRole
+        role: CloudProjectRole,
+        sharedPaths: [String] = []
     ) {
         self.projectID = projectID
         self.hostID = hostID
         self.slug = slug
         self.remoteRoot = remoteRoot
         self.role = role
+        self.sharedPaths = sharedPaths
     }
 
     init(from decoder: any Decoder) throws {
@@ -113,6 +123,7 @@ struct CloudProjectBinding: Codable, Equatable {
         slug = try container.decode(String.self, forKey: .slug)
         remoteRoot = try container.decode(String.self, forKey: .remoteRoot)
         role = try container.decodeIfPresent(CloudProjectRole.self, forKey: .role) ?? .owner
+        sharedPaths = try container.decodeIfPresent([String].self, forKey: .sharedPaths) ?? []
     }
 }
 

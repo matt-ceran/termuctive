@@ -281,6 +281,10 @@ struct TermuctiveApp: App {
                     cloud.presentedFlow = .setUpServer
                 }
 
+                Button("Join Cloud Project...") {
+                    cloud.presentedFlow = .joinProject
+                }
+
                 ForEach(cloudStore.hosts) { host in
                     Button("\(host.name) Status...") {
                         cloud.presentedFlow = .serverStatus(host.id)
@@ -304,6 +308,30 @@ struct TermuctiveApp: App {
                     cloud.presentedFlow = .connectProject(projectID)
                 }
                 .disabled(selectedLocalProjectID == nil)
+
+                Button("Invite Collaborator...") {
+                    guard let projectID = store.selectedProject?.id else {
+                        return
+                    }
+                    cloud.presentedFlow = .inviteCollaborator(projectID)
+                }
+                .disabled(
+                    store.selectedProject.map {
+                        cloudStore.binding(forProjectID: $0.id)?.role != .owner
+                    }
+                        ?? true
+                )
+
+                Button("Team...") {
+                    guard let projectID = store.selectedProject?.id else {
+                        return
+                    }
+                    cloud.presentedFlow = .team(projectID)
+                }
+                .disabled(
+                    store.selectedProject.map { cloudStore.binding(forProjectID: $0.id) == nil }
+                        ?? true
+                )
 
                 Button("Disconnect Project from Cloud") {
                     guard let projectID = store.selectedProject?.id else {
@@ -340,6 +368,13 @@ struct TermuctiveApp: App {
                         Text(theme.title).tag(theme)
                     }
                 }
+            }
+        }
+
+        WindowGroup("Watch", for: CloudWatchTarget.self) { $target in
+            if let target {
+                CloudWatchView(target: target)
+                    .preferredColorScheme(appearance.appTheme.colorScheme)
             }
         }
 

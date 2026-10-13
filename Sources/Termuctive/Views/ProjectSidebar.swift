@@ -425,6 +425,14 @@ struct ProjectSidebar: View {
             Divider()
             if let binding = cloudStore.binding(forProjectID: projectID) {
                 Text("Runs on \(cloudStore.host(withID: binding.hostID)?.name ?? "a server")")
+                Button("Team...") {
+                    cloud.presentedFlow = .team(projectID)
+                }
+                if binding.role == .owner {
+                    Button("Invite Collaborator...") {
+                        cloud.presentedFlow = .inviteCollaborator(projectID)
+                    }
+                }
                 Button("Disconnect from Cloud") {
                     cloud.disconnect(projectID: projectID)
                 }

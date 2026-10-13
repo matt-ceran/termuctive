@@ -10,10 +10,12 @@ from . import (
     admin,
     checklist,
     claudecfg,
+    collab,
     doctor,
     finalize,
     hooks,
     hydrate,
+    memory,
     ports,
     proc,
     setup,
@@ -79,6 +81,26 @@ def build_parser() -> argparse.ArgumentParser:
     hydration = commands.add_parser("hydrate", help="install a checkout's dependencies")
     hydration.add_argument("--root", required=True)
 
+    finish = commands.add_parser("join-finish", help="complete an invite (reads a key on stdin)")
+    finish.add_argument("invite")
+
+    team = commands.add_parser("team", help="project members and their sessions")
+    team.add_argument("--slug", required=True)
+
+    watching = commands.add_parser("watch", help="watch another member's session read-only")
+    watching.add_argument("--slug", required=True)
+    watching.add_argument("--member", required=True)
+    watching.add_argument("--pane", required=True)
+
+    memories = commands.add_parser("memory", help="shared Claude memory")
+    memories.add_argument("action", choices=["merge"])
+    memories.add_argument("--slug", required=True)
+    memories.add_argument("--from", dest="source", required=True)
+    memories.add_argument("--into")
+
+    refs = commands.add_parser("import-refs", help="adopt branches a member pushed")
+    refs.add_argument("--root", required=True)
+
     server = commands.add_parser("setup", help="prepare this server (root)")
     server.add_argument("--admin-user", required=True)
     server.add_argument("--member")
@@ -108,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     project_create.add_argument("--root", required=True)
     project_create.add_argument("--owner", required=True)
     actions.add_parser("project-list")
+    inviting = actions.add_parser("invite")
+    inviting.add_argument("--slug", required=True)
+    inviting.add_argument("--name", required=True)
+    inviting.add_argument("--home", required=True)
+    inviting.add_argument("--invite-key", required=True)
+    inviting.add_argument("--share-path", action="append", default=[])
     claude = actions.add_parser("install-claude")
     claude.add_argument("--user", required=True)
     return parser
@@ -201,6 +229,20 @@ def dispatch(arguments: argparse.Namespace) -> int:
         return 0
     if command == "hydrate":
         return hydrate.hydrate(arguments.root)
+    if command == "join-finish":
+        emit(collab.join_finish(arguments.invite, sys.stdin.read()))
+        return 0
+    if command == "team":
+        emit(collab.team(arguments.slug))
+        return 0
+    if command == "watch":
+        return collab.watch(arguments.slug, arguments.member, arguments.pane)
+    if command == "memory":
+        emit(memory.merge_into_shared(arguments.slug, arguments.source, arguments.into))
+        return 0
+    if command == "import-refs":
+        emit(collab.import_refs(arguments.root, proc.caller()))
+        return 0
     if command == "setup":
         setup.run_setup(
             setup.SetupOptions(
@@ -239,4 +281,14 @@ def dispatch_admin(arguments: argparse.Namespace) -> int:
         emit(admin.project_list())
     elif action == "install-claude":
         emit(admin.install_claude(arguments.user))
+    elif action == "invite":
+        emit(
+            collab.invite(
+                arguments.slug,
+                arguments.name,
+                arguments.home,
+                arguments.invite_key,
+                arguments.share_path,
+            )
+        )
     return 0
