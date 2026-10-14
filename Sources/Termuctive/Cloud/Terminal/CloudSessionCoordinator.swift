@@ -40,6 +40,8 @@ final class CloudSessionCoordinator: ObservableObject {
     @Published private(set) var errorMessage: String?
     /// The move in progress, kept alive if its sheet closes so copying can continue.
     @Published var activeMove: ProjectMove?
+    /// An invite opened from a file, waiting for the Join sheet to show it.
+    @Published var pendingInviteText: String?
 
     let cloudStore: CloudStore
     let paths: SSHPaths
@@ -133,6 +135,18 @@ final class CloudSessionCoordinator: ObservableObject {
     /// Runs `command` in a cloud pane the first time its server session starts.
     func queueInitialCommand(_ command: String, forPaneID paneID: UUID) {
         initialCommands[paneID] = command
+    }
+
+    /// Shows the Join sheet for an invite file someone sent.
+    func openInvite(at url: URL) {
+        do {
+            pendingInviteText = try InviteCode.text(ofFileAt: url)
+            presentedFlow = .joinProject
+        } catch {
+            store.presentError(
+                "Termuctive could not open \(url.lastPathComponent): \(error.localizedDescription)"
+            )
+        }
     }
 
     func isCloudProject(_ projectID: UUID) -> Bool {

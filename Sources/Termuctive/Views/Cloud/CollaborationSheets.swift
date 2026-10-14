@@ -12,6 +12,7 @@ struct InviteCollaboratorSheet: View {
     @State private var isWorking = false
     @State private var code: String?
     @State private var expires: Date?
+    @State private var inviteFile: URL?
     @State private var failure: String?
 
     var body: some View {
@@ -97,8 +98,8 @@ struct InviteCollaboratorSheet: View {
     private func inviteReady(_ code: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(
-                "Send this code to \(partner). In Termuctive they choose Cloud > Join Cloud "
-                    + "Project and paste it. It works once"
+                "Send this invite to \(partner). When they open it, Termuctive asks them to "
+                    + "join, then signs them in. It works once"
                     + (expires.map {
                         " and expires \($0.formatted(date: .abbreviated, time: .shortened))"
                     }
@@ -106,24 +107,36 @@ struct InviteCollaboratorSheet: View {
                     + "."
             )
             .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                if let inviteFile {
+                    ShareLink(item: inviteFile) {
+                        Label("Send Invite...", systemImage: "square.and.arrow.up")
+                    }
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([inviteFile])
+                    }
+                }
+                Button("Copy Invite Code") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(code, forType: .string)
+                }
+            }
             ScrollView {
                 Text(code)
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 120)
+            .frame(height: 80)
             .padding(8)
             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-            Button("Copy Invite Code") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(code, forType: .string)
-            }
             Label(
-                "The code contains a key that lets one person join. Share it privately.",
+                "The invite contains a key that lets one person join. Send it privately, for "
+                    + "example in Messages or AirDrop.",
                 systemImage: "lock"
             )
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -147,9 +160,22 @@ struct InviteCollaboratorSheet: View {
             )
             expires = invite.expires
             code = try invite.encoded()
+            inviteFile = try? invite.writeFile(in: Self.makeInviteDirectory())
         } catch {
             failure = error.localizedDescription
         }
+    }
+
+    /// A private temporary folder for the invite file, which macOS removes after a few days.
+    private static func makeInviteDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("termuctive-invite-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        return directory
     }
 }
 
@@ -162,14 +188,19 @@ struct JoinCloudProjectSheet: View {
     @State private var isJoining = false
     @State private var joinedProjectID: UUID?
     @State private var failure: String?
+    @State private var needsTailscale = false
     @StateObject private var importer = PartnerImportHolder()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Join a Cloud Project")
                 .font(.title2.weight(.semibold))
-            if joinedProjectID == nil {
-                Text("Paste the invite code you received.")
+            if joinedProjectID != nil {
+                joined
+            } else if let invite = try? InviteCode.decode(codeText) {
+                summary(invite)
+            } else {
+                Text("Paste the invite code you received, or open the invite file.")
                     .foregroundStyle(.secondary)
                 TextEditor(text: $codeText)
                     .font(.caption.monospaced())
@@ -179,13 +210,14 @@ struct JoinCloudProjectSheet: View {
                             .stroke(Color(nsColor: .separatorColor))
                     )
                     .disabled(isJoining)
-            } else {
-                joined
             }
             if let failure {
                 Label(failure, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if needsTailscale {
+                    tailscaleButton
+                }
             }
             Spacer(minLength: 0)
             HStack {
@@ -213,6 +245,73 @@ struct JoinCloudProjectSheet: View {
         }
         .padding(24)
         .frame(width: 600, height: 520)
+        .onAppear(perform: takePendingInvite)
+        .onChange(of: cloud.pendingInviteText) { _, _ in
+            takePendingInvite()
+        }
+    }
+
+    private func summary(_ invite: InviteCode) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(
+                "\(invite.owner) invited you to \(invite.projectName) on \(invite.serverName).",
+                systemImage: "person.2"
+            )
+            .font(.headline)
+            Text(
+                "Joining adds it to your sidebar. Its first terminal signs you in to GitHub and "
+                    + "then starts Claude Code, which signs in with your own Claude account."
+            )
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Text(
+                invite.isExpired()
+                    ? "This invite has expired. Ask \(invite.owner) for a new one."
+                    : "The invite works once and expires "
+                        + "\(invite.expires.formatted(date: .abbreviated, time: .shortened))."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            Button("Use a Different Code") {
+                codeText = ""
+                failure = nil
+                needsTailscale = false
+            }
+            .buttonStyle(.link)
+            .disabled(isJoining)
+        }
+    }
+
+    @ViewBuilder
+    private var tailscaleButton: some View {
+        if let tailscale = Self.tailscaleApplication {
+            Button("Open Tailscale") {
+                NSWorkspace.shared.openApplication(
+                    at: tailscale, configuration: NSWorkspace.OpenConfiguration())
+            }
+        } else {
+            Button("Get Tailscale...") {
+                if let url = URL(string: "https://tailscale.com/download/mac") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
+    }
+
+    private static var tailscaleApplication: URL? {
+        ["io.tailscale.ipn.macos", "io.tailscale.ipn.macsys"].lazy
+            .compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+            .first
+    }
+
+    private func takePendingInvite() {
+        guard joinedProjectID == nil, !isJoining, let text = cloud.pendingInviteText else {
+            return
+        }
+        cloud.pendingInviteText = nil
+        codeText = text
+        failure = nil
+        needsTailscale = false
     }
 
     @ViewBuilder
@@ -237,6 +336,7 @@ struct JoinCloudProjectSheet: View {
     private func join() async {
         isJoining = true
         failure = nil
+        needsTailscale = false
         defer {
             isJoining = false
         }
@@ -245,6 +345,9 @@ struct JoinCloudProjectSheet: View {
             joinedProjectID = try await CollaborationService(cloud: cloud, store: store).join(code)
         } catch {
             failure = error.localizedDescription
+            if case .serverUnreachable = error as? InviteCodeError {
+                needsTailscale = true
+            }
         }
     }
 

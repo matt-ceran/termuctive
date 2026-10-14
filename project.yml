@@ -54,11 +54,24 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.developer-tools
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Termuctive Invite
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.mattceran.termuctive.invite
         UTExportedTypeDeclarations:
           - UTTypeConformsTo:
               - public.data
             UTTypeDescription: Termuctive Terminal Space
             UTTypeIdentifier: com.mattceran.termuctive.terminal-space
+          - UTTypeConformsTo:
+              - public.data
+            UTTypeDescription: Termuctive Invite
+            UTTypeIdentifier: com.mattceran.termuctive.invite
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - termuctive-invite
     sources:
       - Sources/Termuctive
       - path: Resources/termuctive-learning-pdf

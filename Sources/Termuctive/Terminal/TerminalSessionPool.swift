@@ -1437,7 +1437,10 @@ private final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate 
 
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         endAgentActivitySession()
-        onTermination(paneID, exitCode)
+        onTermination(
+            paneID,
+            TerminalProcessExit.collectedStatus(pid: view.process.shellPid, reported: exitCode)
+        )
     }
 
     private func start(pane: TerminalPane) -> Bool {

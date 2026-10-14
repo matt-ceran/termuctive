@@ -377,6 +377,8 @@ struct TermuctiveApp: App {
                     .preferredColorScheme(appearance.appTheme.colorScheme)
             }
         }
+        // Opened invite files go to the application delegate, never to a new Watch window.
+        .handlesExternalEvents(matching: [])
 
         Settings {
             AppearanceSettingsView(settings: appearance)
