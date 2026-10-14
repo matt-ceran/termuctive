@@ -47,6 +47,31 @@ enum TerminalProcessExit: Equatable {
             self = .unknown
         }
     }
+
+    /// The wait status of a terminal's process that just exited.
+    ///
+    /// SwiftTerm reads the status with a non-blocking `waitpid` as soon as macOS reports the
+    /// exit, which can happen before the status is ready, and then reports 0. A connection
+    /// failure would look like a finished shell, so collect the status here when SwiftTerm
+    /// could not.
+    static func collectedStatus(pid: pid_t, reported: Int32?) -> Int32? {
+        guard pid > 0 else {
+            return reported
+        }
+        var status: Int32 = 0
+        for _ in 0..<200 {
+            switch waitpid(pid, &status, WNOHANG) {
+            case pid:
+                return status
+            case 0:
+                usleep(1_000)
+            default:
+                // SwiftTerm already collected it, so its report is right.
+                return reported
+            }
+        }
+        return reported
+    }
 }
 
 enum TerminalReconnectDecision: Equatable {

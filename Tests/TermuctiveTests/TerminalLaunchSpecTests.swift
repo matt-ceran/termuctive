@@ -12,6 +12,24 @@ final class TerminalReconnectPolicyTests: XCTestCase {
         XCTAssertEqual(TerminalProcessExit(waitStatus: nil), .unknown)
     }
 
+    func testExitStatusIsCollectedWhenTheTerminalLibraryReadItTooEarly() {
+        var pid: pid_t = 0
+        let words: [String] = ["/bin/sh", "-c", "sleep 0.05; exit 4"]
+        var arguments: [UnsafeMutablePointer<CChar>?] = words.map { strdup($0) } + [nil]
+        defer {
+            for argument in arguments {
+                free(argument)
+            }
+        }
+        XCTAssertEqual(posix_spawn(&pid, "/bin/sh", nil, nil, &arguments, environ), 0)
+
+        // Nothing has collected the process yet, as when SwiftTerm's waitpid came too early.
+        let status = TerminalProcessExit.collectedStatus(pid: pid, reported: 0)
+
+        XCTAssertEqual(TerminalProcessExit(waitStatus: status), .exited(4))
+        XCTAssertEqual(TerminalProcessExit.collectedStatus(pid: pid, reported: 7), 7)
+    }
+
     func testDecisionsFollowTheAttachExitCodeProtocol() {
         let policy = TerminalReconnectPolicy(
             initialDelay: 1,
