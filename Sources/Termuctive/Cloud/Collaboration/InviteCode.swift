@@ -7,6 +7,9 @@ import Foundation
 /// intercepted. It expires after two days.
 struct InviteCode: Codable, Equatable {
     static let prefix = "tmc1:"
+    /// Invite files open in Termuctive, which offers to join the project.
+    static let fileExtension = "termuctive-invite"
+    private static let largestFile = 64 * 1024
 
     var version = 1
     var serverName: String
@@ -65,6 +68,33 @@ struct InviteCode: Codable, Equatable {
     func isExpired(at date: Date = Date()) -> Bool {
         date >= expires
     }
+
+    /// Saves the invite as a file to send to the collaborator. Only this user can read it.
+    func writeFile(in directory: URL) throws -> URL {
+        let name = projectName.replacingOccurrences(of: "/", with: "-")
+        let url = directory.appendingPathComponent("Join \(name).\(Self.fileExtension)")
+        guard
+            FileManager.default.createFile(
+                atPath: url.path,
+                contents: Data(try encoded().utf8),
+                attributes: [.posixPermissions: 0o600]
+            )
+        else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path])
+        }
+        return url
+    }
+
+    /// The text of an invite file, refusing files too large to be one.
+    static func text(ofFileAt url: URL) throws -> String {
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= largestFile,
+            let text = String(data: try Data(contentsOf: url), encoding: .utf8)
+        else {
+            throw InviteCodeError.notAnInvite
+        }
+        return text
+    }
 }
 
 enum InviteCodeError: LocalizedError, Equatable {
@@ -72,6 +102,7 @@ enum InviteCodeError: LocalizedError, Equatable {
     case damaged
     case unsupportedVersion
     case expired
+    case serverUnreachable(server: String, owner: String)
 
     var errorDescription: String? {
         switch self {
@@ -83,6 +114,9 @@ enum InviteCodeError: LocalizedError, Equatable {
             "This invite needs a newer version of Termuctive."
         case .expired:
             "This invite has expired. Ask for a new one."
+        case .serverUnreachable(let server, let owner):
+            "This Mac can't reach \(server) yet. Open Tailscale, sign in and accept "
+                + "\(owner)'s invitation, then click Join again. The invite still works."
         }
     }
 }

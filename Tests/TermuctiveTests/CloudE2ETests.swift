@@ -461,6 +461,8 @@ final class CloudE2ETests: XCTestCase {
                 $0.layout.terminal(withID: $0.layout.firstTerminalID)
             }
         )
+        // A joined project's first terminal starts Claude Code; this one stays a shell.
+        samCloud.queueInitialCommand("true", forPaneID: pane.id)
         let terminal = sessions.terminalView(for: pane)
         terminal.frame = NSRect(x: 0, y: 0, width: 900, height: 480)
         _ = try await output(of: terminal, containing: "$ ", timeout: 60)

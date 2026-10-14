@@ -95,23 +95,35 @@ Your Claude history moved too, so `claude --continue` picks up your last convers
 
 ### Invite (project owner)
 
-Right-click the cloud project and choose **Invite Collaborator...**. Enter their account
-name and their Mac's home folder (usually `/Users/<name>`), then send them the invite code.
-Also invite them to your Tailscale network from the Tailscale admin console.
+Right-click the cloud project, choose **Invite Collaborator...**, and enter their Mac
+account name (`whoami` in their Terminal). Termuctive fills in their home folder. Then:
+
+- choose **Send Invite...** to send the invite file in Messages, AirDrop or Mail, and
+- choose **Invite on Tailscale...** to invite them to your Tailscale network.
 
 The invite shares the project, its `.env` files and related folders with them, and links
-both of your Claude memories for the project to one shared folder. The code works once and
-expires after two days.
+both of your Claude memories for the project to one shared folder. The invite works once
+and expires after two days.
 
 Only invite someone you would trust with your laptop: in a shared project each person's
 agents can run code and use the project's keys.
 
 ### Join (collaborator)
 
-Install Tailscale and accept the invitation, then choose **Cloud > Join Cloud Project...**
-and paste the code. Termuctive adds the project to your sidebar and installs Claude Code
-for your account on the server. Run `claude` in the project to sign in with your own
-subscription.
+1. Install Tailscale, sign in and accept the invitation.
+2. Open the invite file. Termuctive shows who invited you to which project; choose **Join**.
+   You can also choose **Cloud > Join Cloud Project...** and paste the code instead.
+
+If this Mac can't reach the server yet, Termuctive says so and offers to open Tailscale. The
+invite keeps working until you join.
+
+The project's first terminal then:
+
+- installs Claude Code for your account on the server,
+- gives git your name and email from this Mac,
+- signs you in to GitHub (press Return at each question, then open the link and type the
+  code), and
+- starts Claude Code, which signs in with your own Claude subscription.
 
 Choose **Bring My Local Work...** to add your own copy of the project:
 

@@ -5,9 +5,32 @@ final class TermuctiveApplicationDelegate: NSObject, NSApplicationDelegate {
     weak var workspaceStore: WorkspaceStore?
     weak var editorSessions: EditorSessionPool?
     weak var noteSessions: NoteSessionPool?
-    weak var cloud: CloudSessionCoordinator?
+    weak var cloud: CloudSessionCoordinator? {
+        didSet {
+            openPendingInvite()
+        }
+    }
 
     private var isSavingBeforeTermination = false
+    /// An invite file opened before the workspace finished loading.
+    private var pendingInviteURL: URL?
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let invite = urls.last(where: { $0.pathExtension == InviteCode.fileExtension })
+        else {
+            return
+        }
+        pendingInviteURL = invite
+        openPendingInvite()
+    }
+
+    private func openPendingInvite() {
+        guard let cloud, let url = pendingInviteURL else {
+            return
+        }
+        pendingInviteURL = nil
+        cloud.openInvite(at: url)
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if !isSavingBeforeTermination, cloud?.activeMove?.isWorking == true {

@@ -188,6 +188,9 @@ struct CollaborationService {
         )
         guard redemption.succeeded else {
             cloud.cloudStore.removeHost(withID: host.id)
+            if Self.serverIsUnreachable(redemption) {
+                throw InviteCodeError.serverUnreachable(server: code.serverName, owner: code.owner)
+            }
             throw CloudCommandError.failed(
                 command: "join",
                 status: redemption.status,
@@ -216,17 +219,57 @@ struct CollaborationService {
         )
         cloud.workspaceTerminalsChanged()
         if let paneID = store.focusedPaneID {
-            let tmc = TMCClient.executable
             cloud.queueInitialCommand(
-                [
-                    "sudo -n \(tmc) admin install-claude --user \(code.user)",
-                    "\(tmc) claude install-hooks >/dev/null",
-                    "\(tmc) checklist --root \(ShellQuoting.quote(code.root))",
-                ].joined(separator: "; "),
+                Self.joinSetupCommand(user: code.user, gitIdentity: await GitIdentity.local()),
                 forPaneID: paneID
             )
         }
         return projectID
+    }
+
+    /// The joined project's first terminal installs Claude Code, gives git the name and
+    /// email used on this Mac, signs in to GitHub, then starts Claude Code, which asks the
+    /// collaborator to sign in with their own account.
+    static func joinSetupCommand(user: String, gitIdentity: GitIdentity?) -> String {
+        let tmc = TMCClient.executable
+        var steps = [
+            "sudo -n \(tmc) admin install-claude --user \(ShellQuoting.quote(user))",
+            "\(tmc) claude install-hooks >/dev/null",
+            #"export PATH="$HOME/.local/bin:$PATH""#,
+        ]
+        if let gitIdentity {
+            for (key, value) in [
+                ("user.name", gitIdentity.name), ("user.email", gitIdentity.email),
+            ] {
+                steps.append(
+                    "git config --global \(key) >/dev/null || "
+                        + "git config --global \(key) \(ShellQuoting.quote(value))"
+                )
+            }
+        }
+        steps += [
+            "gh auth status >/dev/null 2>&1 || { echo; "
+                + "echo 'Sign in to GitHub so git can push. Press Return at each question, "
+                + "then open the link and type the code.'; "
+                + "BROWSER=echo gh auth login --hostname github.com --git-protocol https --web "
+                + "&& gh auth setup-git; }",
+            "echo",
+            "echo 'Starting Claude Code. Sign in with your own Claude account.'",
+            "claude",
+        ]
+        return steps.joined(separator: "; ")
+    }
+
+    /// Whether ssh never reached the server, as when this Mac is not on Tailscale yet.
+    static func serverIsUnreachable(_ result: ProcessResult) -> Bool {
+        guard result.status == 255, !result.timedOut else {
+            return false
+        }
+        let reasons = [
+            "Could not resolve hostname", "timed out", "No route to host",
+            "Network is unreachable", "Connection refused",
+        ]
+        return reasons.contains { result.errorText.localizedCaseInsensitiveContains($0) }
     }
 
     func team(projectID: UUID) async throws -> TeamReport {
@@ -326,5 +369,34 @@ struct CollaborationService {
             atomically: true,
             encoding: .utf8
         )
+    }
+}
+
+/// The git author this Mac uses, so a collaborator's commits on the server carry it too.
+struct GitIdentity: Equatable {
+    var name: String
+    var email: String
+
+    static func local() async -> GitIdentity? {
+        // Without developer tools, /usr/bin/git asks to install them instead of answering.
+        guard (try? await ProcessRunner.run("/usr/bin/xcode-select", ["-p"]))?.succeeded == true,
+            let name = await value("user.name"),
+            let email = await value("user.email")
+        else {
+            return nil
+        }
+        return GitIdentity(name: name, email: email)
+    }
+
+    private static func value(_ key: String) async -> String? {
+        guard
+            let result = try? await ProcessRunner.run(
+                "/usr/bin/git", ["config", "--global", "--get", key]),
+            result.succeeded
+        else {
+            return nil
+        }
+        let value = result.outputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 }
